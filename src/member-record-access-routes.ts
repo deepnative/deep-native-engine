@@ -76,7 +76,8 @@ export function mountMemberRecordAccess(
     if (Object.keys(req.query).length)
       return send(res, operatorRecordsRefusal("invalid"));
     const allowed = await store.operator(token(res));
-    if (allowed !== "allowed") return send(res, operatorRecordsRefusal(allowed));
+    if (allowed !== "allowed")
+      return send(res, operatorRecordsRefusal(allowed));
     return res.send(operatorRecordsPage(res.locals.csrf as string));
   });
   app.post(OPERATOR_RECORDS_PATH, async (req, res) => {
@@ -90,7 +91,8 @@ export function mountMemberRecordAccess(
       req.body.scope,
       cursor ? cursor : undefined,
     );
-    if (result.kind !== "ready") return send(res, operatorRecordsRefusal(result.kind));
+    if (result.kind !== "ready")
+      return send(res, operatorRecordsRefusal(result.kind));
     const { payload } = result;
     res.set(
       "Content-Disposition",

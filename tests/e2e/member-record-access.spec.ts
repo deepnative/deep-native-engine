@@ -29,8 +29,7 @@ test("[L328] RECACCESS-01/03/04/07 a member lets an operator download one kind o
       .getByRole("link", { name: "Who can see my work", exact: true })
       .click();
     await member
-      .getByRole("link", { name: "Let operators download my records" })
-      .first()
+      .getByRole("link", { name: "Allow or stop operator downloads" })
       .click();
     await expect(
       member.getByRole("heading", {
@@ -41,9 +40,9 @@ test("[L328] RECACCESS-01/03/04/07 a member lets an operator download one kind o
     await expect(member.locator("main")).toContainText(reference);
     await member.getByRole("radio", { name: /^Learning records/ }).check();
     await member.getByRole("button", { name: "Allow for 7 days" }).click();
-    await expect(member.locator('[data-record-access="learning"]')).toContainText(
-      "No downloads yet.",
-    );
+    await expect(
+      member.locator('[data-record-access="learning"]'),
+    ).toContainText("No downloads yet.");
     expect(
       await member.evaluate(
         () =>
@@ -56,7 +55,9 @@ test("[L328] RECACCESS-01/03/04/07 a member lets an operator download one kind o
     const operator = (await f.staff("operator")).page;
     await operator.goto(f.origin + "/staff");
     await operator
-      .getByRole("link", { name: "Download a member's records (with their permission)" })
+      .getByRole("link", {
+        name: "Download a member's records (with their permission)",
+      })
       .click();
     await operator.getByLabel("Student reference").fill(reference);
     await operator.getByLabel("Records").selectOption("learning");
@@ -92,9 +93,9 @@ test("[L328] RECACCESS-01/03/04/07 a member lets an operator download one kind o
 
     // The member sees the one download, without who made it, and stops it.
     await member.reload();
-    await expect(member.locator('[data-record-access="learning"]')).toContainText(
-      "Downloaded once.",
-    );
+    await expect(
+      member.locator('[data-record-access="learning"]'),
+    ).toContainText("Downloaded once.");
     await member.goto(f.origin + "/account/sharing/staff-access");
     await expect(member.locator("main")).toContainText(
       "An operator downloaded your learning records, with your permission.",

@@ -1,8 +1,5 @@
 import { readableTime } from "./display-time.ts";
-import type {
-  RecordAccessEntry,
-  RecordScope,
-} from "./member-record-access.ts";
+import type { RecordAccessEntry, RecordScope } from "./member-record-access.ts";
 import { escape, hidden, page } from "./views.ts";
 
 export const RECORD_ACCESS_PATH = "/account/record-access";
@@ -27,7 +24,11 @@ const SCOPES = Object.keys(RECORD_SCOPE_NAMES) as RecordScope[];
 const time = (at: Date) =>
   `<time datetime="${at.toISOString()}">${readableTime(at)}</time>`;
 const downloads = (n: number) =>
-  n === 0 ? "No downloads yet." : n === 1 ? "Downloaded once." : `Downloaded ${n} times.`;
+  n === 0
+    ? "No downloads yet."
+    : n === 1
+      ? "Downloaded once."
+      : `Downloaded ${n} times.`;
 
 function entry(item: RecordAccessEntry, csrf: string) {
   const name = RECORD_SCOPE_NAMES[item.scope];

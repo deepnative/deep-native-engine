@@ -49,7 +49,11 @@ it("RECACCESS-U01 scopes name only real export sections and parse strictly", () 
   expect(isRecordScope("learning")).toBe(true);
   expect(isRecordScope("toString")).toBe(false);
   expect(isRecordScope(1)).toBe(false);
-  expect(Object.keys(RECORD_SCOPES)).toEqual(["learning", "support", "billing"]);
+  expect(Object.keys(RECORD_SCOPES)).toEqual([
+    "learning",
+    "support",
+    "billing",
+  ]);
 });
 
 it("RECACCESS-U02 member changes refuse bad input before reading and report failures", async () => {
@@ -66,9 +70,9 @@ it("RECACCESS-U02 member changes refuse bad input before reading and report fail
   expect(query.mock.calls.some(([sql]) => sql === "ROLLBACK")).toBe(false);
 
   const missing = fakePool(() => undefined);
-  expect(
-    await memberRecordAccessStore(missing.pool).list(token),
-  ).toEqual({ kind: "denied" });
+  expect(await memberRecordAccessStore(missing.pool).list(token)).toEqual({
+    kind: "denied",
+  });
   expect(missing.query).toHaveBeenCalledWith("ROLLBACK");
 
   const down = fakePool(memberRow, async () => {
@@ -170,9 +174,8 @@ function downloadPool(options: Download = {}) {
   });
   return { ...fake, sections };
 }
-const { MEMBER_EXPORT_SECTIONS: SECTION_SQL } = await import(
-  "../../src/member-export.ts"
-);
+const { MEMBER_EXPORT_SECTIONS: SECTION_SQL } =
+  await import("../../src/member-export.ts");
 const bound = (scope = "learning", staff = staffToken, ref = reference) =>
   `${hash(staff)}.${ref}.${scope}`;
 function signed(data: unknown, scope = "learning") {
@@ -230,9 +233,9 @@ it("RECACCESS-U05 a download refuses bad input, staff, members, permissions and 
     signed([1, 7, ["k"], 2, later]),
     signed([1, 0, ["k"], 2, later], "billing"),
   ])
-    expect(await store.download(staffToken, reference, "learning", cursor)).toEqual(
-      { kind: "denied" },
-    );
+    expect(
+      await store.download(staffToken, reference, "learning", cursor),
+    ).toEqual({ kind: "denied" });
   expect(pool.query).not.toHaveBeenCalled();
   for (const missing of [
     { staff: false },
@@ -340,7 +343,9 @@ it("RECACCESS-U07 a download stops at the byte limit, and a single oversized rec
 });
 
 it("RECACCESS-U08 a failed read, rollback or connection is unavailable, and an expired cursor is refused", async () => {
-  const failed = downloadPool({ fail: "INSERT INTO member_record_access_downloads" });
+  const failed = downloadPool({
+    fail: "INSERT INTO member_record_access_downloads",
+  });
   expect(
     await memberRecordAccessStore(failed.pool).download(
       staffToken,
@@ -408,7 +413,9 @@ const entry = (over: Partial<RecordAccessEntry>): RecordAccessEntry => ({
 
 it("RECACCESS-U10 the member page lists permissions, offers only scopes not yet allowed, and explains", () => {
   const none = text(recordAccessPage([], "csrf-token", reference));
-  expect(none).toContain("Operators can't download any of your records right now.");
+  expect(none).toContain(
+    "Operators can't download any of your records right now.",
+  );
   expect(none).toContain(reference);
   expect(none).toContain("Allow for 7 days");
   expect(none).not.toContain("Ended");
@@ -450,7 +457,9 @@ it("RECACCESS-U10 the member page lists permissions, offers only scopes not yet 
 it("RECACCESS-U11 refusals and the operator form say what happened", () => {
   expect(recordAccessRefusal("invalid")[0]).toBe(400);
   expect(recordAccessRefusal("unavailable")[0]).toBe(503);
-  expect(text(operatorRecordsPage("csrf-token"))).toContain("Student reference");
+  expect(text(operatorRecordsPage("csrf-token"))).toContain(
+    "Student reference",
+  );
   for (const [kind, status] of [
     ["denied", 403],
     ["invalid", 400],
@@ -509,26 +518,37 @@ it("RECACCESS-U12 the routes check their input and map each outcome", async () =
       return form ? r.type("form").send(form) : r;
     });
   // No store, no pages.
-  expect((await call(site(undefined), "get", "/account/record-access")).status).toBe(404);
+  expect(
+    (await call(site(undefined), "get", "/account/record-access")).status,
+  ).toBe(404);
 
   const ok = site(fakeStore());
   expect((await call(ok, "get", "/account/record-access")).status).toBe(200);
-  expect((await call(ok, "get", "/account/record-access?x=1")).status).toBe(400);
+  expect((await call(ok, "get", "/account/record-access?x=1")).status).toBe(
+    400,
+  );
   expect(
     (await call(ok, "post", "/account/record-access", { scope: "learning" }))
       .headers.location,
   ).toBe("/account/record-access");
   expect(
-    (await call(ok, "post", "/account/record-access", { scope: "learning", extra: "1" }))
-      .status,
+    (
+      await call(ok, "post", "/account/record-access", {
+        scope: "learning",
+        extra: "1",
+      })
+    ).status,
   ).toBe(400);
   expect(
     (await call(ok, "post", `/account/record-access/${accessId}/revoke`, {}))
       .status,
   ).toBe(303);
   expect(
-    (await call(ok, "post", `/account/record-access/${accessId}/revoke`, { x: "1" }))
-      .status,
+    (
+      await call(ok, "post", `/account/record-access/${accessId}/revoke`, {
+        x: "1",
+      })
+    ).status,
   ).toBe(400);
   expect(
     (
@@ -540,7 +560,9 @@ it("RECACCESS-U12 the routes check their input and map each outcome", async () =
     ).status,
   ).toBe(400);
   expect((await call(ok, "get", "/operator/member-records")).status).toBe(200);
-  expect((await call(ok, "get", "/operator/member-records?x=1")).status).toBe(400);
+  expect((await call(ok, "get", "/operator/member-records?x=1")).status).toBe(
+    400,
+  );
   const json = await call(ok, "post", "/operator/member-records", {
     reference: ` ${reference.toUpperCase()} `,
     scope: "learning",
@@ -564,16 +586,26 @@ it("RECACCESS-U12 the routes check their input and map each outcome", async () =
       download,
     }),
   );
-  expect((await call(denied, "get", "/account/record-access")).headers.location).toBe("/");
   expect(
-    (await call(denied, "post", "/account/record-access", { scope: "x" })).headers
-      .location,
+    (await call(denied, "get", "/account/record-access")).headers.location,
   ).toBe("/");
   expect(
-    (await call(denied, "post", `/account/record-access/${accessId}/revoke`, {}))
-      .status,
+    (await call(denied, "post", "/account/record-access", { scope: "x" }))
+      .headers.location,
+  ).toBe("/");
+  expect(
+    (
+      await call(
+        denied,
+        "post",
+        `/account/record-access/${accessId}/revoke`,
+        {},
+      )
+    ).status,
   ).toBe(400);
-  expect((await call(denied, "get", "/operator/member-records")).status).toBe(403);
+  expect((await call(denied, "get", "/operator/member-records")).status).toBe(
+    403,
+  );
   expect(
     (
       await call(denied, "post", "/operator/member-records", {
@@ -585,8 +617,11 @@ it("RECACCESS-U12 the routes check their input and map each outcome", async () =
   ).toBe(403);
   expect(download).toHaveBeenCalledWith(token, reference, "learning", "next");
   expect(
-    (await call(denied, "post", "/operator/member-records", { scope: "learning" }))
-      .status,
+    (
+      await call(denied, "post", "/operator/member-records", {
+        scope: "learning",
+      })
+    ).status,
   ).toBe(403);
 
   const down = site(
@@ -596,5 +631,7 @@ it("RECACCESS-U12 the routes check their input and map each outcome", async () =
     }),
   );
   expect((await call(down, "get", "/account/record-access")).status).toBe(503);
-  expect((await call(down, "get", "/operator/member-records")).status).toBe(503);
+  expect((await call(down, "get", "/operator/member-records")).status).toBe(
+    503,
+  );
 });

@@ -12,6 +12,7 @@ import { COOKIE } from "../../src/session.ts";
 import { migrate, store } from "../../src/store.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { testPool } from "../support/database.ts";
+import { withLoopback } from "../support/loopback-server.ts";
 
 // #40 RECACCESS-01..10 on real PostgreSQL with invented members and staff.
 const pool = testPool(),
@@ -131,9 +132,9 @@ it("RECACCESS-02 without the member's permission nothing is disclosed and nothin
   const owner = await member(),
     operator = await staff("operator");
   await milestone(owner.id);
-  expect(await access.download(operator.token, owner.id, "learning")).toEqual(
-    { kind: "denied" },
-  );
+  expect(await access.download(operator.token, owner.id, "learning")).toEqual({
+    kind: "denied",
+  });
   // An unknown reference looks exactly the same as a missing permission.
   expect(
     await access.download(operator.token, randomUUID(), "learning"),
@@ -149,8 +150,9 @@ it("RECACCESS-03 a permission for one scope never opens another", async () => {
   expect(await access.download(operator.token, owner.id, "support")).toEqual({
     kind: "denied",
   });
-  expect(ready(await access.download(operator.token, owner.id, "billing")))
-    .not.toHaveProperty("records.supportRequests");
+  expect(
+    ready(await access.download(operator.token, owner.id, "billing")),
+  ).not.toHaveProperty("records.supportRequests");
   expect(await downloads(owner.id)).toEqual([
     expect.objectContaining({ scope: "billing" }),
   ]);
@@ -160,13 +162,14 @@ it("RECACCESS-04 an expired or revoked permission is refused", async () => {
   const owner = await member(),
     operator = await staff("platform_admin");
   await pool.query(
-    `INSERT INTO member_record_access(id,member_id,scope,created_at,expires_at)
-     VALUES($1,$2,'learning',clock_timestamp()-interval '8 days',clock_timestamp()-interval '1 day')`,
+    `WITH t AS (SELECT clock_timestamp() AS now)
+     INSERT INTO member_record_access(id,member_id,scope,created_at,expires_at)
+     SELECT $1,$2,'learning',now-interval '8 days',now-interval '1 day' FROM t`,
     [randomUUID(), owner.id],
   );
-  expect(await access.download(operator.token, owner.id, "learning")).toEqual(
-    { kind: "denied" },
-  );
+  expect(await access.download(operator.token, owner.id, "learning")).toEqual({
+    kind: "denied",
+  });
   await access.grant(owner.token, "support");
   ready(await access.download(operator.token, owner.id, "support"));
   const listed = await access.list(owner.token);
@@ -194,9 +197,9 @@ it("RECACCESS-05 only operators and administrators may download", async () => {
     reviewer = await staff("reviewer");
   await access.grant(owner.token, "learning");
   expect(await access.operator(reviewer.token)).toBe("denied");
-  expect(await access.download(reviewer.token, owner.id, "learning")).toEqual(
-    { kind: "denied" },
-  );
+  expect(await access.download(reviewer.token, owner.id, "learning")).toEqual({
+    kind: "denied",
+  });
   // A member session is not a staff session, even the owner's own.
   expect(await access.download(owner.token, owner.id, "learning")).toEqual({
     kind: "denied",
@@ -253,7 +256,11 @@ it("RECACCESS-07 the member sees each download, without who made it, in their hi
   if (exported.kind !== "ready") throw Error("Owner export missing");
   expect(exported.payload.version).toBe("local-member-records-v44");
   expect(exported.payload.records.recordAccess).toEqual([
-    expect.objectContaining({ scope: "billing", downloads: 1, revokedAt: null }),
+    expect.objectContaining({
+      scope: "billing",
+      downloads: 1,
+      revokedAt: null,
+    }),
   ]);
   expect(exported.payload.records.staffAccess).toEqual([
     expect.objectContaining({
@@ -302,8 +309,7 @@ it("RECACCESS-09 deleting the account removes the permissions and their download
     (await pool.query("SELECT 1 FROM member_record_access")).rowCount,
   ).toBe(0);
   expect(
-    (await pool.query("SELECT 1 FROM member_record_access_downloads"))
-      .rowCount,
+    (await pool.query("SELECT 1 FROM member_record_access_downloads")).rowCount,
   ).toBe(0);
 });
 
@@ -311,69 +317,95 @@ it("RECACCESS-10 the pages: a member allows and stops a download, and an operato
   const owner = await member(),
     operator = await staff("operator");
   await milestone(owner.id, "Page milestone");
-  const agent = request.agent(application);
-  const page = await agent
-    .get("/account/record-access")
-    .set("Cookie", `${COOKIE}=${owner.token}`);
-  expect(page.status).toBe(200);
-  expect(page.text).toContain("Let operators download my records");
-  expect(page.text).toContain(owner.id);
-  const csrf = /name="csrf" value="([^"]+)"/.exec(page.text)![1]!;
-  const allowed = await agent
-    .post("/account/record-access")
-    .set("Cookie", `${COOKIE}=${owner.token}`)
-    .set("Origin", origin)
-    .type("form")
-    .send({ csrf, scope: "learning" });
-  expect(allowed.status).toBe(303);
+  await withLoopback(application, async (listener) => {
+    const agent = request.agent(listener);
+    const page = await agent
+      .get("/account/record-access")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${owner.token}`);
+    expect(page.status).toBe(200);
+    expect(page.text).toContain("Let operators download my records");
+    expect(page.text).toContain(owner.id);
+    const csrf = /name="csrf" value="([^"]+)"/.exec(page.text)![1]!;
+    const allowed = await agent
+      .post("/account/record-access")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${owner.token}`)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, scope: "learning" });
+    expect(allowed.status).toBe(303);
 
-  const form = await request(application)
-    .get("/operator/member-records")
-    .set("Cookie", `${COOKIE}=${operator.token}`);
-  expect(form.status).toBe(200);
-  const staffCsrf = /name="csrf" value="([^"]+)"/.exec(form.text)![1]!;
-  const download = await request(application)
-    .post("/operator/member-records")
-    .set("Cookie", `${COOKIE}=${operator.token}`)
-    .set("Origin", origin)
-    .type("form")
-    .send({ csrf: staffCsrf, reference: owner.id, scope: "learning", cursor: "" });
-  expect(download.status).toBe(200);
-  expect(download.headers["content-type"]).toContain("application/json");
-  expect(download.headers["content-disposition"]).toContain("attachment");
-  expect(download.text).toContain("Page milestone");
-  const refused = await request(application)
-    .post("/operator/member-records")
-    .set("Cookie", `${COOKIE}=${operator.token}`)
-    .set("Origin", origin)
-    .type("form")
-    .send({ csrf: staffCsrf, reference: owner.id, scope: "billing", cursor: "" });
-  expect(refused.status).toBe(403);
-  expect(refused.text).toContain("Nothing was downloaded");
+    const form = await request(listener)
+      .get("/operator/member-records")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${operator.token}`);
+    expect(form.status).toBe(200);
+    const staffCsrf = /name="csrf" value="([^"]+)"/.exec(form.text)![1]!;
+    const download = await request(listener)
+      .post("/operator/member-records")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${operator.token}`)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf: staffCsrf,
+        reference: owner.id,
+        scope: "learning",
+        cursor: "",
+      });
+    expect(download.status).toBe(200);
+    expect(download.headers["content-type"]).toContain("application/json");
+    expect(download.headers["content-disposition"]).toContain("attachment");
+    expect(download.text).toContain("Page milestone");
+    const refused = await request(listener)
+      .post("/operator/member-records")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${operator.token}`)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf: staffCsrf,
+        reference: owner.id,
+        scope: "billing",
+        cursor: "",
+      });
+    expect(refused.status).toBe(403);
+    expect(refused.text).toContain("Nothing was downloaded");
 
-  const listed = await agent
-    .get("/account/record-access")
-    .set("Cookie", `${COOKIE}=${owner.token}`);
-  expect(listed.text).toContain("Downloaded once.");
-  const id = /record-access\/([0-9a-f-]{36})\/revoke/.exec(listed.text)![1]!;
-  const stopped = await agent
-    .post(`/account/record-access/${id}/revoke`)
-    .set("Cookie", `${COOKIE}=${owner.token}`)
-    .set("Origin", origin)
-    .type("form")
-    .send({ csrf });
-  expect(stopped.status).toBe(303);
-  const after = await request(application)
-    .post("/operator/member-records")
-    .set("Cookie", `${COOKIE}=${operator.token}`)
-    .set("Origin", origin)
-    .type("form")
-    .send({ csrf: staffCsrf, reference: owner.id, scope: "learning", cursor: "" });
-  expect(after.status).toBe(403);
-  const history = await agent
-    .get("/account/sharing/staff-access")
-    .set("Cookie", `${COOKIE}=${owner.token}`);
-  expect(history.text).toContain(
-    "An operator downloaded your learning records, with your permission.",
-  );
+    const listed = await agent
+      .get("/account/record-access")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${owner.token}`);
+    expect(listed.text).toContain("Downloaded once.");
+    const id = /record-access\/([0-9a-f-]{36})\/revoke/.exec(listed.text)![1]!;
+    const stopped = await agent
+      .post(`/account/record-access/${id}/revoke`)
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${owner.token}`)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf });
+    expect(stopped.status).toBe(303);
+    const after = await request(listener)
+      .post("/operator/member-records")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${operator.token}`)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf: staffCsrf,
+        reference: owner.id,
+        scope: "learning",
+        cursor: "",
+      });
+    expect(after.status).toBe(403);
+    const history = await agent
+      .get("/account/sharing/staff-access")
+      .set("Host", "127.0.0.1:3000")
+      .set("Cookie", `${COOKIE}=${owner.token}`);
+    expect(history.text).toContain(
+      "An operator downloaded your learning records, with your permission.",
+    );
+  });
 });

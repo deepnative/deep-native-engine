@@ -1,4 +1,9 @@
-import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  createHmac,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
   MAX_MEMBER_EXPORT_BYTES,
@@ -125,7 +130,13 @@ const LOG = `INSERT INTO member_record_access_downloads(id,access_id,member_id,s
  VALUES($1,$2,$3,$4,$5)`;
 
 type Key = (string | number)[];
-type Cursor = [version: 1, section: number, key: Key, page: number, expires: number];
+type Cursor = [
+  version: 1,
+  section: number,
+  key: Key,
+  page: number,
+  expires: number,
+];
 
 class Denied extends Error {}
 
@@ -190,7 +201,10 @@ export function memberRecordAccessStore(
     const match = /^([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]{43})$/.exec(value);
     if (
       !match ||
-      !timingSafeEqual(Buffer.from(match[2]!), Buffer.from(sign(match[1]!, bound)))
+      !timingSafeEqual(
+        Buffer.from(match[2]!),
+        Buffer.from(sign(match[1]!, bound)),
+      )
     )
       return null;
     try {
