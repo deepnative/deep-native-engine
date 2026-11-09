@@ -160,4 +160,6 @@ it("bootstraps private synthetic moderator credentials and manages an exact audi
   } finally {
     await rm(root, { recursive: true, force: true });
   }
-});
+  // Ten CLI child processes take 3-4s even on a quiet machine; under four gate
+  // lanes they passed the 5s default (gate on 5d02ed4, 9 Nov 2026).
+}, 30_000);
