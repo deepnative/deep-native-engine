@@ -7,6 +7,12 @@ import { practiceSessionStore } from "../../src/practice-sessions.ts";
 import { migrate, store } from "../../src/store.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { testPool } from "../support/database.ts";
+import { setTestCeiling } from "../support/ai-test-ceiling.ts";
+import {
+  aiCostPoints,
+  aiInputTokens,
+  estimateAiRequest,
+} from "../../src/ai-budget-policy.ts";
 
 // #200 PRACTICE-AI: simulated suggestions on saved practice pairs, from the
 // local deterministic test provider, on real PostgreSQL. Invented data only.
@@ -33,7 +39,11 @@ beforeEach(async () => {
 afterEach(async () => {
   await pool.query("UPDATE local_ai_control SET paused=false");
 });
-afterAll(async () => pool.end());
+afterAll(async () => {
+  // Leave the shared test ceiling usable for later files.
+  await setTestCeiling(pool, { ceiling: 100000, committed: 0 });
+  await pool.end();
+});
 
 async function member() {
   const value = token();
@@ -393,4 +403,279 @@ it("PRACTICE-AI-07 a store without suggestions requests nothing, and the table r
       [owner.id, other.id],
     ),
   ).rejects.toThrow();
+});
+
+// #188 metering: practice suggestions count against the platform test
+// spending ceiling like every other simulated AI request. Points are the
+// published invented test rates; no money and no member units are involved.
+const spend = async (memberId: string) =>
+  (
+    await pool.query<{
+      estimate: number | null;
+      estimateRate: string | null;
+      actual: number | null;
+      commitment: string | null;
+      committedPoints: number | null;
+      settledPoints: number | null;
+    }>(
+      `SELECT e.cost_points AS estimate,e.rate_version AS "estimateRate",s.cost_points AS actual,
+        c.state AS commitment,c.estimated_points AS "committedPoints",c.actual_points AS "settledPoints"
+       FROM adapter_jobs j LEFT JOIN ai_usage_estimates e ON e.job_id=j.id
+       LEFT JOIN ai_usage_settlements s ON s.job_id=j.id
+       LEFT JOIN ai_spending_commitments c ON c.job_id=j.id
+       WHERE j.member_id=$1 ORDER BY j.created_at`,
+      [memberId],
+    )
+  ).rows;
+const committed = async () =>
+  Number(
+    (
+      await pool.query<{ committed: string }>(
+        "SELECT committed_points AS committed FROM ai_test_spending_ceiling WHERE singleton",
+      )
+    ).rows[0]!.committed,
+  );
+async function expected(sessionId: string, sequence = 1) {
+  const pair = (
+    await pool.query<{ response: string; excerpt: string }>(
+      "SELECT response,source_excerpt AS excerpt FROM private_practice_exchanges WHERE session_id=$1 AND sequence=$2",
+      [sessionId, sequence],
+    )
+  ).rows[0]!;
+  return estimateAiRequest(
+    Buffer.byteLength(pair.response) + Buffer.byteLength(pair.excerpt),
+  );
+}
+
+it("PRACTICE-AI-08 a suggestion commits its labelled estimate before the provider call and settles at reported simulated usage", async () => {
+  await setTestCeiling(pool, { ceiling: 100000, committed: 0 });
+  await lesson();
+  const owner = await member();
+  const id = await saved(owner);
+  const estimate = await expected(id);
+  let during: Awaited<ReturnType<typeof spend>> = [];
+  let duringCommitted = -1;
+  const real = (
+    await import("../../src/practice-ai-suggestions.ts")
+  ).deterministicPracticeSuggestionProvider("test");
+  const store = practiceSessionStore(pool, {
+    suggestions: {
+      mode: "test",
+      provider: {
+        async suggest(input) {
+          during = await spend(owner.id);
+          duringCommitted = await committed();
+          return real.suggest(input);
+        },
+      },
+    },
+  });
+  expect(await store.suggest?.(owner.token, id, 1)).toBe("ready");
+  // Committed before the call, at the stored estimate.
+  expect(during).toEqual([
+    {
+      estimate: estimate.costPoints,
+      estimateRate: "simulated-rates-v1",
+      actual: null,
+      commitment: "committed",
+      committedPoints: estimate.costPoints,
+      settledPoints: null,
+    },
+  ]);
+  expect(duringCommitted).toBe(estimate.costPoints);
+  // Settled at the usage the simulated provider reported.
+  const text = (await store.detail(owner.token, id))!.exchanges[0]!.suggestion!
+    .text!;
+  const actual = aiCostPoints({
+    inputTokens: estimate.inputTokens,
+    outputTokens: aiInputTokens(Buffer.byteLength(text)),
+  });
+  expect(await spend(owner.id)).toEqual([
+    {
+      estimate: estimate.costPoints,
+      estimateRate: "simulated-rates-v1",
+      actual,
+      commitment: "settled",
+      committedPoints: estimate.costPoints,
+      settledPoints: actual,
+    },
+  ]);
+  expect(await committed()).toBe(actual);
+  // A replay spends nothing more.
+  expect(await store.suggest?.(owner.token, id, 1)).toBe("replayed");
+  expect(await committed()).toBe(actual);
+  // The member's own export shows the labelled figures.
+  const exported = await memberExportStore(pool).exportOwned(owner.token);
+  if (exported.kind !== "ready") throw Error("Export unavailable");
+  expect(exported.payload.records.aiUsage).toMatchObject([
+    {
+      estimatedCostPoints: estimate.costPoints,
+      actualCostPoints: actual,
+      label: "ESTIMATE · SIMULATED · NO MONEY CHARGED",
+    },
+  ]);
+});
+
+it("PRACTICE-AI-09 a ceiling without room requests nothing, and two pairs racing for the last room make one call", async () => {
+  await lesson();
+  const owner = await member();
+  const id = await saved(owner, "practice-v1", [RESPONSE, `${RESPONSE} Too.`]);
+  const first = await expected(id, 1);
+  const provider = counting(
+    (
+      await import("../../src/practice-ai-suggestions.ts")
+    ).deterministicPracticeSuggestionProvider("test"),
+  );
+  const store = practiceSessionStore(pool, {
+    suggestions: { mode: "test", provider },
+  });
+  await setTestCeiling(pool, {
+    ceiling: 5000 + first.costPoints - 1,
+    committed: 5000,
+  });
+  expect(await store.suggest?.(owner.token, id, 1)).toBe("ceiling");
+  expect(provider.calls).toBe(0);
+  expect(await jobs(owner.id)).toEqual([]);
+  expect(await suggestions(owner.id)).toEqual([]);
+  expect(await committed()).toBe(5000);
+  const pair = (await store.detail(owner.token, id))!.exchanges[0]!;
+  expect(pair.suggestion).toBeNull();
+
+  // Room for exactly one of the two estimates.
+  await setTestCeiling(pool, {
+    ceiling: 5000 + first.costPoints,
+    committed: 5000,
+  });
+  const raced = await Promise.all([
+    store.suggest?.(owner.token, id, 1),
+    store.suggest?.(owner.token, id, 2),
+  ]);
+  expect(raced.filter((item) => item === "ready")).toHaveLength(1);
+  expect(raced.filter((item) => item === "ceiling")).toHaveLength(1);
+  expect(provider.calls).toBe(1);
+  expect(await jobs(owner.id)).toHaveLength(1);
+  expect(await committed()).toBeLessThanOrEqual(5000 + first.costPoints + 200);
+});
+
+it("PRACTICE-AI-10 unknown or unreported spend stays committed at its estimate, and withdrawal and erasure keep recorded spend", async () => {
+  await setTestCeiling(pool, { ceiling: 100000, committed: 0 });
+  await lesson();
+  const owner = await member();
+  const id = await saved(owner, "practice-v1", [
+    RESPONSE,
+    `${RESPONSE} Second.`,
+    `${RESPONSE} Third.`,
+  ]);
+  const estimates = [
+    await expected(id, 1),
+    await expected(id, 2),
+    await expected(id, 3),
+  ];
+  const real = (
+    await import("../../src/practice-ai-suggestions.ts")
+  ).deterministicPracticeSuggestionProvider("test");
+  const answers: ((
+    input: Parameters<PracticeSuggestionProvider["suggest"]>[0],
+  ) => Promise<unknown>)[] = [
+    // 1: an error after the call may have spent: held, estimate kept.
+    async () => {
+      throw new Error("invented provider fault");
+    },
+    // 2: a valid answer without usage: shown, but its estimate stays committed.
+    async (input) => {
+      const { usage: _usage, ...rest } = (await real.suggest(input)) as {
+        usage: unknown;
+      };
+      return rest;
+    },
+    // 3: an invalid answer with usage: rejected, settled at that usage.
+    async () => ({
+      text: "Score 10",
+      reference: "test_x",
+      usage: { inputTokens: 5, outputTokens: 1 },
+    }),
+  ];
+  let call = 0;
+  const store = practiceSessionStore(pool, {
+    suggestions: {
+      mode: "test",
+      provider: { suggest: (input) => answers[call++]!(input) },
+    },
+  });
+  expect(await store.suggest?.(owner.token, id, 1)).toBe("unknown");
+  expect(await store.suggest?.(owner.token, id, 2)).toBe("ready");
+  expect(await store.suggest?.(owner.token, id, 3)).toBe("rejected");
+  const rejectedPoints = aiCostPoints({ inputTokens: 5, outputTokens: 1 });
+  expect(await spend(owner.id)).toMatchObject([
+    {
+      commitment: "committed",
+      actual: null,
+      committedPoints: estimates[0]!.costPoints,
+    },
+    {
+      commitment: "committed",
+      actual: null,
+      committedPoints: estimates[1]!.costPoints,
+    },
+    {
+      commitment: "settled",
+      actual: rejectedPoints,
+      settledPoints: rejectedPoints,
+    },
+  ]);
+  const total =
+    estimates[0]!.costPoints + estimates[1]!.costPoints + rejectedPoints;
+  expect(await committed()).toBe(total);
+
+  // Withdrawal removes the pairs and suggestions but not recorded spend.
+  expect(await store.withdraw(owner.token, id)).toBe("withdrawn");
+  expect(await suggestions(owner.id)).toEqual([]);
+  expect(await committed()).toBe(total);
+  // Erasure removes the member's figures; the platform counter keeps the spend.
+  await pool.query("DELETE FROM principals WHERE id=$1", [owner.id]);
+  expect(await spend(owner.id)).toEqual([]);
+  expect(await committed()).toBe(total);
+});
+
+it("PRACTICE-AI-10 the database refuses forged practice estimates, commitments and settlements", async () => {
+  await setTestCeiling(pool, { ceiling: 100000, committed: 0 });
+  await lesson();
+  const owner = await member();
+  const id = await saved(owner, "practice-v1", [
+    RESPONSE,
+    `${RESPONSE} Again.`,
+  ]);
+  expect(await practice.suggest?.(owner.token, id, 1)).toBe("ready");
+  const job = (
+    await pool.query<{ id: string }>(
+      "SELECT id FROM adapter_jobs WHERE member_id=$1",
+      [owner.id],
+    )
+  ).rows[0]!.id;
+  // The finished request takes no second estimate, commitment or settlement.
+  await expect(
+    pool.query(
+      "INSERT INTO ai_spending_commitments(job_id,attempt,estimated_points,state) VALUES($1,2,1,'committed')",
+      [job],
+    ),
+  ).rejects.toThrow(/claimed metered request/);
+  await expect(
+    pool.query("DELETE FROM ai_usage_settlements WHERE job_id=$1", [job]),
+  ).rejects.toThrow(/member erasure/);
+  // A running practice-like job with no requested suggestion cannot be metered.
+  const forged = (
+    await pool.query<{ id: string }>(
+      `INSERT INTO adapter_jobs(id,adapter,mode,operation,idempotency_key,request_fingerprint,status,attempt_count,max_attempts,
+        attempt_token,lease_until,member_id)
+       VALUES(gen_random_uuid(),'ai','test','practice-suggestion-local-v1','forged-practice-key',repeat('a',64),'running',1,1,
+        gen_random_uuid()::text,clock_timestamp()+interval '5 minutes',$1) RETURNING id`,
+      [owner.id],
+    )
+  ).rows[0]!.id;
+  await expect(
+    pool.query(
+      "INSERT INTO ai_usage_estimates(job_id,member_id,rate_version,model_version,input_tokens,output_tokens,cost_points) VALUES($1,$2,'simulated-rates-v1','simulated-model-v1',1,1,1)",
+      [forged, owner.id],
+    ),
+  ).rejects.toThrow(/new metered request/);
 });
