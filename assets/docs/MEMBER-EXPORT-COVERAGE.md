@@ -17,7 +17,7 @@ The check is about which tables the download reads, not which columns. Each sect
 
 - Uploaded files. Each one downloads from its own evidence page. Program enrollments also have their own download on My courses.
 - Records about the member that sit in another member's or a staff member's records.
-- Hosted object storage, provider copies and backups (#12, D07/D08).
+- Hosted object storage, provider copies and backups. Database backups are kept up to 30 days (#12, owner decision 9 Nov 2026).
 
 ## Member records not in Download my records
 

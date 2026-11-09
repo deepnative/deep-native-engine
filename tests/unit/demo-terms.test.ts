@@ -14,6 +14,7 @@ const text = (html: string) =>
   html
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")
+    .replace(/ ([.,])/g, "$1")
     .trim();
 
 function storage() {
@@ -22,9 +23,8 @@ function storage() {
   } as never;
 }
 async function visit(path: string) {
-  return withLoopback(
-    app(storage(), { origin, secret: "terms-test" }),
-    (s) => request(s).get(path).set("Host", host),
+  return withLoopback(app(storage(), { origin, secret: "terms-test" }), (s) =>
+    request(s).get(path).set("Host", host),
   );
 }
 
