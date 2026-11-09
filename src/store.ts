@@ -277,6 +277,7 @@ export async function migrate(pool: Pool) {
       "123-practice-suggestion-spending.sql",
       "124-member-record-access.sql",
       "125-demo-site-accounts.sql",
+      "126-student-coaching-terms.sql",
       "128-staff-sample-hold-cancellation.sql",
       "130-member-browser-sessions.sql",
     ].map((name) =>

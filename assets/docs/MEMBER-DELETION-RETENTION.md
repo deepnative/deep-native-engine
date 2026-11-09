@@ -11,7 +11,7 @@ The account page tells members the same thing in plain words before they delete 
 
 ## Not covered here
 
-- Hosted object storage, provider copies and database backups. Backups go only when they expire, on the hosting provider's schedule. Retention periods and backup expiry are open on #12 (D07/D08).
+- Hosted object storage, provider copies and database backups. The owner set database backup retention to 30 days on 9 November 2026 (#12, D08); copies in backups go when those backups expire. The account page and `/terms` say "up to 30 days". Other retention periods are still open on #12.
 - A deleted member's ID inside another member's own records, such as a reply to their post. Those follow each feature's own rules.
 - Staff accounts (`principals.kind='staff'`) are a separate kind and aren't deleted through this path.
 
