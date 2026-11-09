@@ -297,7 +297,10 @@ export function mountCoachingRoutes(
     if (!valid(req, res, [...TERMS_FIELDS])) return;
     if (!options.coachingTerms) return failure(res, "unavailable", true);
     const values = parseCoachingTerms(req.body);
-    if (values === null || !/^(0|[1-9]\d{0,8})$/.test(req.body.revision ?? ""))
+    if (
+      values === null ||
+      !/^(0|[1-9]\d{0,8})$/.test(String(req.body.revision))
+    )
       return failure(res, "invalid", true);
     const ownerId = (req.params as Record<string, string>).ownerId!;
     const r = await options.coachingTerms.save(token(res), {
