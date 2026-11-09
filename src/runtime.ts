@@ -68,6 +68,7 @@ import { metricsStore } from "./metrics.ts";
 import { ledgerReconciliationStore } from "./ledger-reconciliation.ts";
 import { invoiceReconciliationStore } from "./invoice-reconciliation.ts";
 import { staffCapacityStore } from "./staff-capacity.ts";
+import { myStaffTimeStore } from "./my-staff-time.ts";
 import { agreementOutcomesStore } from "./agreement-outcomes.ts";
 import { localAiHoldInspectionStore } from "./local-ai-hold-inspection.ts";
 import { localAiHoldDecisionStore } from "./local-ai-hold-decisions.ts";
@@ -275,6 +276,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       ledgerReconciliation: ledgerReconciliationStore(pool),
       invoiceReconciliation: invoiceReconciliationStore(pool),
       staffCapacity: staffCapacityStore(pool),
+      myStaffTime: myStaffTimeStore(pool),
       agreementOutcomes: agreementOutcomesStore(pool),
       localHoldInspection: localAiHoldInspectionStore(pool, {
         mode: settings.mode,

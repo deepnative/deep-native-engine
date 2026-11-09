@@ -50,6 +50,8 @@ export interface StaffTools {
   agreements?: boolean;
   /** #123 CAP: the staff capacity report is available here. */
   capacity?: boolean;
+  /** #193 MYTIME: a staff member's own booked time is available here. */
+  myTime?: boolean;
   localAi: boolean;
   receipts: boolean;
 }
@@ -63,6 +65,7 @@ const labels = (): Record<StaffRole, string> => ({
 });
 function links(role: StaffRole, tools: StaffTools) {
   const choices: [boolean, string, string][] = [];
+  choices.push([tools.myTime === true, "/review/my-time", "My booked time"]);
   if (role === "editor" || role === "reviewer")
     choices.push([tools.library, "/editor/library", "Content workflow"]);
   if (role === "reviewer") {
