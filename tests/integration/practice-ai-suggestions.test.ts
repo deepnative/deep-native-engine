@@ -668,7 +668,7 @@ it("PRACTICE-AI-10 the database refuses forged practice estimates, commitments a
       `INSERT INTO adapter_jobs(id,adapter,mode,operation,idempotency_key,request_fingerprint,status,attempt_count,max_attempts,
         attempt_token,lease_until,member_id)
        VALUES(gen_random_uuid(),'ai','test','practice-suggestion-local-v1','forged-practice-key',repeat('a',64),'running',1,1,
-        gen_random_uuid()::text,clock_timestamp()+interval '5 minutes',$1) RETURNING id`,
+        gen_random_uuid(),clock_timestamp()+interval '5 minutes',$1) RETURNING id`,
       [owner.id],
     )
   ).rows[0]!.id;
