@@ -326,6 +326,10 @@ it("MARKET-01 hosted signup asks where the person lives, with no preselected ans
   expect(page.text).toContain(
     "Deep Native Engine is operated by Deep Native Inc. in Ontario, Canada, and is offered to people living in Canada for now.",
   );
+  // #12 TERMS-04: the demo terms sit beside the operator statement.
+  expect(page.text).toContain(
+    'for now. <a href="/terms">Terms and privacy for this demo</a> (not legally reviewed).</p>',
+  );
 });
 
 it("MARKET-02/03 only people living in Canada can open an account, and nothing is saved or looked up otherwise", async () => {

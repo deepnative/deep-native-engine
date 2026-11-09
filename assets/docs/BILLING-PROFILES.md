@@ -17,7 +17,7 @@ Migration086 creates only the member-owned billing_profiles table with cascade e
   - Migration 129 keeps the verified address readable on the member's own `member_email_identities` row, beside the unchanged fingerprint. Sign-in, session and verification checks still use only the fingerprint.
   - The address is captured when a link that proves it is used: linking an email, or an email sign-in. Members verified earlier get theirs at their next email sign-in; until then the invoice email starts empty.
   - A waiting link holds the address only until it is used (a trigger clears it) or expires (later email activity clears it).
-  - The address goes with the identity row, so it is removed with the account and replaced with the identity. It is in the member's own records download (`signInEmail`, v45).
+  - The address goes with the identity row, so it is removed with the account and replaced with the identity. It is in the member's own records download (`signInEmail`, v46).
   - Only the member's own pages and records download read it; nothing writes it to logs, metrics, URLs or change history.
   - Changing the invoice email never changes the sign-in email.
 - **Coaching edits become the reusable recipient.** Saving a coaching draft also saves its name, email and company as the reusable billing recipient.

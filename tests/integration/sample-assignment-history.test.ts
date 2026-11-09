@@ -183,7 +183,7 @@ it("REVADM-08 v22 owner export traverses retained source-deleted receipts with u
   do {
     const result = await exporter.exportOwned(first.ownerToken, cursor);
     if (result.kind !== "ready") throw Error("Owned export unavailable");
-    expect(result.payload.version).toBe("local-member-records-v45");
+    expect(result.payload.version).toBe("local-member-records-v46");
     expect(result.payload.page.recordCount).toBeLessThanOrEqual(
       MAX_MEMBER_EXPORT_RECORDS,
     );

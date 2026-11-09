@@ -1204,6 +1204,15 @@ class AzureReleasePreservation(unittest.TestCase):
         self.assertEqual(r.env_values(released)['DNE_MEMBER_CONTRIBUTIONS'], 'enabled')
         self.assertRegex((SOURCE / 'infra/app.tf').read_text(), r'DNE_MEMBER_CONTRIBUTIONS +=  *"enabled"')
 
+    def test_terms06_database_declares_owner_30_day_backup_retention(self):
+        # TERMS-06 (#12, owner decision 9 Nov 2026): database backups are kept 30 days.
+        # Declarative only: deploy-azure.yml doesn't run Terraform, so an Azure apply sets it.
+        durable = (SOURCE / 'infra/durable.tf').read_text()
+        server = durable[durable.index('resource "azurerm_postgresql_flexible_server" "durable"'):]
+        server = server[:server.index('\n}\n')]
+        self.assertRegex(server, r'\n  backup_retention_days +=  *30\n')
+        self.assertRegex(server, r'geo_redundant_backup_enabled +=  *false')
+
     def test_azinv02_release_replaces_stale_invoice_values_exactly_once(self):
         r = self.release()
         app = self.durable()
