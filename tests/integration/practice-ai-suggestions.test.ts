@@ -583,10 +583,11 @@ it("PRACTICE-AI-10 unknown or unreported spend stays committed at its estimate, 
     },
     // 2: a valid answer without usage: shown, but its estimate stays committed.
     async (input) => {
-      const { usage: _usage, ...rest } = (await real.suggest(input)) as {
-        usage: unknown;
+      const answer = (await real.suggest(input)) as {
+        text: string;
+        reference: string;
       };
-      return rest;
+      return { text: answer.text, reference: answer.reference };
     },
     // 3: an invalid answer with usage: rejected, settled at that usage.
     async () => ({
