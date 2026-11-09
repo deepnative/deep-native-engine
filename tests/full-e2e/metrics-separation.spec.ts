@@ -146,7 +146,7 @@ test("[F-ECO-08-A] learning, participation, reviewed-contribution and paid-conve
       );
       // The learning snapshot carries no paid or revenue measure.
       await expect(report).toContainText(
-        "paid conversion, revenue, service capacity and career outcomes are not included",
+        "paid conversion, revenue and service capacity are not included",
       );
       await expect(activity).not.toContainText("accepted");
     });
