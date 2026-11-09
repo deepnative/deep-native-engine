@@ -131,7 +131,8 @@ it("MYTIME-01/02/06 a staff member sees only their own records, held slot times 
     b = await staff("coach");
   verifierId = admin.id;
   const aRecord = await roster(a.id, b.id, { capacity: 300, committed: 60 }),
-    bRecord = await roster(b.id, a.id, { capacity: 120 });
+    // The backup needs room to cover A's three slots as well as its own.
+    bRecord = await roster(b.id, a.id, { capacity: 300 });
   const start = Math.floor((Date.now() + 3 * day) / 60000) * 60000,
     at = (offset: number) => new Date(start + offset * 2 * hour),
     slot = async (record: string, offset: number) => {
@@ -174,10 +175,10 @@ it("MYTIME-01/02/06 a staff member sees only their own records, held slot times 
   // B is A's backup but sees only B's own record and its own held slot.
   expect(ready(await mine.snapshot(b.token)).records).toEqual([
     expect.objectContaining({
-      capacityMinutes: 120,
+      capacityMinutes: 300,
       slotMinutes: 60,
       held: [{ startsAt: at(3), endsAt: new Date(+at(3) + hour) }],
-      roomMinutes: 60,
+      roomMinutes: 240,
     }),
   ]);
   // The same held rule as the staff capacity report.

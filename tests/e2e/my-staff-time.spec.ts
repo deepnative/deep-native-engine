@@ -34,7 +34,8 @@ test("[L324] MYTIME-01/02/05/06/07 a staff member sees only their own held slot 
         [id, staffId, capacity, other, admin.id],
       );
     await insert(record, coach.id, backup.id, 300);
-    await insert(randomUUID(), backup.id, coach.id, 120);
+    // The backup also covers both of the coach's slots, so it needs room for them.
+    await insert(randomUUID(), backup.id, coach.id, 300);
     const startsAt = new Date(
       Math.floor((Date.now() + 3 * 86_400_000) / 60000) * 60000,
     );
@@ -45,12 +46,13 @@ test("[L324] MYTIME-01/02/05/06/07 a staff member sees only their own held slot 
       startsAt,
       new Date(+startsAt + 3_600_000),
     );
-    await slots.create(
+    const openSlot = await slots.create(
       operator.token,
       record,
       new Date(+startsAt + 7_200_000),
       new Date(+startsAt + 10_800_000),
     );
+    expect(heldSlot && openSlot).toBeTruthy();
     const member = await f.member();
     const memberToken = (await member.context().cookies()).find(
       (cookie) => cookie.name === COOKIE,
