@@ -9,7 +9,7 @@ import { reviewedContentFixture } from "../support/reviewed-content-browser.ts";
 // Staff credentials remain outside browser traces and captures.
 test.use({ trace: "off" });
 
-test("[L324] MYTIME-01/02/05/06/07 a staff member sees only their own held slot and room left", async ({
+test("[L327] MYTIME-01/02/05/06/07 a staff member sees only their own held slot and room left", async ({
   browser,
 }, info) => {
   const f = await reviewedContentFixture(browser, info);
@@ -29,8 +29,8 @@ test("[L324] MYTIME-01/02/05/06/07 a staff member sees only their own held slot 
            loaded_cost_cents,capacity_minutes,committed_minutes,backup_staff_id,
            qualification_ref,agreement_ref,conflict_review_ref,verified_by,verified_at)
          VALUES($1,$2,'coach','education','coaching',clock_timestamp()-interval '1 hour',
-           clock_timestamp()+interval '30 days',123456,$3,60,$4,'INVENTED-QUAL-L324',
-           'INVENTED-AGREE-L324','INVENTED-CONFLICT-L324',$5,clock_timestamp()-interval '1 minute')`,
+           clock_timestamp()+interval '30 days',123456,$3,60,$4,'INVENTED-QUAL-L327',
+           'INVENTED-AGREE-L327','INVENTED-CONFLICT-L327',$5,clock_timestamp()-interval '1 minute')`,
         [id, staffId, capacity, other, admin.id],
       );
     await insert(record, coach.id, backup.id, 300);
@@ -107,7 +107,7 @@ test("[L324] MYTIME-01/02/05/06/07 a staff member sees only their own held slot 
       heldSlot!,
       record,
       coach.id,
-      "L324",
+      "L327",
       "1234.56",
     ])
       expect(text).not.toContain(secret);
