@@ -135,8 +135,17 @@ export interface SampleHoldReceipt {
   startsAt: Date;
   endsAt: Date;
   expiresAt: Date;
-  state: "held" | "expired" | "released";
+  state: "held" | "expired" | "released" | "cancelled";
   quantity: number;
+  /** #27 STAFFCANCEL: present only when staff cancelled the hold. */
+  cancellation?: SampleHoldCancellation | null;
+}
+export interface SampleHoldCancellation {
+  reason: "coach-unavailable" | "scheduling-error" | "member-request";
+  cancelledAt: string;
+  replacementMinutes: number;
+  replacementStartsAt: string;
+  replacementExpiresAt: string;
 }
 export interface SampleHoldGrant {
   id: string;
@@ -170,6 +179,8 @@ export function disabledMemberSlotHolds(): MemberSlotHolds {
   };
 }
 
+const utc = (column: string) =>
+  `to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 export function memberSlotHolds(pool: Pool): MemberSlotHolds {
   const validToken = (value: string) =>
     typeof value === "string" && !!value.trim();
@@ -181,9 +192,16 @@ export function memberSlotHolds(pool: Pool): MemberSlotHolds {
     return client.query<SampleHoldReceipt>(
       `SELECT r.request_id AS id,r.slot_id AS "slotId",r.domain,
         r.service_type AS "serviceType",r.starts_at AS "startsAt",
-        r.ends_at AS "endsAt",h.expires_at AS "expiresAt",h.state,60 AS quantity
+        r.ends_at AS "endsAt",h.expires_at AS "expiresAt",h.state,60 AS quantity,
+        CASE WHEN c.id IS NULL THEN NULL ELSE json_build_object(
+          'reason',c.reason,'cancelledAt',${utc("c.cancelled_at")},
+          'replacementMinutes',g.quantity,
+          'replacementStartsAt',${utc("g.starts_at")},
+          'replacementExpiresAt',${utc("g.expires_at")}) END AS cancellation
        FROM synthetic_member_hold_receipts r
        JOIN synthetic_slot_holds h ON h.id=r.hold_id
+       LEFT JOIN sample_hold_staff_cancellations c ON c.hold_id=h.id AND c.member_id=r.member_id
+       LEFT JOIN synthetic_entitlement_grants g ON g.id=c.replacement_grant_id AND g.member_id=r.member_id
        JOIN principals p ON p.id=r.member_id
        JOIN workspaces w ON w.owner_principal_id=p.id AND w.deleting_at IS NULL
        WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL

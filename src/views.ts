@@ -403,6 +403,19 @@ export function availabilityPage(
   );
 }
 
+// #27 STAFFCANCEL: the member's own account of a staff cancellation. The
+// replacement keeps the dates of the credit it replaces.
+const CANCELLED_BECAUSE: Record<string, string> = {
+  "coach-unavailable": "the coach is unavailable",
+  "scheduling-error": "the window was listed in error",
+  "member-request": "you asked staff to cancel it",
+};
+function cancelledByStaff(receipt: SampleHoldReceipt) {
+  const value = receipt.cancellation;
+  if (!value)
+    return "<p>Staff cancelled this sample hold. Its replacement credit could not be shown; inspect your test units.</p>";
+  return `<p>Staff cancelled this sample hold: ${escape(CANCELLED_BECAUSE[value.reason] ?? "no reason was recorded")}. Its slot is free again. One replacement credit was added for the test minutes it held, valid for the same dates as the credit it replaces. Your earlier history is kept.</p><dl><dt>Cancelled</dt><dd>${timeTag(value.cancelledAt)}</dd><dt>Replacement credit</dt><dd>${value.replacementMinutes} test minutes</dd><dt>Replacement valid from</dt><dd>${timeTag(value.replacementStartsAt)}</dd><dt>Replacement valid until</dt><dd>${timeTag(value.replacementExpiresAt)}</dd></dl><p><a href="/member/test-units">View your test units</a></p>`;
+}
 export function sampleHoldReceiptPage(
   receipt: SampleHoldReceipt,
   timezone?: string,
@@ -415,7 +428,7 @@ export function sampleHoldReceiptPage(
     : "UTC display window (no valid member time zone)";
   return page(
     "Your sample hold receipt",
-    `<section class="reading"><p class="eyebrow">SAMPLE HOLD — NOT A BOOKING</p><h1>Your sample hold receipt</h1><dl><dt>State</dt><dd>${escape(receipt.state)}</dd><dt>Sample service</dt><dd>${escape(DOMAINS[receipt.domain as Domain] ?? receipt.domain)} · ${escape(receipt.serviceType)}</dd><dt>Slot</dt><dd>${escape(receipt.slotId)}</dd><dt>Exact UTC window</dt><dd>${readableRange(receipt.startsAt, receipt.endsAt)}</dd><dt>${windowLabel}</dt><dd>${escape(localSlotTime(receipt.startsAt, zone)!)} to ${escape(localSlotTime(receipt.endsAt, zone)!)}</dd><dt>Reserved test quantity</dt><dd>${receipt.quantity} minutes</dd><dt>Test-only deadline</dt><dd>${timeTag(receipt.expiresAt)} · ${escape(localSlotTime(receipt.expiresAt, zone)!)}</dd></dl><p>${receipt.state === "released" ? "You withdrew this sample hold. Its slot and test-minute reservation are released. Units return only while the original test grant remains current; otherwise those units stay expired." : receipt.state === "expired" ? "This temporary hold has expired. Reserved units return only while the original test grant and member access remain current; otherwise those units stay expired." : "This temporary hold lasts at most 10 minutes and ends before the sample window starts. Reload this receipt to inspect its current state."}</p>${receipt.state === "held" && csrf ? `<form method="post" action="/availability/holds/${escape(receipt.id)}/withdraw">${hidden(csrf)}<p>Withdraw this temporary sample hold to release its slot and test-minute reservation. Your original receipt remains available.</p><button type="submit">Withdraw sample hold</button></form>` : ""}<p>Real expert capacity, paid access, provider notification, calendar/email delivery, cancellation and service fulfillment are unavailable. This is no commercial cancellation or no-show term.</p><p><a href="/availability/holds/${escape(receipt.id)}">Reload this receipt</a> · <a href="/availability">Inspect your current sample receipts</a></p></section>`,
+    `<section class="reading"><p class="eyebrow">SAMPLE HOLD — NOT A BOOKING</p><h1>Your sample hold receipt</h1><dl><dt>State</dt><dd>${receipt.state === "cancelled" ? "cancelled by staff" : escape(receipt.state)}</dd><dt>Sample service</dt><dd>${escape(DOMAINS[receipt.domain as Domain] ?? receipt.domain)} · ${escape(receipt.serviceType)}</dd><dt>Slot</dt><dd>${escape(receipt.slotId)}</dd><dt>Exact UTC window</dt><dd>${readableRange(receipt.startsAt, receipt.endsAt)}</dd><dt>${windowLabel}</dt><dd>${escape(localSlotTime(receipt.startsAt, zone)!)} to ${escape(localSlotTime(receipt.endsAt, zone)!)}</dd><dt>Reserved test quantity</dt><dd>${receipt.quantity} minutes</dd><dt>Test-only deadline</dt><dd>${timeTag(receipt.expiresAt)} · ${escape(localSlotTime(receipt.expiresAt, zone)!)}</dd></dl>${receipt.state === "cancelled" ? cancelledByStaff(receipt) : `<p>${receipt.state === "released" ? "You withdrew this sample hold. Its slot and test-minute reservation are released. Units return only while the original test grant remains current; otherwise those units stay expired." : receipt.state === "expired" ? "This temporary hold has expired. Reserved units return only while the original test grant and member access remain current; otherwise those units stay expired." : "This temporary hold lasts at most 10 minutes and ends before the sample window starts. Reload this receipt to inspect its current state."}</p>`}${receipt.state === "held" && csrf ? `<form method="post" action="/availability/holds/${escape(receipt.id)}/withdraw">${hidden(csrf)}<p>Withdraw this temporary sample hold to release its slot and test-minute reservation. Your original receipt remains available.</p><button type="submit">Withdraw sample hold</button></form>` : ""}<p>Real expert capacity, paid access, provider notification, calendar/email delivery, cancellation and service fulfillment are unavailable. This is no commercial cancellation or no-show term.</p><p><a href="/availability/holds/${escape(receipt.id)}">Reload this receipt</a> · <a href="/availability">Inspect your current sample receipts</a></p></section>`,
   );
 }
 
