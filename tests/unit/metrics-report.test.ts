@@ -27,6 +27,7 @@ const snapshot: PreviewMetrics = {
     returnEligible: "First lesson open at least 14 days ago.",
     crossContentReturned:
       "Of returnEligible, different content during days 7 to 14.",
+    reportedOutcome: "Member-reported <outcome>, not verified.",
     usefulness: "Self-report, with small groups suppressed.",
     segments: "Segments can overlap.",
     cohorts: "Cohort windows are fixed.",
@@ -44,6 +45,7 @@ const snapshot: PreviewMetrics = {
     submittedAssignment: 4,
     returnEligible: 20,
     crossContentReturned: 6,
+    reportedOutcome: 8,
   }),
   segments: learningSegments(
     {
@@ -57,6 +59,7 @@ const snapshot: PreviewMetrics = {
           submittedAssignment: 1,
           returnEligible: 5,
           crossContentReturned: 0,
+          reportedOutcome: 0,
         },
       },
     },
@@ -88,8 +91,17 @@ it("MR-01 renders every count with its meaning, denominator, timestamp and separ
     submittedAssignment: "Suppressed",
     returnEligible: "20-49",
     crossContentReturned: "5-19",
+    reportedOutcome: "5-19",
   }))
     expect(html).toContain(`data-metric="${name}">${value}</strong>`);
+  // #123 OUTCOME: labelled member-reported, never as verified.
+  expect(html).toContain("Member-reported career outcomes");
+  expect(html).toContain("Member-reported &lt;outcome&gt;, not verified.");
+  expect(html).toContain('<th scope="col">Reported an outcome</th>');
+  expect(html).toContain(
+    "Career outcomes appear only as member-reported counts",
+  );
+  expect(html).not.toContain("and career outcomes are not included");
   expect(html).toContain("Values are broad bands, not exact counts");
   expect(html).toContain('data-segment="background-explorer"');
   expect(html).toContain('data-segment="goal-build"');
