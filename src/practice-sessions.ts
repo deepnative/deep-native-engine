@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import {
+  aiCostPoints,
+  estimateAiRequest,
+  readAiUsage,
+} from "./ai-budget-policy.ts";
 import { requestFingerprint } from "./jobs.ts";
 import { LOCAL_AI_MEMBER_OPEN_LIMIT } from "./local-ai-consent.ts";
 import {
@@ -85,6 +90,7 @@ export type PracticeSuggestionOutcome =
   | "replayed"
   | "paused"
   | "limit"
+  | "ceiling"
   | "withdrawn"
   | "unavailable";
 export type PracticeSessionWithdrawal =
@@ -700,6 +706,23 @@ export function practiceSessionStore(
             sourceExcerpt: pair.sourceExcerpt,
             interview: row.promptVersion === interviewPromptVersion,
           };
+          // #188: the request counts against the platform test spending
+          // ceiling. Locked last, so two requests for the last room serialize
+          // and a ceiling without room creates nothing and calls nothing.
+          const estimate = estimateAiRequest(
+            Buffer.byteLength(input.response) +
+              Buffer.byteLength(input.sourceExcerpt),
+          );
+          if (
+            !(
+              await client.query(
+                `SELECT 1 FROM ai_test_spending_ceiling WHERE singleton AND rate_version=$2
+                 AND committed_points+$1<=ceiling_points FOR UPDATE`,
+                [estimate.costPoints, estimate.rateVersion],
+              )
+            ).rows[0]
+          )
+            return "ceiling";
           const jobId = randomUUID(),
             attemptToken = randomUUID();
           // One attempt only: an unknown outcome is held, never retried.
@@ -725,6 +748,25 @@ export function practiceSessionStore(
              VALUES($1,$2,$3,$4)`,
             [id, sequence, memberId, jobId],
           );
+          // Committed before the provider call, at the labelled estimate.
+          await client.query(
+            `INSERT INTO ai_usage_estimates(job_id,member_id,rate_version,model_version,input_tokens,output_tokens,cost_points)
+             VALUES($1,$2,$3,$4,$5,$6,$7)`,
+            [
+              jobId,
+              memberId,
+              estimate.rateVersion,
+              estimate.modelVersion,
+              estimate.inputTokens,
+              estimate.outputTokens,
+              estimate.costPoints,
+            ],
+          );
+          await client.query(
+            `INSERT INTO ai_spending_commitments(job_id,attempt,estimated_points,state)
+             VALUES($1,1,$2,'committed')`,
+            [jobId, estimate.costPoints],
+          );
           return { jobId, attemptToken, input };
         },
       );
@@ -744,6 +786,9 @@ export function practiceSessionStore(
       const valid = reached
         ? validatePracticeSuggestion(raw, begun.input)
         : null;
+      // Without reported usage the spend is unknown, so the estimate stays
+      // committed; an error or timeout keeps it too.
+      const usage = reached ? readAiUsage(raw) : null;
       try {
         return (
           (await transaction<PracticeSuggestionOutcome>(
@@ -764,6 +809,26 @@ export function practiceSessionStore(
                 job.attempt_token !== begun.attemptToken
               )
                 return "unknown";
+              if (usage) {
+                await client.query(
+                  `INSERT INTO ai_usage_settlements(job_id,member_id,input_tokens,output_tokens,cost_points)
+                   VALUES($1,$2,$3,$4,$5)`,
+                  [
+                    begun.jobId,
+                    memberId,
+                    usage.inputTokens,
+                    usage.outputTokens,
+                    aiCostPoints(usage),
+                  ],
+                );
+                // The ceiling moves from the estimate to the reported cost,
+                // including an overrun.
+                await client.query(
+                  `UPDATE ai_spending_commitments SET state='settled',actual_points=$2
+                   WHERE job_id=$1 AND attempt=1 AND state='committed'`,
+                  [begun.jobId, aiCostPoints(usage)],
+                );
+              }
               if (!reached) {
                 await client.query(
                   `UPDATE adapter_jobs SET status='needs_reconciliation',safe_error='provider_outcome_unknown',

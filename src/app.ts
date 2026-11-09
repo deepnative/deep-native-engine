@@ -3774,6 +3774,7 @@ export function app(
       if (
         result === "paused" ||
         result === "limit" ||
+        result === "ceiling" ||
         result === "unavailable"
       ) {
         res.status(result === "unavailable" ? 404 : 409).send(
@@ -3784,6 +3785,8 @@ export function app(
                 "Simulated AI suggestions are paused on this service. Nothing was requested.",
               limit:
                 "You already have 3 unfinished AI requests. Nothing was requested; try again once one finishes.",
+              ceiling:
+                "The test spending ceiling for simulated AI on this service has no room for this suggestion. Nothing was requested and no provider was contacted.",
               unavailable:
                 "This pair, its session or its exact source version is unavailable for a suggestion. Nothing was requested.",
             }[result],

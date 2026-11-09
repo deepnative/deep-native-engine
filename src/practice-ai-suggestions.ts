@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { aiInputTokens } from "./ai-budget-policy.ts";
 import { interviewNotice } from "./practice-session-purpose.ts";
 
 // #200 PRACTICE-AI: one optional simulated AI suggestion per saved practice
@@ -54,7 +55,19 @@ export function deterministicPracticeSuggestionProvider(
         .update(JSON.stringify([mode, PRACTICE_SUGGESTION_PROMPT, input, text]))
         .digest("hex")
         .slice(0, 24);
-      return { text, reference: `${mode}_${reference}` };
+      // Simulated usage at the published test rates (#188): the member's
+      // words and source excerpt in, the suggestion out.
+      return {
+        text,
+        reference: `${mode}_${reference}`,
+        usage: {
+          inputTokens: aiInputTokens(
+            Buffer.byteLength(input.response) +
+              Buffer.byteLength(input.sourceExcerpt),
+          ),
+          outputTokens: aiInputTokens(Buffer.byteLength(text)),
+        },
+      };
     },
   };
 }
