@@ -15,6 +15,11 @@ async function start(page: Page, context: BrowserContext) {
   await page.getByLabel("Display name").fill("Sample learner");
   await page.getByLabel("Your starting point").selectOption("professional");
   await chooseLearningGoal(page, "everyday");
+  // Sample windows are listed only with a saved time zone.
+  await page
+    .getByText("Personalize your path (optional)", { exact: true })
+    .click();
+  await page.getByLabel("Time zone (optional)").fill("America/Toronto");
   await page.getByRole("button", { name: "Start my learning path" }).click();
   const token = (await context.cookies()).find(
     (cookie) => cookie.name === "dne_preview",

@@ -202,7 +202,11 @@ it("COACHMOCK-05 a failed check keeps history readable, and later pages leave th
   );
   expect(disabled.text).toContain("needs coach minutes");
   const after = Buffer.from(
-    JSON.stringify([new Date().toISOString(), randomUUID()]),
+    // The history cursor carries microseconds.
+    JSON.stringify([
+      new Date().toISOString().replace("Z", "000Z"),
+      randomUUID(),
+    ]),
   ).toString("base64url");
   const later = await history(owner.token, `/practice-sessions?after=${after}`);
   expect(later.status).toBe(200);
