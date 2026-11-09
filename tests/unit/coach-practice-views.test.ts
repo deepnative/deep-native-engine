@@ -42,6 +42,17 @@ it("COACHMOCK-01 without coach minutes the section explains the gate and offers 
   expect(html).not.toContain('href="/availability"');
 });
 
+it("NOCOACH-01 the section says no coach can be booked yet, with or without minutes", () => {
+  const sentence =
+    "No coaches are available to book yet, so a practice interview with a person can't be arranged.";
+  for (const grants of [[], [{ id: "g", category: "coach_minutes" }]])
+    expect(
+      coachPracticeSection(coachPracticeState({ grants, receipts: [] })),
+    ).toContain(sentence);
+  // A failed check still mustn't suggest a coach is available.
+  expect(coachPracticeSection({ kind: "failed" })).toContain(sentence);
+});
+
 it("COACHMOCK-02 only a current coach-minute grant opens the sample route", () => {
   const review = coachPracticeState({
     grants: [{ id: "g1", category: "review_minutes" }],
