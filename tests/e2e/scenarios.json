@@ -2901,6 +2901,15 @@
       "expected": "The timed-out request is named as a timeout after the 5-second deadline, stays held with its test unit and ceiling points held once, no settlement and no run or retry offered; the malformed answer is named with nothing shown, saved or charged and one more try offered, which runs it again without saving output; no sideways scrolling",
       "issues": [190],
       "critical": false
+    },
+    {
+      "id": "L326",
+      "actor": "Member asking for a simulated AI suggestion on a saved practice pair",
+      "preconditions": "Dedicated synthetic PostgreSQL database, one published invented lesson, port0 server; desktop/mobile Chromium; local deterministic test provider only",
+      "steps": "PRACTICE-AI-01/02/06/08: a member starts lesson practice, saves one response, asks for a simulated AI suggestion on that pair and reloads",
+      "expected": "Saving and reading ask for nothing; the suggestion is labelled simulated and not reviewed by a person, quotes the member's exact words, cites the exact lesson id and version, says it is uncertain and gives no score; one request succeeds and reload shows the same suggestion with no second request offered; no sideways scrolling",
+      "issues": [200],
+      "critical": true
     }
   ],
   "fullMvp": [

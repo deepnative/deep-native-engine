@@ -3743,6 +3743,60 @@ export function app(
       `/practice-sessions/${encodeURIComponent(req.params.sessionId as string)}`,
     );
   });
+  // #200 PRACTICE-AI: ask for one simulated suggestion on a saved pair.
+  app.post(
+    "/practice-sessions/:sessionId/pairs/:sequence/suggestion",
+    async (req, res) => {
+      const fields = (req.body ?? {}) as Fields;
+      const raw = req.params.sequence as string;
+      const sequence = Number(raw);
+      if (
+        typeof fields.csrf !== "string" ||
+        Object.keys(fields).some((key) => key !== "csrf") ||
+        !/^[1-9][0-9]?$/.test(raw) ||
+        !practiceSessions.suggest
+      ) {
+        res
+          .status(404)
+          .send(
+            practiceSessionRecoveryPage(
+              "Suggestion not requested",
+              "Open the exact saved session and choose the pair again. Nothing was requested.",
+            ),
+          );
+        return;
+      }
+      const result = await practiceSessions.suggest(
+        res.locals.token as string,
+        req.params.sessionId as string,
+        sequence,
+      );
+      if (
+        result === "paused" ||
+        result === "limit" ||
+        result === "unavailable"
+      ) {
+        res.status(result === "unavailable" ? 404 : 409).send(
+          practiceSessionRecoveryPage(
+            "Suggestion not requested",
+            {
+              paused:
+                "Simulated AI suggestions are paused on this service. Nothing was requested.",
+              limit:
+                "You already have 3 unfinished AI requests. Nothing was requested; try again once one finishes.",
+              unavailable:
+                "This pair, its session or its exact source version is unavailable for a suggestion. Nothing was requested.",
+            }[result],
+          ),
+        );
+        return;
+      }
+      res.redirect(
+        303,
+        `/practice-sessions/${encodeURIComponent(req.params.sessionId as string)}#pair-${sequence}`,
+      );
+    },
+  );
   app.post("/practice-sessions/:sessionId/withdraw", async (req, res) => {
     const fields = (req.body ?? {}) as Fields;
     if (

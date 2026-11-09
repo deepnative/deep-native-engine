@@ -34,7 +34,8 @@ export interface LocalAiHoldItem {
   // Both null for a request that used no test unit.
   unitState: "reserved" | "consumed" | "released" | null;
   policy: "deterministic-request-test-v1" | null;
-  promptTemplateVersion: "local-simulation-v1";
+  // #189: a sample request, or a practice suggestion (#200).
+  promptTemplateVersion: "local-simulation-v1" | "practice-suggestion-v1";
   modelContractVersion: "deterministic-local-v1";
 }
 type Failure = { kind: "denied" | "invalid" | "unavailable" };
@@ -93,7 +94,9 @@ const selection = `WITH instant AS MATERIALIZED (SELECT clock_timestamp() AS obs
   WHERE g.job_id=j.id AND g.member_id=j.member_id AND g.staff_id=$1 AND g.purpose=$2
    AND g.revoked_at IS NULL AND g.starts_at<=instant.observed AND g.expires_at>instant.observed
   ORDER BY g.expires_at DESC,g.id LIMIT 1) chosen ON TRUE
- WHERE j.adapter='ai' AND j.mode IN ('demo','test') AND j.operation='evidence-summary-local-v1'
+ WHERE j.adapter='ai' AND j.mode IN ('demo','test')
+ AND ((j.operation='evidence-summary-local-v1' AND j.prompt_template_version='local-simulation-v1')
+  OR (j.operation='practice-suggestion-local-v1' AND j.prompt_template_version='practice-suggestion-v1' AND b.job_id IS NULL))
  AND (b.job_id IS NULL OR (b.member_id=j.member_id AND units.member_id=j.member_id AND units.category='study_requests'))
  AND ($3::timestamptz IS NULL OR (j.created_at,j.id)>($3::timestamptz,$4::uuid))
  AND (NOT $5::boolean OR ((b.job_id IS NULL OR r.state='reserved') AND (j.status='needs_reconciliation' OR (j.status='running' AND j.lease_until<=instant.observed))))
@@ -146,7 +149,9 @@ function item(row: Candidate): LocalAiHoldItem {
   if (
     !sampleUuid(row.jobId) ||
     !(row.policy === null ? unmeteredShape(row) : meteredShape(row)) ||
-    row.promptTemplateVersion !== "local-simulation-v1" ||
+    !["local-simulation-v1", "practice-suggestion-v1"].includes(
+      row.promptTemplateVersion,
+    ) ||
     row.modelContractVersion !== "deterministic-local-v1" ||
     typeof row.expiredClaim !== "boolean" ||
     (row.status === "running" && row.leaseUntil === null)
@@ -166,7 +171,8 @@ function item(row: Candidate): LocalAiHoldItem {
     leaseUntil: row.leaseUntil === null ? null : timestamp(row.leaseUntil),
     unitState: row.unitState,
     policy: row.policy === null ? null : "deterministic-request-test-v1",
-    promptTemplateVersion: "local-simulation-v1",
+    promptTemplateVersion:
+      row.promptTemplateVersion as LocalAiHoldItem["promptTemplateVersion"],
     modelContractVersion: "deterministic-local-v1",
   };
 }

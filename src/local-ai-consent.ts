@@ -599,7 +599,12 @@ export function localAiConsentStore(
       )
         return { kind: "denied" };
       const digest = fingerprint(authorization.permission, metered);
-      const scopedKey = "local-ai:" + hash(key);
+      // #42 AIKEY: a key is unique per member, so another member's key reads
+      // and acts exactly like an unused one. Keys stored before this change
+      // (without the member) still replay for their own member only.
+      const owner = authorization.row.owner_principal_id;
+      const scopedKey = "local-ai:" + hash(`${owner}:${key}`);
+      const legacyKey = "local-ai:" + hash(key);
       // receipt() holds UPDATE through commit, serializing every enqueue and
       // local job transition. Existing unresolved rows also fence new keys;
       // exact-key replay below remains available even with legacy duplicates.
@@ -611,8 +616,8 @@ export function localAiConsentStore(
       ).rows[0];
       const prior = (
         await client.query<Job>(
-          "SELECT * FROM adapter_jobs WHERE idempotency_key=$1",
-          [scopedKey],
+          "SELECT * FROM adapter_jobs WHERE idempotency_key=$1 OR (idempotency_key=$2 AND member_id=$3) ORDER BY idempotency_key=$1 DESC LIMIT 1",
+          [scopedKey, legacyKey, owner],
         )
       ).rows[0];
       if (prior) {
@@ -632,8 +637,9 @@ export function localAiConsentStore(
         );
         const open = (
           await client.query<{ open: number }>(
-            "SELECT count(*)::int AS open FROM adapter_jobs WHERE member_id=$1 AND adapter='ai' AND operation=$2 AND status IN ('pending','running','failed','needs_reconciliation')",
-            [authorization.row.owner_principal_id, LOCAL_AI_PURPOSE],
+            // Every member AI request counts, including practice suggestions (#200).
+            "SELECT count(*)::int AS open FROM adapter_jobs WHERE member_id=$1 AND adapter='ai' AND status IN ('pending','running','failed','needs_reconciliation')",
+            [authorization.row.owner_principal_id],
           )
         ).rows[0]!.open;
         // Refused before any unit, estimate, ceiling room or provider call.

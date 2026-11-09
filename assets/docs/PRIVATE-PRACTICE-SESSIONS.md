@@ -43,7 +43,39 @@ BDD mapping: INTERVIEW-01..07 are in `tests/unit/practice-sessions.test.ts`, `te
 
 Rollback: revert the code. Interview sessions already saved keep their history, export and withdrawal, because an unknown prompt version is read-only.
 
-Still open on #200: generated feedback, provider output checks and failures, and live budget exhaustion. These need a provider and budget.
+Still open on #200: a live provider, metering and budget exhaustion. Simulated suggestions from the local test provider are below.
+
+## Simulated AI suggestions on a saved pair (#200)
+
+Under each saved pair, a member can choose **Ask for a simulated AI suggestion**. It is optional, and saving or reading a pair asks for nothing. The suggestion comes from the local deterministic test provider on this service, not a live AI service. Nothing is charged, no test unit is used and no person reviews it.
+
+A suggestion is kept only if it passes every check in `src/practice-ai-suggestions.ts`. Otherwise it is rejected whole, with nothing repaired or partly shown:
+
+- it starts "Simulated AI suggestion, not reviewed by a person.";
+- it quotes the member's own saved words exactly, once, and at least the start of their first line;
+- it cites the session's exact source and version, such as `SYN-001 v2`, and no other;
+- it says it is uncertain and that it gives no score, and in interview practice it also says it predicts nothing;
+- outside the member's quoted words it has no digits, percentages, links, markup, ratings or competence words, and it fits on one line of up to 1,200 characters.
+
+| What happens                                                 | Result                                                                                                 |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| A grounded suggestion comes back                             | It is saved with the pair and shown after reload.                                                      |
+| The output fails a check                                     | The pair says the suggestion was rejected. Nothing from it is kept, and it isn't requested again.      |
+| The provider fails or doesn't answer within 5 seconds        | The outcome is unknown. The request stays held and counted, and it isn't retried.                      |
+| The same pair is asked again, even at the same moment        | The session lock lets one request through. The others return its result, with no second provider call. |
+| Simulations are paused (`/operator/local-ai`)                | Nothing is requested and the page says they are paused.                                                |
+| The member already has 3 unfinished AI requests (#190)       | Nothing is requested. Practice suggestions and sample requests share this limit.                       |
+| The source or goal changed, or the prompt version is unknown | Nothing is requested. Earlier suggestions stay readable.                                               |
+| Another member, or no member, asks                           | Refused like an unknown session; nothing is requested.                                                 |
+| The session is withdrawn, even while the provider answers    | The pair and its suggestion are removed and nothing is kept.                                           |
+
+Migration 121 adds `practice_ai_suggestions`: one row per pair, removed with the pair or the account. A database trigger accepts a new row only as its owner's own pending request for a practice-suggestion job, and lets it complete once, as ready or rejected. The request is an ordinary member-owned AI job (`practice-suggestion-local-v1`, one attempt), so the member's export already lists it under `adapterJobs`. Download my records (v43) adds `practiceAiSuggestions`: state, text and times, labelled simulated, without the request fingerprint or provider reference.
+
+Limits: an administrator can assign a held unknown request to an operator for the same content-free [hold inspection](PRIVATE-LOCAL-AI-HOLD-INSPECTION.md) as sample requests (#189). It shows the request's status, times and versions, never the member's words or the suggestion. Recording a test outcome for it isn't available yet, so it keeps its place in the limit. Metering, a spending ceiling, a live provider and qualified review are still open on #200.
+
+BDD mapping: PRACTICE-AI-01..07 are in `tests/unit/practice-ai-suggestions.test.ts`, `tests/unit/practice-session-suggestions.test.ts`, `tests/unit/member-export.test.ts` and `tests/integration/practice-ai-suggestions.test.ts`. PRACTICE-AI-08 is journey L326 (desktop and mobile Chromium).
+
+Rollback: pause simulations to stop new requests, then revert the code. Keep migration 121; saved suggestions stay in the table and its export until withdrawal or account deletion.
 
 ## Failure and rollback
 

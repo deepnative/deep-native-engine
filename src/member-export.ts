@@ -631,6 +631,17 @@ const sections = {
     "synthetic_manual_observations WHERE member_id=$1",
     "id",
   ),
+  // v43 appends #200 PRACTICE-AI: simulated suggestions on the member's own
+  // saved practice pairs. Never the request fingerprint or provider reference.
+  practiceAiSuggestions: section(
+    `g.session_id AS "sessionId",g.sequence,g.state,g.suggestion,
+    g.requested_at AS "requestedAt",g.completed_at AS "completedAt",
+    'SIMULATED · LOCAL TEST PROVIDER · NOT REVIEWED · NO SCORE' AS label`,
+    `practice_ai_suggestions g
+    JOIN private_practice_sessions s ON s.id=g.session_id AND s.member_id=g.member_id
+    WHERE g.member_id=$1 AND s.withdrawn_at IS NULL`,
+    "g.session_id,g.sequence",
+  ),
 } as const;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
@@ -644,7 +655,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v42";
+  version: "local-member-records-v43";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -778,7 +789,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v42",
+          version: "local-member-records-v43",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

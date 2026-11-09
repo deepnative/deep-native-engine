@@ -114,6 +114,7 @@ const base: PreviewMetrics = {
     submittedAssignment: "Submitted.",
     returnEligible: "Eligible.",
     crossContentReturned: "Returned.",
+    reportedOutcome: "Reported.",
     usefulness: "Useful.",
     segments: "Segments.",
     cohorts: "Cohorts.",
