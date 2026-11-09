@@ -13,6 +13,7 @@ import {
   parseInvoiceMoney,
 } from "./simple-invoice-values.ts";
 import { escape } from "./views.ts";
+import { SERVICE_CONTACT } from "./demo-terms.ts";
 
 // #316 owner decisions of 9 November 2026: an administrator sets each student's
 // coaching price, length, renewal date and allowances. The student's own price
@@ -37,8 +38,6 @@ export type TermsFailure = {
   kind: "denied" | "invalid" | "conflict" | "unavailable";
 };
 export type TermsResult<T> = { kind: "ready"; value: T } | TermsFailure;
-// The owner's 9 Nov operator and support contact (#12).
-const SERVICE_CONTACT = "info@deepnative.io";
 const fail = (kind: TermsFailure["kind"]): TermsFailure => ({ kind });
 
 export const TERMS_FIELDS = [
