@@ -360,6 +360,7 @@ import {
   disabledAssignmentReadinessStore,
   type AssignmentReadinessStore,
 } from "./assignment-readiness.ts";
+import { coachPracticeState } from "./coach-practice-views.ts";
 import {
   disabledMemberSlotHolds,
   SlotHoldFailure,
@@ -2429,22 +2430,21 @@ export function app(
     }
     if (outcome.kind !== "completed") {
       const paused = (await localAiControl.current()) === "paused";
-      res
-        .status(outcome.kind === "unavailable" ? 409 : 403)
-        .send(
-          errorPage(
-            hostingText(
-              "Local simulation unavailable",
-              "Simulation unavailable",
-            ),
-            paused
-              ? hostingText(
-                  "Local simulations are paused. This attempt will not retry automatically.",
-                  "Simulations are paused. This attempt will not retry automatically.",
-                )
+      res.status(outcome.kind === "unavailable" ? 409 : 403).send(
+        errorPage(
+          hostingText("Local simulation unavailable", "Simulation unavailable"),
+          paused
+            ? hostingText(
+                "Local simulations are paused. This attempt will not retry automatically.",
+                "Simulations are paused. This attempt will not retry automatically.",
+              )
+            : outcome.status === "needs_reconciliation" ||
+                outcome.status === "failed"
+              ? // #190 AIFAULT: the page names the real failure.
+                "This attempt did not finish normally and will not retry automatically. Go back to your AI simulation page to see what happened. No live AI provider was contacted."
               : "Refresh the page. No live AI provider was contacted.",
-          ),
-        );
+        ),
+      );
       return;
     }
     res.redirect(303, "/evidence/local-ai");
@@ -3660,7 +3660,15 @@ export function app(
         );
       return;
     }
-    res.send(practiceSessionHistoryPage(result));
+    // COACHMOCK-05: only the first page carries the coach section, and a
+    // failed check never hides the member's own history.
+    const coach =
+      req.query.after === undefined
+        ? await memberHolds
+            .snapshot(res.locals.token as string)
+            .then(coachPracticeState, () => ({ kind: "failed" as const }))
+        : undefined;
+    res.send(practiceSessionHistoryPage(result, coach));
   });
   app.get("/practice-sessions/:sessionId", async (req, res) => {
     const detail = await practiceSessions.detail(

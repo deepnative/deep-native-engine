@@ -54,7 +54,7 @@ async function publishLesson(pool: Pool, id: string) {
   expect(await catalog.approve(reviewer, id, 1, true)).toBe(true);
   expect(await catalog.publish(editor, id, 1)).toBe(true);
 }
-test("[L324] PRACTICE-AI-01/02/06/08 a member asks for one simulated AI suggestion on a saved practice pair and finds it after reload", async ({
+test("[L326] PRACTICE-AI-01/02/06/08 a member asks for one simulated AI suggestion on a saved practice pair and finds it after reload", async ({
   browser,
 }, info) => {
   test.setTimeout(90000);

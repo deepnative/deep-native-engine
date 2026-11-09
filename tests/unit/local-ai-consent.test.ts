@@ -111,6 +111,7 @@ function setup(
     invalidPhase2Job?: boolean;
     paused?: boolean;
     phase2Paused?: boolean;
+    stepDeadlineMs?: number;
   } = {},
 ) {
   const owner = options.metered
@@ -298,7 +299,9 @@ function setup(
                   : j,
               ],
       };
-    if (sql.includes("SELECT j.id,j.status,j.safe_error,b.policy"))
+    if (
+      sql.includes("SELECT j.id,j.status,j.safe_error,j.attempt_count,b.policy")
+    )
       return { rows: options.listedJobs ?? [{ id: jid, status: j.status }] };
     if (sql.includes("SELECT id FROM adapter_jobs"))
       return { rows: options.unresolved ? [{ id: jid }] : [] };
@@ -352,6 +355,9 @@ function setup(
     { connect } as unknown as Pool,
     { get, put: vi.fn(), remove: vi.fn() },
     registry,
+    options.stepDeadlineMs === undefined
+      ? undefined
+      : { stepDeadlineMs: options.stepDeadlineMs },
   );
   return {
     service,
@@ -693,6 +699,79 @@ it("holds adapter exceptions and treats malformed responses as failed without pe
   expect(await invalid.service.run("member", jid)).toMatchObject({
     status: "failed",
   });
+});
+it("AIFAULT-01 holds a step that misses its deadline as a timeout, and a late answer is dropped", async () => {
+  const f = setup({ stepDeadlineMs: 5 });
+  let late: (value: unknown) => void = () => {};
+  f.execute.mockImplementationOnce(
+    () => new Promise((resolve) => (late = resolve)) as never,
+  );
+  expect(await f.service.run("member", jid)).toMatchObject({
+    kind: "unavailable",
+    status: "needs_reconciliation",
+  });
+  const held = f.query.mock.calls.find(
+    ([sql]) =>
+      typeof sql === "string" &&
+      sql.startsWith("UPDATE adapter_jobs SET status='needs_reconciliation'"),
+  )!;
+  expect(held[1]).toEqual([jid, "provider_timeout"]);
+  late({ kind: "ai", mode: "test", state: "simulated" });
+  const other = setup({ stepDeadlineMs: 5_000 });
+  other.execute.mockRejectedValueOnce(Error("private provider detail"));
+  await other.service.run("member", jid);
+  expect(
+    other.query.mock.calls.find(
+      ([sql]) =>
+        typeof sql === "string" &&
+        sql.startsWith("UPDATE adapter_jobs SET status='needs_reconciliation'"),
+    )![1],
+  ).toEqual([jid, "provider_outcome_unknown"]);
+});
+it("AIFAULT-03 names a timeout or malformed answer and offers a retry only while tries remain", async () => {
+  const f = setup({
+    listedJobs: [
+      {
+        id: jid,
+        status: "needs_reconciliation",
+        safe_error: "provider_timeout",
+        attempt_count: 1,
+      },
+      {
+        id: jid,
+        status: "needs_reconciliation",
+        safe_error: "provider_outcome_unknown",
+        attempt_count: 1,
+      },
+      {
+        id: jid,
+        status: "failed",
+        safe_error: "invalid_provider_response",
+        attempt_count: 1,
+      },
+      {
+        id: jid,
+        status: "failed",
+        safe_error: "invalid_provider_response",
+        attempt_count: 3,
+      },
+      {
+        id: jid,
+        status: "failed",
+        safe_error: "provider_unavailable",
+        attempt_count: 2,
+      },
+      { id: jid, status: "succeeded", safe_error: null, attempt_count: 1 },
+    ],
+  });
+  expect((await f.service.list("member"))[0]!.jobs).toEqual([
+    { id: jid, status: "needs_reconciliation", failure: "timeout" },
+    { id: jid, status: "needs_reconciliation" },
+    { id: jid, status: "failed", failure: "malformed", canRetry: true },
+    { id: jid, status: "failed", failure: "malformed" },
+    { id: jid, status: "failed", canRetry: true },
+    { id: jid, status: "succeeded" },
+  ]);
 });
 it("sanitizes storage/transaction failures and discards broken clients without erasing durable claims", async () => {
   for (const fail of ["BEGIN", "COMMIT", "SELECT * FROM evidence_objects"]) {

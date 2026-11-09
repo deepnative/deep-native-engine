@@ -75,6 +75,23 @@ The limit is a fixed invented value for the test path, not a plan allowance. Oth
 
 This does not set a real rate, currency, spending ceiling or grant. Those remain inputs for a real provider under #188. Resolving held requests is #189.
 
+## When the AI step times out or answers oddly
+
+The AI step has a fixed 5-second deadline (#190, `LOCAL_AI_STEP_DEADLINE_MS`), far inside the 5-minute claim. The member's page names the real failure when it is known.
+
+| What happens                                 | Result                                                                                                                                                                                     |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A started step misses the deadline           | Held as a timeout (`provider_timeout`): it may have run, so it is never retried. A test request keeps its unit and ceiling points held once, with no settlement. A late answer is ignored. |
+| A simulation answers in an unexpected form   | Failed (`invalid_provider_response`). Nothing is shown, saved or charged. The member can try again, up to 3 attempts in all.                                                               |
+| A test request answers in an unexpected form | Held with an unknown outcome and its unit held, as before. It is not named as malformed, because a charge or release needs the #189 policy.                                                |
+| The step throws any other error              | Held with an unknown outcome, as before.                                                                                                                                                   |
+
+The run page says the attempt did not finish normally and sends the member back to the simulation page, which says "did not answer within 5 seconds, so it timed out" or "answered, but not in the expected form".
+
+**Test-only faults.** `DNE_TEST_AI_FAULTS=enabled` lets invented text containing `[dne-test-fault:timeout]` or `[dne-test-fault:malformed]` make the simulated step never answer or answer with an empty message. It is off by default, and the server refuses to start with it outside local test mode or on a hosted site. The browser test configuration turns it on for L325.
+
+A held timeout follows the [held request process](LOCAL-AI-HELD-REQUEST-HANDLING.md). Settling or releasing it needs a real provider's evidence and the #189 policy.
+
 ## Transactions and migration
 
 Migration 053 adds an immutable owned job/reservation link and policy, validates category/quantity/local job identity, and enforces job/reservation outcome agreement. Legacy jobs acquire no link, inferred allowance or charge. Reapplying migrations preserves populated legacy and metered history. The composite job/member index adds storage; index creation and foreign-key replacement/validation take PostgreSQL table locks and can wait behind active writers. Apply with affected workers stopped and allow for the retained job/reservation table sizes; no production performance or online migration is claimed.

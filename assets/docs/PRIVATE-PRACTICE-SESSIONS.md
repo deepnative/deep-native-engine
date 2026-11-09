@@ -73,7 +73,7 @@ Migration 121 adds `practice_ai_suggestions`: one row per pair, removed with the
 
 Limits: an administrator can assign a held unknown request to an operator for the same content-free [hold inspection](PRIVATE-LOCAL-AI-HOLD-INSPECTION.md) as sample requests (#189). It shows the request's status, times and versions, never the member's words or the suggestion. Recording a test outcome for it isn't available yet, so it keeps its place in the limit. Metering, a spending ceiling, a live provider and qualified review are still open on #200.
 
-BDD mapping: PRACTICE-AI-01..07 are in `tests/unit/practice-ai-suggestions.test.ts`, `tests/unit/practice-session-suggestions.test.ts`, `tests/unit/member-export.test.ts` and `tests/integration/practice-ai-suggestions.test.ts`. PRACTICE-AI-08 is journey L324 (desktop and mobile Chromium).
+BDD mapping: PRACTICE-AI-01..07 are in `tests/unit/practice-ai-suggestions.test.ts`, `tests/unit/practice-session-suggestions.test.ts`, `tests/unit/member-export.test.ts` and `tests/integration/practice-ai-suggestions.test.ts`. PRACTICE-AI-08 is journey L326 (desktop and mobile Chromium).
 
 Rollback: pause simulations to stop new requests, then revert the code. Keep migration 121; saved suggestions stay in the table and its export until withdrawal or account deletion.
 
@@ -117,3 +117,15 @@ affected practice operations while retaining their stored records and existing
 export/deletion paths. Restoring the older transaction reader also restores the
 known expiry defect; it is not a privacy-preserving recovery. This local correction
 does not establish hosted deployment, live AI, paid capacity or qualified review.
+
+## Practice interview with a coach (#201, first slice)
+
+Delivered for part of [#201](https://github.com/deepnative/deep-native-engine/issues/201) (COACHMOCK-01 to COACHMOCK-06, browser journey L324). The first page of `/practice-sessions` ends with a **Practice interview with a coach** section. It reads the delivered sample coaching holds ([CTP-012 member sample holds](CTP-012-MEMBER-SAMPLE-HOLDS.md)) and changes nothing.
+
+- It says the sessions listed are simulated practice that no person reads, and their comparisons don't come from a coach.
+- Without a current coach-minute test grant that has 60 free minutes, it says a practice interview with a person needs coach minutes, foundation membership doesn't include them, practice-session units can't be used instead, and no coach is booked. It offers no request link. Background, goal, review minutes and practice-session units never change this.
+- With such a grant, it links to the sample coaching windows and says a sample hold isn't a booking: no coach has confirmed it and nothing is paid.
+- It lists the member's own coaching sample holds, newest first, each as "Sample hold with a coach · not a booking", with its exact UTC window and state (held until its deadline, withdrawn, or ended without a booking), linking to its receipt. Formal-review holds and other members' holds don't appear.
+- If the check fails, the history still loads and the section says it couldn't check. Later history pages leave the section out.
+
+There's no migration, write path, booking, coach, quota or payment. Real coaches, accepted service terms, a funded coach quota, booking confirmation, cancellation, no-show and attributed coach feedback stay open on #201 and need the owner's decision. To roll back, remove the section from the history page. No data changes.

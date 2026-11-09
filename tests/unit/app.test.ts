@@ -1756,7 +1756,20 @@ it("requires explicit member confirmation and current local AI permission at eve
   expect(fullRun.text).toContain("stays reserved");
   await post("/evidence/local-ai/job-id/run").expect(403);
   localAiConsent.run.mockResolvedValueOnce({ kind: "unavailable" });
-  await post("/evidence/local-ai/job-id/run").expect(409);
+  const unknown = await post("/evidence/local-ai/job-id/run").expect(409);
+  expect(unknown.text).toContain("Refresh the page.");
+  // AIFAULT: a held or failed attempt points back to the page that names it.
+  for (const status of ["needs_reconciliation", "failed"]) {
+    localAiConsent.run.mockResolvedValueOnce({
+      kind: "unavailable",
+      jobId: "job-id",
+      status,
+    });
+    const named = await post("/evidence/local-ai/job-id/run").expect(409);
+    expect(named.text).toContain(
+      "This attempt did not finish normally and will not retry automatically.",
+    );
+  }
   localAiConsent.run.mockResolvedValueOnce({
     kind: "completed",
     jobId: "job-id",
