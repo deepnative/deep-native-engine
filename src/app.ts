@@ -1,4 +1,5 @@
 import { mountAdministratorDiagnostics } from "./administrator-diagnostics-routes.ts";
+import { OUTSIDE_MARKET_MESSAGE, servedCountry } from "./customer-market.ts";
 import { workQueueTools } from "./administrator-work-waiting-views.ts";
 import type { AdministratorDiagnostics } from "./administrator-diagnostics.ts";
 import {
@@ -1711,8 +1712,18 @@ export function app(
         ? body.signup_email
         : "";
     const signupPassword = body.signup_password;
+    const signupCountry =
+      body.signup_country === "other" || servedCountry(body.signup_country)
+        ? (body.signup_country as string)
+        : "";
     if (signup) {
       const problems: { field: string; message: string }[] = [];
+      // #12 D02: Canada first. Refused before any lookup, admission or save.
+      if (!servedCountry(body.signup_country))
+        problems.push({
+          field: "signup_country",
+          message: OUTSIDE_MARKET_MESSAGE,
+        });
       if (!normalizedEmail(signupEmail))
         problems.push({
           field: "signup_email",
@@ -1740,7 +1751,9 @@ export function app(
               [refused.message],
               start,
               Boolean(options.memberEmail),
-              signup ? { email: signupEmail } : undefined,
+              signup
+                ? { email: signupEmail, country: signupCountry }
+                : undefined,
             ),
           );
         return;
@@ -1765,7 +1778,7 @@ export function app(
             [],
             start,
             Boolean(options.memberEmail),
-            signup ? { email: signupEmail } : undefined,
+            signup ? { email: signupEmail, country: signupCountry } : undefined,
           ),
         );
       return;
@@ -3786,6 +3799,7 @@ export function app(
       if (
         result === "paused" ||
         result === "limit" ||
+        result === "ceiling" ||
         result === "unavailable"
       ) {
         res.status(result === "unavailable" ? 404 : 409).send(
@@ -3796,6 +3810,8 @@ export function app(
                 "Simulated AI suggestions are paused on this service. Nothing was requested.",
               limit:
                 "You already have 3 unfinished AI requests. Nothing was requested; try again once one finishes.",
+              ceiling:
+                "The test spending ceiling for simulated AI on this service has no room for this suggestion. Nothing was requested and no provider was contacted.",
               unavailable:
                 "This pair, its session or its exact source version is unavailable for a suggestion. Nothing was requested.",
             }[result],

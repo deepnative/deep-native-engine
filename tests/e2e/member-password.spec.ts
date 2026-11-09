@@ -193,6 +193,8 @@ test("[L286] SIGNUP-01/02/04/06 a visitor signs up with email and password, sign
     await page.getByLabel("Display name").fill("Invented Signup");
     await page.getByLabel("Your starting point").selectOption("explorer");
     await chooseLearningGoal(page, "everyday");
+    // #12 Hosted signup is offered to people living in Canada for now.
+    await page.getByLabel("Country where you live").selectOption("CA");
     await page.getByLabel("Email address").fill(address);
     await page.getByLabel("Password", { exact: true }).fill("short");
     await page.getByRole("button", { name: "Start my learning path" }).click();
@@ -206,6 +208,7 @@ test("[L286] SIGNUP-01/02/04/06 a visitor signs up with email and password, sign
     await expect(page.getByLabel("Display name")).toHaveValue(
       "Invented Signup",
     );
+    await expect(page.getByLabel("Country where you live")).toHaveValue("CA");
     await friendly(page, "signup-correction");
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Start my learning path" }).click();

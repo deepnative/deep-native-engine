@@ -19,6 +19,7 @@ interface Options {
   existing?: boolean;
   paused?: boolean | null;
   open?: number;
+  room?: boolean;
   job?: { status: string; attempt_token: string | null } | "match" | null;
   kept?: boolean;
   principalAfter?: boolean;
@@ -100,6 +101,8 @@ function fixture(
           options.paused === null ? [] : [{ paused: options.paused ?? false }],
       };
     if (sql.includes("AS open")) return { rows: [{ open: options.open ?? 0 }] };
+    if (sql.startsWith("SELECT 1 FROM ai_test_spending_ceiling"))
+      return { rows: options.room === false ? [] : [{ "?column?": 1 }] };
     if (sql.startsWith("INSERT INTO adapter_jobs"))
       token = params![5] as string;
     if (sql.startsWith("SELECT status,attempt_token"))
@@ -229,6 +232,7 @@ it("PRACTICE-AI-05/06 refuses unowned, withdrawn, missing, ineligible, paused an
     [{ paused: true }, "paused"],
     [{ paused: null }, "paused"],
     [{ open: 3 }, "limit"],
+    [{ room: false }, "ceiling"],
   ] as [Options, string][]) {
     const suggest = vi.fn();
     const f = fixture(options, { suggest });
