@@ -268,6 +268,7 @@ export async function migrate(pool: Pool) {
       "118-workflow-review-operation-keys.sql",
       "119-study-fixture-operation-keys.sql",
       "120-ai-test-ceiling-row-guard.sql",
+      "121-practice-ai-suggestions.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

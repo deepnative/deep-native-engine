@@ -16,6 +16,12 @@ No exact learning count leaves the store. `src/learning-metrics.ts` turns the ag
 
 **Evidence.** MET-SUPP-01, MET-SEG-01/02 and MET-COH-01/02/03 are in `tests/unit/learning-metrics.test.ts` and `tests/integration/learning-cohorts.test.ts`, which failed before implementation. Journeys L222 and L223 read the bands in the browser on desktop and mobile; L47 and L68 confirm no exact count is served.
 
+## Member-reported career outcomes — #123
+
+The snapshot also counts **retained members who reported an outcome on their own plan**: at least one of their private career, opportunity or contract entries has a non-blank self-reported outcome. It counts members, not entries, uses the same bands and suppression, and appears in every segment row as "Reported an outcome". The report labels it member-reported and not verified. It is not a hiring, placement, contract or income rate, and no outcome text, entry or member is read into the report. Plans without an outcome don't count. A deleted account leaves the count with its entries.
+
+Demo records are still not separated, so this is no live outcome figure. Evidence: OUTCOME-01..03 in `tests/integration/career-outcome-metric.test.ts`, and the report wording in `tests/unit/metrics-report.test.ts`.
+
 Exact-count wording below describes the earlier contract and is superseded by this section.
 
 ## Readable staff report

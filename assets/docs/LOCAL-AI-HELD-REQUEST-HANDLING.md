@@ -11,6 +11,7 @@ A request is held when an attempt started and we cannot tell what happened to it
 A request becomes held when, after an attempt started:
 
 - the AI step throws an error or does not answer usably
+- the AI step misses its 5-second deadline. This hold is stored as `provider_timeout`, and the member's page says the step timed out (#190)
 - its claim expires
 - the member withdraws permission
 - the member saves a new revision of the source
@@ -90,7 +91,7 @@ Source deletion is never blocked. A request that never started, succeeded or clo
 - Requests closed as `exhausted` before this behaviour existed are not reclassified. No provider has ever been connected, so none of them reached one.
 - A first attempt refused just after its claim closes as `exhausted`, and a retry refused that way is held. Earlier attempts are not inspected: a retry is held even if every earlier attempt was refused before the AI step (#187, AIHOLD-08 to 10).
 - There is no retention period, automatic expiry or staff queue for holds. A live provider would need those decided first.
-- A test outcome does not appear on the member's page or in their export. It records which operator decided, which the member should not see.
+- The member sees a recorded test outcome on their page and in their export, but never which operator recorded it, the assignment, the test reference or the key.
 - A test outcome does not settle or release the test unit. That needs a release and charge policy tied to a real provider's evidence (#189).
 - This process has had no legal or privacy review. It records current system behaviour and is not a commitment to members.
 

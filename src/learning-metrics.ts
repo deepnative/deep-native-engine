@@ -11,6 +11,8 @@ export const LEARNING_KEYS = [
   "submittedAssignment",
   "returnEligible",
   "crossContentReturned",
+  // #123 OUTCOME: member-reported, never verified.
+  "reportedOutcome",
 ] as const;
 export const COHORT_KEYS = [
   "activated",

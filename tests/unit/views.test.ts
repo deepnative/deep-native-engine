@@ -755,6 +755,18 @@ it("describes local AI permission and every job state without leaking sample tex
             },
           },
           { id: "failed", status: "failed" },
+          {
+            id: "timed-out",
+            status: "needs_reconciliation",
+            failure: "timeout",
+          },
+          {
+            id: "garbled",
+            status: "failed",
+            failure: "malformed",
+            canRetry: true,
+          },
+          { id: "garbled-last", status: "failed", failure: "malformed" },
         ],
       },
     ],
@@ -776,6 +788,18 @@ it("describes local AI permission and every job state without leaking sample tex
     "on 2026-11-07: it did not run, recorded as an operator test exercise.",
   );
   expect(active.match(/A test outcome was recorded/g)).toHaveLength(2);
+  // #190 AIFAULT: the real failure is named, and a retry is offered only
+  // while tries remain.
+  expect(active).toContain(
+    "The AI step did not answer within 5 seconds, so it timed out.",
+  );
+  expect(active).toContain(
+    "The AI step answered, but not in the expected form, so nothing was shown or saved. Nothing was charged. You can try again.",
+  );
+  expect(active).toContain("Nothing was charged. It has used all its tries.");
+  expect(active.match(/Try the local simulation again/g)).toHaveLength(1);
+  expect(active).toContain('action="/evidence/local-ai/garbled/run"');
+  expect(active).not.toContain('action="/evidence/local-ai/garbled-last/run"');
   const paused = localAiConsentPage(
     [
       {
@@ -792,13 +816,22 @@ it("describes local AI permission and every job state without leaking sample tex
           modelVersion: "simulated-model-v1",
           rateVersion: "simulated-rates-v1",
         },
-        jobs: [{ id: "pending", status: "pending" }],
+        jobs: [
+          { id: "pending", status: "pending" },
+          {
+            id: "garbled",
+            status: "failed",
+            failure: "malformed",
+            canRetry: true,
+          },
+        ],
       },
     ],
     "csrf",
     [],
     "paused",
   );
+  expect(paused).not.toContain("Try the local simulation again");
   expect(paused).toContain("Local simulations are paused");
   expect(paused).not.toContain("Queue local simulation</button>");
   expect(paused).not.toContain("Run local simulation</button>");
@@ -2142,7 +2175,7 @@ it("shows an exact-version rubric and private reflection beside its submitted re
 it("explains live bounded export pages without embedding private records and offers a restart", () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v42" as const,
+    version: "local-member-records-v43" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),

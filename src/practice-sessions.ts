@@ -1,4 +1,15 @@
 import { randomUUID } from "node:crypto";
+import { requestFingerprint } from "./jobs.ts";
+import { LOCAL_AI_MEMBER_OPEN_LIMIT } from "./local-ai-consent.ts";
+import {
+  deterministicPracticeSuggestionProvider,
+  PRACTICE_SUGGESTION_MODEL,
+  PRACTICE_SUGGESTION_OPERATION,
+  PRACTICE_SUGGESTION_PROMPT,
+  validatePracticeSuggestion,
+  type PracticeSuggestionInput,
+  type PracticeSuggestionProvider,
+} from "./practice-ai-suggestions.ts";
 import type { Pool } from "pg";
 import {
   practiceTransaction,
@@ -33,12 +44,20 @@ export interface PracticeSessionSummary {
   createdAt: Date;
   withdrawnAt: Date | null;
 }
+// #200 PRACTICE-AI: a request whose outcome was never recorded is "unknown"
+// and is never retried.
+export interface PracticeSuggestionView {
+  state: "ready" | "rejected" | "unknown";
+  text: string | null;
+  requestedAt: Date;
+}
 export interface PracticeSessionExchange {
   sequence: number;
   response: string;
   comparison: string;
   sourceExcerpt: string;
   acceptedAt: Date;
+  suggestion?: PracticeSuggestionView | null;
 }
 export interface PracticeSessionDetail extends PracticeSessionSummary {
   title: string;
@@ -51,12 +70,23 @@ export interface PracticeSessionDetail extends PracticeSessionSummary {
     | "full";
   exchanges: PracticeSessionExchange[];
   nextSequence: number | null;
+  /** Absent when simulated suggestions are off for this service. */
+  suggestions?: "available" | "paused";
 }
 export type PracticeSessionStart =
   | { kind: "started" | "replayed"; sessionId: string }
   | { kind: "unavailable" | "withdrawn" | "allowance-needed" };
 export type PracticeSessionAppend =
   "saved" | "replayed" | "conflict" | "full" | "withdrawn" | "unavailable";
+export type PracticeSuggestionOutcome =
+  | "ready"
+  | "rejected"
+  | "unknown"
+  | "replayed"
+  | "paused"
+  | "limit"
+  | "withdrawn"
+  | "unavailable";
 export type PracticeSessionWithdrawal =
   "withdrawn" | "already-withdrawn" | "unavailable";
 export interface PracticeSessionStore {
@@ -93,6 +123,11 @@ export interface PracticeSessionStore {
     token: string,
     sessionId: string,
   ): Promise<PracticeSessionWithdrawal>;
+  suggest?(
+    token: string,
+    sessionId: string,
+    sequence: number,
+  ): Promise<PracticeSuggestionOutcome>;
 }
 export function disabledPracticeSessionStore(): PracticeSessionStore {
   return {
@@ -185,9 +220,36 @@ async function allowanceUnit(client: PracticeTransaction, memberId: string) {
     ).rows[0] ?? null
   );
 }
+const PROVIDER_LIMIT_MS = 5000;
+async function bounded(
+  provider: PracticeSuggestionProvider,
+  input: PracticeSuggestionInput,
+  limit: number,
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => provider.suggest(input)),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timeout")), limit);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 export function practiceSessionStore(
   pool: Pool,
-  options: { allowance?: boolean } = {},
+  options: {
+    allowance?: boolean;
+    // #200 PRACTICE-AI: on only with a local deterministic (or test) provider.
+    suggestions?: {
+      mode: "demo" | "test";
+      provider?: PracticeSuggestionProvider;
+      /** Tests only: a shorter wait before an unanswered call is unknown. */
+      providerLimitMs?: number;
+    };
+  } = {},
 ): PracticeSessionStore {
   async function transaction<T>(
     token: string,
@@ -273,13 +335,40 @@ export function practiceSessionStore(
     client: PracticeTransaction,
     id: string,
   ): Promise<PracticeSessionExchange[]> {
-    return (
-      await client.query<PracticeSessionExchange>(
-        `SELECT sequence,response,comparison,source_excerpt AS "sourceExcerpt",accepted_at AS "acceptedAt"
-       FROM private_practice_exchanges WHERE session_id=$1 ORDER BY sequence LIMIT 15`,
+    const rows = (
+      await client.query<
+        Omit<PracticeSessionExchange, "suggestion"> & {
+          suggestionState: "requested" | "ready" | "rejected" | null;
+          suggestionText: string | null;
+          suggestionRequestedAt: Date | null;
+        }
+      >(
+        `SELECT e.sequence,e.response,e.comparison,e.source_excerpt AS "sourceExcerpt",e.accepted_at AS "acceptedAt",
+         g.state AS "suggestionState",g.suggestion AS "suggestionText",g.requested_at AS "suggestionRequestedAt"
+       FROM private_practice_exchanges e
+       LEFT JOIN practice_ai_suggestions g ON g.session_id=e.session_id AND g.sequence=e.sequence
+       WHERE e.session_id=$1 ORDER BY e.sequence LIMIT 15`,
         [id],
       )
     ).rows;
+    return rows.map(
+      ({
+        suggestionState,
+        suggestionText,
+        suggestionRequestedAt,
+        ...pair
+      }) => ({
+        ...pair,
+        suggestion: suggestionState
+          ? {
+              state:
+                suggestionState === "requested" ? "unknown" : suggestionState,
+              text: suggestionText,
+              requestedAt: suggestionRequestedAt!,
+            }
+          : null,
+      }),
+    );
   }
   return {
     async source(token, contentId) {
@@ -421,12 +510,23 @@ export function practiceSessionStore(
               : pairs.length === 15
                 ? "full"
                 : "available";
+        const paused =
+          options.suggestions && !row.withdrawnAt
+            ? (
+                await client.query<{ paused: unknown }>(
+                  "SELECT paused FROM local_ai_control WHERE singleton=true",
+                )
+              ).rows[0]?.paused !== false
+            : null;
         return {
           ...row,
           prompt: row.withdrawnAt ? null : instruction,
           availability,
           exchanges: pairs,
           nextSequence: availability === "available" ? pairs.length + 1 : null,
+          ...(paused === null
+            ? {}
+            : { suggestions: paused ? "paused" : "available" }),
         };
       });
     },
@@ -516,6 +616,194 @@ export function practiceSessionStore(
           },
         )) ?? "unavailable"
       );
+    },
+    async suggest(token, id, sequence) {
+      const settings = options.suggestions;
+      if (
+        !settings ||
+        !uuidPattern.test(id) ||
+        !Number.isInteger(sequence) ||
+        sequence < 1 ||
+        sequence > 15
+      )
+        return "unavailable";
+      const provider =
+        settings.provider ??
+        deterministicPracticeSuggestionProvider(settings.mode);
+      type Begun = {
+        jobId: string;
+        attemptToken: string;
+        input: PracticeSuggestionInput;
+      };
+      const begun = await transaction<Begun | PracticeSuggestionOutcome>(
+        token,
+        async (client, memberId) => {
+          const metadata = await session(client, memberId, id, false);
+          if (!metadata) return "unavailable";
+          const current = await source(
+            client,
+            memberId,
+            metadata.contentId,
+            metadata.contentVersion,
+          );
+          // The session lock serializes requests for its pairs, so one pair
+          // gets at most one request however many arrive together.
+          const row = (await session(client, memberId, id, true))!;
+          if (row.withdrawnAt) return "withdrawn";
+          const pair = (
+            await client.query<{ response: string; sourceExcerpt: string }>(
+              `SELECT response,source_excerpt AS "sourceExcerpt" FROM private_practice_exchanges
+               WHERE session_id=$1 AND sequence=$2`,
+              [id, sequence],
+            )
+          ).rows[0];
+          if (!pair) return "unavailable";
+          if (
+            (
+              await client.query(
+                "SELECT 1 FROM practice_ai_suggestions WHERE session_id=$1 AND sequence=$2",
+                [id, sequence],
+              )
+            ).rows[0]
+          )
+            return "replayed";
+          // Only for the exact source version still eligible for this goal.
+          if (
+            !current ||
+            current.goal !== row.goal ||
+            !prompt(row.promptVersion, row.goal)
+          )
+            return "unavailable";
+          const control = (
+            await client.query<{ paused: unknown }>(
+              "SELECT paused FROM local_ai_control WHERE singleton=true FOR SHARE",
+            )
+          ).rows[0];
+          if (control?.paused !== false) return "paused";
+          // #190: the same per-member lock and limit as sample requests.
+          await client.query(
+            "SELECT pg_advisory_xact_lock(hashtextextended('local-ai-member-open:'||$1::text,0))",
+            [memberId],
+          );
+          const open = (
+            await client.query<{ open: number }>(
+              `SELECT count(*)::int AS open FROM adapter_jobs WHERE member_id=$1 AND adapter='ai'
+               AND status IN ('pending','running','failed','needs_reconciliation')`,
+              [memberId],
+            )
+          ).rows[0]!.open;
+          if (open >= LOCAL_AI_MEMBER_OPEN_LIMIT) return "limit";
+          const input: PracticeSuggestionInput = {
+            response: pair.response,
+            contentId: row.contentId,
+            contentVersion: row.contentVersion,
+            sourceExcerpt: pair.sourceExcerpt,
+            interview: row.promptVersion === interviewPromptVersion,
+          };
+          const jobId = randomUUID(),
+            attemptToken = randomUUID();
+          // One attempt only: an unknown outcome is held, never retried.
+          await client.query(
+            `INSERT INTO adapter_jobs(id,adapter,mode,operation,idempotency_key,request_fingerprint,
+             status,attempt_count,max_attempts,attempt_token,lease_until,
+             prompt_template_version,model_contract_version,member_id)
+             VALUES($1,'ai',$2,$3,$4,$5,'running',1,1,$6,clock_timestamp()+INTERVAL '5 minutes',$7,$8,$9)`,
+            [
+              jobId,
+              settings.mode,
+              PRACTICE_SUGGESTION_OPERATION,
+              `practice-suggestion:${id}:${sequence}`,
+              requestFingerprint(input),
+              attemptToken,
+              PRACTICE_SUGGESTION_PROMPT,
+              PRACTICE_SUGGESTION_MODEL,
+              memberId,
+            ],
+          );
+          await client.query(
+            `INSERT INTO practice_ai_suggestions(session_id,sequence,member_id,job_id)
+             VALUES($1,$2,$3,$4)`,
+            [id, sequence, memberId, jobId],
+          );
+          return { jobId, attemptToken, input };
+        },
+      );
+      if (begun === null) return "unavailable";
+      if (typeof begun === "string") return begun;
+      let raw: unknown,
+        reached = true;
+      try {
+        raw = await bounded(
+          provider,
+          begun.input,
+          settings.providerLimitMs ?? PROVIDER_LIMIT_MS,
+        );
+      } catch {
+        reached = false;
+      }
+      const valid = reached
+        ? validatePracticeSuggestion(raw, begun.input)
+        : null;
+      try {
+        return (
+          (await transaction<PracticeSuggestionOutcome>(
+            token,
+            async (client, memberId) => {
+              const job = (
+                await client.query<{
+                  status: string;
+                  attempt_token: string | null;
+                }>(
+                  "SELECT status,attempt_token FROM adapter_jobs WHERE id=$1 AND member_id=$2 FOR UPDATE",
+                  [begun.jobId, memberId],
+                )
+              ).rows[0];
+              if (
+                !job ||
+                job.status !== "running" ||
+                job.attempt_token !== begun.attemptToken
+              )
+                return "unknown";
+              if (!reached) {
+                await client.query(
+                  `UPDATE adapter_jobs SET status='needs_reconciliation',safe_error='provider_outcome_unknown',
+                   attempt_token=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1`,
+                  [begun.jobId],
+                );
+                return "unknown";
+              }
+              if (!valid) {
+                await client.query(
+                  `UPDATE adapter_jobs SET status='exhausted',safe_error='invalid_provider_response',
+                   attempt_token=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1`,
+                  [begun.jobId],
+                );
+                await client.query(
+                  `UPDATE practice_ai_suggestions SET state='rejected',completed_at=clock_timestamp()
+                   WHERE job_id=$1`,
+                  [begun.jobId],
+                );
+                return "rejected";
+              }
+              await client.query(
+                `UPDATE adapter_jobs SET status='succeeded',safe_error=NULL,attempt_token=NULL,lease_until=NULL,
+                 provider_operation_reference=$2,updated_at=clock_timestamp() WHERE id=$1`,
+                [begun.jobId, valid.reference],
+              );
+              // Withdrawn meanwhile: the pair and its request row are gone, so
+              // the answer is not kept anywhere.
+              const kept = await client.query(
+                `UPDATE practice_ai_suggestions SET state='ready',suggestion=$2,completed_at=clock_timestamp()
+                 WHERE job_id=$1 RETURNING 1`,
+                [begun.jobId, valid.text],
+              );
+              return kept.rows[0] ? "ready" : "withdrawn";
+            },
+          )) ?? "unknown"
+        );
+      } catch {
+        return "unknown";
+      }
     },
   };
 }

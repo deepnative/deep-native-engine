@@ -628,6 +628,7 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         submittedAssignment: "observed submission",
         returnEligible: "matured first-open cohort",
         crossContentReturned: "bounded observed return",
+        reportedOutcome: "member-reported outcome",
         usefulness: "coarse self-reported usefulness",
         segments: "Segments.",
         cohorts: "Cohorts.",
@@ -645,6 +646,7 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         submittedAssignment: 7,
         returnEligible: 20,
         crossContentReturned: 8,
+        reportedOutcome: 5,
       }),
       segments: learningSegments(null, 30),
       cohorts: [],
@@ -679,6 +681,7 @@ it("denies an unconfigured operator metrics route and returns only a configured 
       submittedAssignment: "5-19",
       returnEligible: "20-49",
       crossContentReturned: "5-19",
+      reportedOutcome: "5-19",
     },
   });
   expect(response.body.scope).toBe("synthetic-local-preview");
@@ -1753,7 +1756,20 @@ it("requires explicit member confirmation and current local AI permission at eve
   expect(fullRun.text).toContain("stays reserved");
   await post("/evidence/local-ai/job-id/run").expect(403);
   localAiConsent.run.mockResolvedValueOnce({ kind: "unavailable" });
-  await post("/evidence/local-ai/job-id/run").expect(409);
+  const unknown = await post("/evidence/local-ai/job-id/run").expect(409);
+  expect(unknown.text).toContain("Refresh the page.");
+  // AIFAULT: a held or failed attempt points back to the page that names it.
+  for (const status of ["needs_reconciliation", "failed"]) {
+    localAiConsent.run.mockResolvedValueOnce({
+      kind: "unavailable",
+      jobId: "job-id",
+      status,
+    });
+    const named = await post("/evidence/local-ai/job-id/run").expect(409);
+    expect(named.text).toContain(
+      "This attempt did not finish normally and will not retry automatically.",
+    );
+  }
   localAiConsent.run.mockResolvedValueOnce({
     kind: "completed",
     jobId: "job-id",
@@ -2428,7 +2444,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v42",
+          version: "local-member-records-v43",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2468,7 +2484,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v42",
+    version: "local-member-records-v43",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -6109,7 +6125,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v42" as const,
+    version: "local-member-records-v43" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),

@@ -50,7 +50,7 @@ import { preparedObjectStorage } from "./prepared-sample-storage.ts";
 import { preparedSampleStore } from "./prepared-samples.ts";
 import { assignmentEvidenceStore } from "./assignment-evidence.ts";
 import { assignmentObjectStorage } from "./assignment-evidence-storage.ts";
-import { deterministicRegistry } from "./adapters.ts";
+import { deterministicRegistry, testAiFaults } from "./adapters.ts";
 import { localAiConsentStore } from "./local-ai-consent.ts";
 import { localAiControlStore } from "./local-ai-control.ts";
 import { catalogStore, seedDraftPack } from "./catalog.ts";
@@ -293,6 +293,8 @@ export async function start(env: NodeJS.ProcessEnv) {
       practice: practiceStore(pool),
       practiceSessions: practiceSessionStore(pool, {
         allowance: settings.practiceSessionAllowance,
+        // #200: local deterministic suggestions; config() rejects live hosting.
+        suggestions: { mode: settings.mode as "demo" | "test" },
       }),
       practiceSessionAllowance: settings.practiceSessionAllowance,
       reviewTimeGrantAdmin: reviewTimeGrantAdminStore(
@@ -351,7 +353,9 @@ export async function start(env: NodeJS.ProcessEnv) {
       localAiConsent: localAiConsentStore(
         pool,
         objects,
-        deterministicRegistry(env, settings.mode as "demo" | "test"),
+        deterministicRegistry(env, settings.mode as "demo" | "test", {
+          aiFaults: testAiFaults(env, settings.mode, Boolean(settings.hosted)),
+        }),
       ),
       localAiControl: localAiControlStore(pool),
       uploadAdmission: uploadAdmissionStore(pool),
