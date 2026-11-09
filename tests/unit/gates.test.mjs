@@ -589,6 +589,7 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B/D, ECO-01 to ECO-04, ECO-06-A/08-C a
     "F-ECO-08-A",
     "F-ECO-08-B",
     "F-BUILD-09-A",
+    "F-BUILD-06-D",
   ];
   const cases = proposal.fullMvp.flatMap((family) => family.cases);
   const report = {
@@ -618,11 +619,11 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B/D, ECO-01 to ECO-04, ECO-06-A/08-C a
   };
   expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
     approved: false,
-    passed: 74,
-    total: 74,
-    criticalPassed: 68,
-    criticalTotal: 68,
-    executions: 74 * proposal.projects.length,
+    passed: 75,
+    total: 75,
+    criticalPassed: 69,
+    criticalTotal: 69,
+    executions: 75 * proposal.projects.length,
   });
   for (const [browserIndex, browserName] of proposal.projects.entries()) {
     for (const [name, corrupt] of [
@@ -729,6 +730,7 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B/D, ECO-01 to ECO-04, ECO-06-A/08-C a
       [71, "F-ECO-08-A"],
       [72, "F-ECO-08-B"],
       [73, "F-BUILD-09-A"],
+      [74, "F-BUILD-06-D"],
     ]) {
       const incomplete = copy(report);
       incomplete.suites[0].specs[index].tests[
@@ -939,4 +941,17 @@ it("rejects empty, duplicated or incomplete journey registers", () => {
   expect(() => assertJourneys(declassified, browser())).toThrow(
     /Incomplete full/,
   );
+});
+
+it("HOLD06D-01 words F-BUILD-06-D by the hold rule: unknown AI outcomes stay held once", () => {
+  const item = proposal.fullMvp
+    .flatMap((family) => family.cases)
+    .find((test) => test.id === "F-BUILD-06-D");
+  const text = JSON.stringify(item);
+  expect(item.critical).toBe(true);
+  expect(item.requiredChecks).toHaveLength(2);
+  expect(text).not.toMatch(/restored|released or settled/);
+  for (const check of item.requiredChecks)
+    expect(check.expected).toMatch(/held once/);
+  expect(item.expected).toMatch(/unknown outcome/);
 });
