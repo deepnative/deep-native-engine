@@ -30,6 +30,7 @@ const states: Record<
   held: (hold) => `Held until ${timeTag(hold.expiresAt, "UTC")}`,
   released: () => "You withdrew it",
   expired: () => "Ended without a booking",
+  cancelled: () => "Cancelled by staff, with a replacement credit",
 };
 
 export function coachPracticeSection(state: CoachPracticeState): string {

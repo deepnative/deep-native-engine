@@ -14,9 +14,11 @@ import { syntheticLedger } from "../../src/ledger.ts";
 import { COOKIE } from "../../src/session.ts";
 import { hash } from "../../src/store.ts";
 import { authorizationStore } from "./administrator-fixture.ts";
+import { browserOrigin } from "./browser-origin.ts";
 import { chooseLearningGoal } from "./choose-learning-goal.ts";
 
-export const slotOrigin = "http://127.0.0.1:4317";
+// The focused-run override (#176) must reach the journey helpers too.
+export const slotOrigin = browserOrigin;
 
 export type SlotMember = {
   id: string;
