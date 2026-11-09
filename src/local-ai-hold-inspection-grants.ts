@@ -158,8 +158,9 @@ export function localAiHoldInspectionGrants(pool: Pool, available: boolean) {
              LEFT JOIN synthetic_entitlement_reservations r ON r.id=b.reservation_id
              LEFT JOIN synthetic_entitlement_grants g ON g.id=r.grant_id
              WHERE j.id=$1 AND j.member_id=$2 AND j.adapter='ai' AND j.mode IN ('demo','test')
-              AND j.operation='evidence-summary-local-v1'
-              AND j.prompt_template_version='local-simulation-v1' AND j.model_contract_version='deterministic-local-v1'
+              -- #189 PRACTICE-HOLD: held practice suggestions (#200) are unmetered.
+              AND (j.operation,j.prompt_template_version) IN (('evidence-summary-local-v1','local-simulation-v1'),('practice-suggestion-local-v1','practice-suggestion-v1'))
+              AND j.model_contract_version='deterministic-local-v1'
               AND ((b.job_id IS NULL AND (j.status='needs_reconciliation' OR (j.status='running' AND j.lease_until<=clock_timestamp())))
                OR (b.member_id=j.member_id AND b.policy='deterministic-request-test-v1' AND r.quantity=1
                 AND g.member_id=j.member_id AND g.category='study_requests')) FOR SHARE OF j`,

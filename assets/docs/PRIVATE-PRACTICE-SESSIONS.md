@@ -71,7 +71,7 @@ A suggestion is kept only if it passes every check in `src/practice-ai-suggestio
 
 Migration 120 adds `practice_ai_suggestions`: one row per pair, removed with the pair or the account. A database trigger accepts a new row only as its owner's own pending request for a practice-suggestion job, and lets it complete once, as ready or rejected. The request is an ordinary member-owned AI job (`practice-suggestion-local-v1`, one attempt), so the member's export already lists it under `adapterJobs`. Download my records (v43) adds `practiceAiSuggestions`: state, text and times, labelled simulated, without the request fingerprint or provider reference.
 
-Limits: held unknown requests aren't yet visible to the operators' held-request tools (#189), so they keep their place in the limit. Metering, a spending ceiling, a live provider and qualified review are still open on #200.
+Limits: an administrator can assign a held unknown request to an operator for the same content-free [hold inspection](PRIVATE-LOCAL-AI-HOLD-INSPECTION.md) as sample requests (#189). It shows the request's status, times and versions, never the member's words or the suggestion. Recording a test outcome for it isn't available yet, so it keeps its place in the limit. Metering, a spending ceiling, a live provider and qualified review are still open on #200.
 
 BDD mapping: PRACTICE-AI-01..07 are in `tests/unit/practice-ai-suggestions.test.ts`, `tests/unit/practice-session-suggestions.test.ts`, `tests/unit/member-export.test.ts` and `tests/integration/practice-ai-suggestions.test.ts`. PRACTICE-AI-08 is journey L324 (desktop and mobile Chromium).
 
