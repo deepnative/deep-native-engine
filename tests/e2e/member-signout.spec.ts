@@ -412,6 +412,17 @@ test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without
     await expect(
       page.getByText("You may lose access", { exact: false }),
     ).toBeVisible();
+    // NAV-CURRENT-01 (#793): the current page is marked by an underline only,
+    // so it does not read as a filled button beside the outlined view switch.
+    const current = page
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "Sign out", exact: true });
+    await expect(current).toHaveAttribute("aria-current", "page");
+    await expect(current).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(current).toHaveCSS(
+      "box-shadow",
+      "rgb(36, 84, 214) 0px -2px 0px 0px inset",
+    );
     // SOUT-LAYOUT-01/02 (#793): the heading starts below the header like other
     // task pages, and Stay signed in sits beside Sign out under the checkbox.
     const original = page.viewportSize()!;
