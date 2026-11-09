@@ -315,6 +315,11 @@ function routes(terms?: Partial<CoachingTermsStore>) {
     secret,
     billingProfiles: {
       read: vi.fn().mockResolvedValue({ kind: "ready", value: null }),
+      // #796: a new month starts from the saved or registered recipient.
+      suggest: vi.fn().mockResolvedValue({
+        kind: "ready",
+        value: { name: "", email: "", company: null, revision: 0 },
+      }),
     } as never,
     coachingTerms: terms as CoachingTermsStore | undefined,
   });
