@@ -15,8 +15,10 @@ import { withLoopback } from "../support/loopback-server.ts";
 
 const snapshot: PreviewMetrics = {
   scope: "synthetic-local-preview",
+  accounts: "not-demo",
   asOf: new Date("2026-10-27T12:00:00Z"),
   definitions: {
+    accounts: "Only <non-demo> accounts.",
     denominator:
       "Retained accounts at asOf, excluding deleted records <private>.",
     activated: "Versioned lesson opens.",
@@ -189,4 +191,25 @@ it("READABLE-19 the hosted metrics report drops local wording and stays not a bu
   expect(html).toContain("This is not a live business report");
   expect(html).not.toMatch(/\blocal\b/i);
   expect(metricsReportPage(snapshot)).toContain("SYNTHETIC LOCAL PREVIEW");
+});
+
+it("DEMOACCT-05 the report says which accounts it counts, on a demo site and elsewhere", () => {
+  const live = metricsReportPage(snapshot);
+  expect(live).toContain(
+    '<p data-accounts="not-demo">Only &lt;non-demo&gt; accounts.</p>',
+  );
+  expect(live).toContain(
+    "Accounts created before a site stops being a demo stay demo accounts and are never counted here.",
+  );
+  expect(live).not.toContain("not yet separated");
+  const demo = metricsReportPage({
+    ...snapshot,
+    accounts: "demo",
+    definitions: { ...snapshot.definitions, accounts: "Demo <only>." },
+  });
+  expect(demo).toContain('<p data-accounts="demo">Demo &lt;only&gt;.</p>');
+  expect(demo).toContain(
+    "Demo accounts are test data, not evidence of live outcomes.",
+  );
+  expect(demo).not.toContain("stops being a demo");
 });

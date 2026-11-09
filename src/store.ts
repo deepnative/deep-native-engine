@@ -272,13 +272,18 @@ export async function migrate(pool: Pool) {
       "122-sample-service-states.sql",
       "123-practice-suggestion-spending.sql",
       "124-member-record-access.sql",
+      "125-demo-site-accounts.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),
   );
   await pool.query(scripts.join("\n"));
 }
-export function store(pool: Pool): Store {
+/** DEMOACCT-01: `demoSite` marks every account this store creates as a demo account. */
+export function store(
+  pool: Pool,
+  settings: { demoSite?: boolean } = {},
+): Store {
   async function exerciseTransaction<T>(
     token: string,
     write: boolean,
@@ -404,8 +409,8 @@ export function store(pool: Pool): Store {
          ), member AS (
            INSERT INTO learners(id,token_hash,background,goal,expires_at,
                                 background_tags,domain_tags,it_roles,experience,exploratory,
-                                time_zone,weekly_minutes,display_name)
-           SELECT id,token_hash,$3,$4,expires_at,$5,$6,$7,$8,$9,$10,$11,$12 FROM identity
+                                time_zone,weekly_minutes,display_name,created_on_demo_site)
+           SELECT id,token_hash,$3,$4,expires_at,$5,$6,$7,$8,$9,$10,$11,$12,$13 FROM identity
            RETURNING id
          )
          INSERT INTO workspaces(id,owner_principal_id)
@@ -423,6 +428,7 @@ export function store(pool: Pool): Store {
           profile.timezone ?? null,
           profile.weeklyMinutes ?? null,
           profile.displayName ?? null,
+          settings.demoSite === true,
         ],
       );
     },

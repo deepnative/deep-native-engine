@@ -1262,6 +1262,20 @@ it("READABLE-23 the hosted metrics report reads its real definitions without loc
   expect(Object.keys(online)).toEqual(Object.keys(local));
 });
 
+it("DEMOACCT-03/04 the accounts definition follows the site, not the hosting", () => {
+  expect(metricDefinitions().accounts).toBe(
+    "Every figure counts only accounts that were not created while the site ran as a demo. Demo accounts and their activity are left out.",
+  );
+  expect(metricDefinitions(true).accounts).toBe(
+    "This site runs as a demo, so every figure counts only accounts created on the demo. They are test data, not live figures.",
+  );
+  // Only the accounts sentence changes on a demo site.
+  expect({ ...metricDefinitions(true), accounts: "" }).toEqual({
+    ...metricDefinitions(),
+    accounts: "",
+  });
+});
+
 const comparison =
   "Simulation — unreviewed local comparison. Your paired words: “my local words and This deterministic comparison does not verify”\n" +
   "Exact source excerpt (SYN-960 v3): “a synthetic excerpt”\n" +
