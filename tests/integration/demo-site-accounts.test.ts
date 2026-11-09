@@ -124,10 +124,10 @@ it("DEMOACCT-02 accounts that existed before the change are recorded as demo acc
   const before = await member(false);
   const client = await pool.connect();
   try {
-    // Replays migration 124 on a database that had accounts without the column.
+    // Replays migration 125 on a database that had accounts without the column.
     await client.query("BEGIN");
     await client.query(
-      "DROP TRIGGER learners_demo_site_fixed ON learners; ALTER TABLE learners DROP COLUMN created_on_demo_site; DELETE FROM schema_migrations WHERE version=124",
+      "DROP TRIGGER learners_demo_site_fixed ON learners; ALTER TABLE learners DROP COLUMN created_on_demo_site; DELETE FROM schema_migrations WHERE version=125",
     );
     await client.query("COMMIT");
   } catch (error) {

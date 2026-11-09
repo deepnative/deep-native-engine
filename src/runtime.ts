@@ -3,6 +3,7 @@ import { workflowTestRoot } from "./workflow-registry.ts";
 import { administratorEntry } from "./administrator-entry.ts";
 import { coachViewStore } from "./coach-view.ts";
 import { memberSharingStore } from "./member-sharing.ts";
+import { memberRecordAccessStore } from "./member-record-access.ts";
 import { accountRoleAdmin } from "./account-role-admin.ts";
 import { administratorDiagnostics } from "./administrator-diagnostics.ts";
 import {
@@ -211,6 +212,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       administratorEntry: administratorEntry(pool),
       coachView: coachViewStore(pool),
       memberSharing: memberSharingStore(pool),
+      memberRecordAccess: memberRecordAccessStore(pool),
       roleAdmin: accountRoleAdmin(pool),
       administratorDiagnostics: administratorDiagnostics(pool),
       workflowReviewStaff: workflowReviewStaffStore(

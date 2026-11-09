@@ -358,6 +358,14 @@ it.each([
     entry("proposal", "a_later_kind", "moderator"),
     "Staff accessed your private work.",
   ],
+  [
+    entry("records", "records_downloaded", "billing"),
+    "An operator downloaded your billing records, with your permission.",
+  ],
+  [
+    entry("records", "records_downloaded", "everything"),
+    "Staff accessed your private work.",
+  ],
 ])("STAFFSEE-02..04 says %j in plain words", async (row, words) => {
   const res = await open(server(showing([row])), PATH);
   expect(res.status).toBe(200);

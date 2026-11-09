@@ -6,6 +6,11 @@ import type {
   StaffAccessEntry,
 } from "./member-sharing.ts";
 import { escape, page } from "./views.ts";
+import { isRecordScope } from "./member-record-access.ts";
+import {
+  RECORD_ACCESS_PATH,
+  RECORD_SCOPE_NAMES,
+} from "./member-record-access-views.ts";
 
 const PATH = "/account/sharing";
 const HISTORY_PATH = `${PATH}/staff-access`;
@@ -83,7 +88,7 @@ function sharingPage(v: SharingSummary, contributionsOn: boolean) {
     v.staffWithAccess
       ? `${v.staffWithAccess === 1 ? "1 staff member has" : `${v.staffWithAccess} staff members have`} access to your private work right now, given by an administrator for a limited time.`
       : "No staff access to your private work is active right now."
-  } ${link(HISTORY_PATH, HISTORY_TITLE)}</p></section>
+  } ${link(HISTORY_PATH, HISTORY_TITLE)}</p><p>Operators can download your records only with your permission, one kind at a time and for seven days at most. ${link(RECORD_ACCESS_PATH, "Allow or stop operator downloads")}</p></section>
 <section class="reading" aria-labelledby="sharing-records"><h2 id="sharing-records">Your records</h2><p>${link("/member/export", "Download my records")}. To delete your account, go to ${link("/account", "My account")}.</p></section>`;
 }
 
@@ -149,6 +154,8 @@ function staffAccessText(entry: StaffAccessEntry) {
   }
   if (source === "workflow")
     return `A moderator read your workflow note for ${file}.`;
+  if (source === "records" && isRecordScope(via))
+    return `An operator downloaded your ${RECORD_SCOPE_NAMES[via]}, with your permission.`;
   // A later kind of record still shows rather than silently vanishing.
   return "Staff accessed your private work.";
 }
@@ -172,7 +179,7 @@ function staffAccessPage(
       ? `<p>${link(`${HISTORY_PATH}?before=${encodeURIComponent(older)}`, "Older entries")}</p>`
       : ""
   }</section>
-<section class="reading" aria-labelledby="staff-access-covers"><h2 id="staff-access-covers">What this covers</h2><p>Your learning workspace, the files and samples you sent for review, proposals you submitted, and workflow notes you sent for private review.</p><p>Readings of workflow notes are listed from November 2026 on; earlier ones weren't recorded.</p><p>It doesn't list support requests or circle post moderation, because opening those isn't recorded here. It also doesn't list a moderator being assigned to a workflow note, or access that ended on its own at its set time.</p><p>This history is deleted with your account. It's also in ${link("/member/export", "Download my records")}. Its section there is called staffAccess.</p><p>${link(PATH, "Who can see my work")}</p></section>`;
+<section class="reading" aria-labelledby="staff-access-covers"><h2 id="staff-access-covers">What this covers</h2><p>Your learning workspace, the files and samples you sent for review, proposals you submitted, and workflow notes you sent for private review.</p><p>Readings of workflow notes are listed from November 2026 on; earlier ones weren't recorded.</p><p>It also lists each download of your records an operator made with your permission. ${link(RECORD_ACCESS_PATH, "Allow or stop operator downloads")}</p><p>It doesn't list support requests or circle post moderation, because opening those isn't recorded here. It also doesn't list a moderator being assigned to a workflow note, or access that ended on its own at its set time.</p><p>This history is deleted with your account. It's also in ${link("/member/export", "Download my records")}. Its section there is called staffAccess.</p><p>${link(PATH, "Who can see my work")}</p></section>`;
 }
 
 /** #40 WHOSEES-01..08: read-only; every change happens on the linked page. */

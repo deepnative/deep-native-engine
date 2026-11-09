@@ -2919,6 +2919,15 @@
       "expected": "The coach sees one record with 120 min open slots, 1 held slot at its start time and 120 min room left (300 declared - 60 committed - 120 slots); no member, grant, slot, record or staff ID, reference or cost appears; no sideways scrolling; the backup sees only their own record with nothing held; the operator sees that nothing is bookable; the member is refused (403) with no figures",
       "issues": [193],
       "critical": true
+    },
+    {
+      "id": "L328",
+      "actor": "Member allowing, watching and stopping an operator download of their records, and the operator",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, one invented member with an invented milestone and support request, an invented operator; desktop/mobile Chromium; no provider",
+      "steps": "RECACCESS-01/03/04/07: the member opens Let operators download my records from Who can see my work and allows learning records for 7 days; the operator downloads learning records with the student reference, then asks for support records; the member checks the page and When staff opened my work, then stops the permission; the operator asks again",
+      "expected": "The download is JSON with only the learning sections (the milestone, not the support body); support records are refused with nothing downloaded; the member sees Downloaded once and the plain-words history line, without who downloaded; after stopping, the page says nothing is allowed and the next download is refused; no sideways scrolling",
+      "issues": [40],
+      "critical": true
     }
   ],
   "fullMvp": [

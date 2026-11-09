@@ -9,6 +9,7 @@ Download my records (My account → Download my records, `src/member-export.ts`)
 - **EXPCOV-04:** simulated assessment results recorded on the member's work are in the download (`contentAssessments`, v41), without the reviewer. No page records these yet.
 - **EXPCOV-05:** how many coaches are assigned to the member, and since when, is in the download (`coachAssignments`, v42) as one row, without any coach's email fingerprint or who assigned them.
 - **EXPCOV-06:** test payments staff recorded by hand about the member are in the download (`manualPaymentObservations`, v42), labelled unverified, without the staff member.
+- **RECACCESS-07:** each permission the member gave operators to download their records is in the download (`recordAccess`, v44), with how many downloads were made, and each download is in `staffAccess`, without the operator.
 
 The check is about which tables the download reads, not which columns. Each section's own tests decide which fields a member sees.
 

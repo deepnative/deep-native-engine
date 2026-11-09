@@ -24,7 +24,7 @@ Nothing here is verified, and no live outcome figure exists yet. Evidence: OUTCO
 
 ## Demo accounts — #123
 
-Each member account records, once and for good, whether it was created while the site ran as a demo (`learners.created_on_demo_site`, migration 124; a trigger refuses any change). Accounts that existed before migration 124 are recorded as demo accounts, because the hosted site has only ever run as a demo and nothing has launched.
+Each member account records, once and for good, whether it was created while the site ran as a demo (`learners.created_on_demo_site`, migration 125; a trigger refuses any change). Accounts that existed before migration 125 are recorded as demo accounts, because the hosted site has only ever run as a demo and nothing has launched.
 
 The snapshot (`/operator/metrics` and its report) counts only the accounts that match the site: on a site that isn't a demo, every figure leaves out demo accounts and their activity (members, learning measures, segments, cohorts, usefulness, contributions and reported outcomes); on a demo site, it counts only demo accounts and says they are test data, not live figures. The JSON carries `accounts: "demo"` or `"not-demo"`, and the report states which accounts it counted. An account created on the demo stays a demo account after the site stops being a demo. Access, bands and suppression are unchanged.
 

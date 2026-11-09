@@ -4,7 +4,7 @@ BEGIN;
 -- Accounts that already exist are demo accounts: the hosted site has only ever
 -- run as a demo, and nothing has launched. The answer is fixed at creation.
 DO $$ BEGIN
-IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=124) THEN
+IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=125) THEN
  IF NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema()
    AND table_name='learners' AND column_name='created_on_demo_site') THEN
   ALTER TABLE learners ADD COLUMN created_on_demo_site boolean;
@@ -24,5 +24,5 @@ END $$;
 DROP TRIGGER IF EXISTS learners_demo_site_fixed ON learners;
 CREATE TRIGGER learners_demo_site_fixed BEFORE UPDATE OF created_on_demo_site ON learners
  FOR EACH ROW EXECUTE FUNCTION keep_learner_demo_site();
-INSERT INTO schema_migrations(version) VALUES(124) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(125) ON CONFLICT DO NOTHING;
 COMMIT;
