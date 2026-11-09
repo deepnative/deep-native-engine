@@ -2910,6 +2910,15 @@
       "expected": "Saving and reading ask for nothing; the suggestion is labelled simulated and not reviewed by a person, quotes the member's exact words, cites the exact lesson id and version, says it is uncertain and gives no score; one request succeeds and reload shows the same suggestion with no second request offered; no sideways scrolling",
       "issues": [200],
       "critical": true
+    },
+    {
+      "id": "L327",
+      "actor": "Coach reading their own booked time, their backup, a staff member with no roster record and a refused member",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, invented administrator, operator, two coaches with verified coaching records naming each other as backup, two future slots on the first coach's record and one member sample hold; desktop/mobile Chromium; no provider",
+      "steps": "MYTIME-01/02/05/06/07: the coach follows My booked time from the staff page; the backup, the operator and the member open the same page",
+      "expected": "The coach sees one record with 120 min open slots, 1 held slot at its start time and 120 min room left (300 declared - 60 committed - 120 slots); no member, grant, slot, record or staff ID, reference or cost appears; no sideways scrolling; the backup sees only their own record with nothing held; the operator sees that nothing is bookable; the member is refused (403) with no figures",
+      "issues": [193],
+      "critical": true
     }
   ],
   "fullMvp": [
