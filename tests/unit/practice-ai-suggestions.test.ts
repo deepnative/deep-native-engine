@@ -236,6 +236,49 @@ it("PRACTICE-AI-01/02/03 the page shows a ready, rejected or unknown suggestion 
   );
   expect(unknown).toContain("isn't known. It isn't requested again");
   expect(unknown).not.toContain("/pairs/1/suggestion");
+  expect(unknown).not.toContain("data-practice-suggestion-test-outcome");
+});
+
+it("PRACTICE-HOLD-03 an unknown suggestion shows its recorded test outcome, labelled as not provider-confirmed", () => {
+  const requestedAt = new Date("2026-10-01T12:02:00Z");
+  const decidedAt = new Date("2026-10-02T09:00:00Z");
+  const ran = practiceSessionPage(
+    pair({
+      state: "unknown",
+      text: null,
+      requestedAt,
+      testOutcome: {
+        outcome: "test-executed",
+        reason: "operator-test-exercise",
+        decidedAt,
+      },
+    }),
+    "csrf-token",
+  );
+  expect(ran).toContain("isn't known. It isn't requested again");
+  expect(ran).toContain(
+    "recorded for this held suggestion on 2026-10-02: it ran",
+  );
+  expect(ran).toContain("recorded as an operator test exercise");
+  expect(ran).toContain("No AI provider confirmed it");
+  expect(ran).toContain("the request stays held");
+  expect(ran).not.toContain("/pairs/1/suggestion");
+  const notRun = practiceSessionPage(
+    pair({
+      state: "unknown",
+      text: null,
+      requestedAt,
+      testOutcome: {
+        outcome: "test-not-executed",
+        reason: "matching-test-record",
+        decidedAt,
+      },
+    }),
+    "csrf-token",
+  );
+  expect(notRun).toContain(
+    "it did not run, matched to an invented test record",
+  );
 });
 
 const origin = "http://127.0.0.1:3000",
