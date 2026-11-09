@@ -585,6 +585,10 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B/D, ECO-01 to ECO-04, ECO-06-A/08-C a
     "F-ROADMAP-07-D",
     "F-ROADMAP-06-C",
     "F-BUILD-07-B",
+    "F-BUILD-09-B",
+    "F-ECO-08-A",
+    "F-ECO-08-B",
+    "F-BUILD-09-A",
   ];
   const cases = proposal.fullMvp.flatMap((family) => family.cases);
   const report = {
@@ -614,11 +618,11 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B/D, ECO-01 to ECO-04, ECO-06-A/08-C a
   };
   expect(assertProvisionalReleaseJourneys(proposal, report)).toMatchObject({
     approved: false,
-    passed: 70,
-    total: 70,
-    criticalPassed: 64,
-    criticalTotal: 64,
-    executions: 70 * proposal.projects.length,
+    passed: 74,
+    total: 74,
+    criticalPassed: 68,
+    criticalTotal: 68,
+    executions: 74 * proposal.projects.length,
   });
   for (const [browserIndex, browserName] of proposal.projects.entries()) {
     for (const [name, corrupt] of [
@@ -721,6 +725,10 @@ it("requires ROADMAP-01-B/02-A/B/C/D/08-A/B/D, ECO-01 to ECO-04, ECO-06-A/08-C a
       [67, "F-ROADMAP-07-D"],
       [68, "F-ROADMAP-06-C"],
       [69, "F-BUILD-07-B"],
+      [70, "F-BUILD-09-B"],
+      [71, "F-ECO-08-A"],
+      [72, "F-ECO-08-B"],
+      [73, "F-BUILD-09-A"],
     ]) {
       const incomplete = copy(report);
       incomplete.suites[0].specs[index].tests[
