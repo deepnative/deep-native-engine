@@ -56,7 +56,7 @@ test("[L318] ERASE-06 a member reads what stays after deletion, then deletes the
       "Issued invoices",
     );
     await expect(kept).toContainText(
-      "Copies in service backups go only when those backups expire.",
+      "Copies in service backups are kept for up to 30 days, then they expire.",
     );
     expect(await noSidewaysScroll(page)).toBe(true);
 
