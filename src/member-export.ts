@@ -577,7 +577,11 @@ const sections = {
      UNION ALL
      SELECT 'workflow',x.id::text,'note_read','moderator',NULL,NULL,x.workflow_id,x.workflow_version,x.occurred_at
       FROM workflow_review_read_audit x JOIN workspaces w ON w.id=x.workspace_id
-      WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL) h WHERE TRUE`,
+      WHERE w.owner_principal_id=$1 AND w.deleting_at IS NULL
+     UNION ALL
+     SELECT 'records',d.id::text,'records_downloaded',d.scope,NULL,NULL,NULL,NULL,d.occurred_at
+      FROM member_record_access_downloads d JOIN workspaces w ON w.owner_principal_id=d.member_id
+      WHERE d.member_id=$1 AND w.deleting_at IS NULL) h WHERE TRUE`,
     "h.source,h.id",
   ),
   // v39 appends #94 F-ECO-07-C: the course-billing agreements offered to or
@@ -642,7 +646,19 @@ const sections = {
     WHERE g.member_id=$1 AND s.withdrawn_at IS NULL`,
     "g.session_id,g.sequence",
   ),
+  // v44 appends #40 RECACCESS: each time the member let operators download a
+  // scope of these records, until when, and how many downloads were made.
+  // Never which operator downloaded them.
+  recordAccess: section(
+    `a.id,a.scope,a.created_at AS "createdAt",a.expires_at AS "expiresAt",
+    a.revoked_at AS "revokedAt",
+    (SELECT count(*)::integer FROM member_record_access_downloads d WHERE d.access_id=a.id) AS downloads`,
+    "member_record_access a WHERE a.member_id=$1",
+    "a.id",
+  ),
 } as const;
+/** Section SQL, shared with the member-authorized operator download (#40). */
+export const MEMBER_EXPORT_SECTIONS = sections;
 const entries = Object.entries(sections);
 export const MEMBER_EXPORT_CURSOR_TTL_MS = 15 * 60 * 1000;
 type Key = (string | number)[];
@@ -655,7 +671,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v43";
+  version: "local-member-records-v44";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -789,7 +805,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v43",
+          version: "local-member-records-v44",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

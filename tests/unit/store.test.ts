@@ -145,7 +145,15 @@ it("passes untrusted answers as bound parameters and scopes versioned reads and 
     null,
     null,
     null,
+    false,
   ]);
+  // DEMOACCT-01: a demo site's store marks the account as a demo account.
+  const demo = pool();
+  await store(demo.value, { demoSite: true }).create("demo-token", {
+    background: "explorer",
+    goal: "everyday",
+  });
+  expect(demo.query.mock.calls[0]![1]!.at(-1)).toBe(true);
   expect(await db.progress("owned")).toBeUndefined();
   await db.remove("owned");
   expect(p.query.mock.calls[2]![1]).toEqual(["owned"]);
@@ -206,6 +214,7 @@ it("saves profile changes by the session-derived learner and preserves the pract
     "UTC",
     60,
     null,
+    false,
   ]);
   await db.updateProfile("owned", {
     displayName: "Sample learner",

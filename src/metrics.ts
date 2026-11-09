@@ -18,8 +18,11 @@ import {
 
 export interface PreviewMetrics {
   scope: "synthetic-local-preview";
+  /** DEMOACCT-03/04: which accounts every figure counts. */
+  accounts: "demo" | "not-demo";
   asOf: Date;
   definitions: {
+    accounts: string;
     denominator: string;
     activated: string;
     selfAssessed: string;
@@ -119,7 +122,11 @@ const COHORT_MONTHS = 12;
  * The exact aggregate, for this module and its database tests only. No route
  * may serve it: `snapshot` is the disclosed form.
  */
-export async function exactMetrics(pool: Pool, token: string) {
+export async function exactMetrics(
+  pool: Pool,
+  token: string,
+  demoSite = false,
+) {
   const result = await pool.query<
     RawLearningCell & {
       asOf: Date;
@@ -184,6 +191,7 @@ export async function exactMetrics(pool: Pool, token: string) {
              WHERE a.member_id=l.id AND a.opened_at<=CURRENT_TIMESTAMP
              ORDER BY a.opened_at,a.content_id,a.content_version LIMIT 1
            ) anchor ON TRUE WHERE EXISTS(SELECT 1 FROM authorized)
+             AND l.created_on_demo_site=$2
          ), return_events AS (
            SELECT m.*,
              (m.first_open<=CURRENT_TIMESTAMP-interval '14 days') AS return_eligible,
@@ -222,6 +230,7 @@ export async function exactMetrics(pool: Pool, token: string) {
          ), latest_usefulness AS (
            SELECT DISTINCT ON (u.member_id) u.member_id,u.choice
            FROM lesson_usefulness u JOIN learners l ON l.id=u.member_id
+             AND l.created_on_demo_site=$2
            JOIN authorized ON TRUE
            ORDER BY u.member_id,u.updated_at DESC,u.reported_at DESC,
              u.content_id DESC,u.content_version DESC
@@ -232,7 +241,7 @@ export async function exactMetrics(pool: Pool, token: string) {
            FROM latest_usefulness
          ), contribution_retained AS (
            SELECT e.* FROM contribution_events e JOIN learners l ON l.id=e.member_id
-           WHERE EXISTS(SELECT 1 FROM authorized)
+           WHERE EXISTS(SELECT 1 FROM authorized) AND l.created_on_demo_site=$2
          ), contribution_groups AS (
            SELECT o.origin,jsonb_build_object(
              'contributors',COUNT(DISTINCT e.member_id) FILTER(WHERE e.kind='submitted'),
@@ -268,14 +277,19 @@ export async function exactMetrics(pool: Pool, token: string) {
            (SELECT jsonb_object_agg(origin,summary) FROM contribution_groups) AS contributions
          FROM return_events CROSS JOIN usefulness_counts uc
          HAVING EXISTS(SELECT 1 FROM authorized)`,
-    [hash(token)],
+    [hash(token), demoSite],
   );
   return result.rows[0] ?? null;
 }
 
 /** #730 The report shows this text, so hosted pages get plain wording here. */
-export function metricDefinitions(): PreviewMetrics["definitions"] {
+export function metricDefinitions(
+  demoSite = false,
+): PreviewMetrics["definitions"] {
   return {
+    accounts: demoSite
+      ? "This site runs as a demo, so every figure counts only accounts created on the demo. They are test data, not live figures."
+      : "Every figure counts only accounts that were not created while the site ran as a demo. Demo accounts and their activity are left out.",
     denominator: `Current retained ${hostingText("local-preview ", "")}member records at asOf; deleted members cannot be reconstructed. Expired and revoked sessions remain included.`,
     activated:
       "Distinct members with at least one versioned lesson open, divided by members. Opening does not establish learning.",
@@ -307,7 +321,12 @@ export function metricDefinitions(): PreviewMetrics["definitions"] {
   };
 }
 
-export function metricsStore(pool: Pool): MetricsStore {
+/** DEMOACCT-03/04: a demo site counts its demo accounts; any other site leaves them out. */
+export function metricsStore(
+  pool: Pool,
+  settings: { demoSite?: boolean } = {},
+): MetricsStore {
+  const demoSite = settings.demoSite === true;
   return {
     async logExport(token) {
       const logged = await pool.query(
@@ -322,12 +341,13 @@ export function metricsStore(pool: Pool): MetricsStore {
       return logged.rowCount === 1;
     },
     async snapshot(token) {
-      const row = await exactMetrics(pool, token);
+      const row = await exactMetrics(pool, token, demoSite);
       if (!row) return null;
       return {
         scope: "synthetic-local-preview",
+        accounts: demoSite ? "demo" : "not-demo",
         asOf: row.asOf,
-        definitions: metricDefinitions(),
+        definitions: metricDefinitions(demoSite),
         learning: learningDisclosure(row),
         segments: learningSegments(row.segments, row.members),
         cohorts: learningCohorts(row.cohorts),

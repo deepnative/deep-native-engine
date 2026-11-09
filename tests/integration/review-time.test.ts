@@ -1061,7 +1061,9 @@ it("upgrades populated pre-review-time feedback twice without converting unbille
       .sort())
       await client.query(await readFile(new URL(name, directory), "utf8"));
     // Current member projection only; keep the target legacy migration and marker unchanged.
-    await client.query("ALTER TABLE learners ADD COLUMN display_name text");
+    await client.query(
+      "ALTER TABLE learners ADD COLUMN display_name text, ADD COLUMN created_on_demo_site boolean NOT NULL DEFAULT false",
+    );
     const scoped = {
       query: client.query.bind(client),
       async connect() {
