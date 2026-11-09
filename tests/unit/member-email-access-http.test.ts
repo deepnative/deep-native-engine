@@ -626,6 +626,24 @@ it("NAV-02 linked confirmation offers recovery without requiring access-loss ack
   expect(response.text).not.toContain('name="acknowledgeAccessLoss"');
   expect(email.signOut).not.toHaveBeenCalled();
 });
+it("SOUT-LAYOUT-01 frames sign-out like other task pages with one action row", async () => {
+  const { application, email } = fixture();
+  email.ownedStatus.mockResolvedValue("linked");
+  const { text } = await get(application, "/account/sign-out");
+  expect(text).toContain(
+    '<section class="portal-page"><div class="portal-intro"><h1>Sign out</h1>',
+  );
+  expect(text).toMatch(
+    /<div class="portal-actions"><button type="submit">Sign out<\/button><a class="button secondary" href="\/account">Stay signed in<\/a><\/div><\/form><\/section>/,
+  );
+});
+it("SOUT-LAYOUT-02 keeps the access-loss acknowledgement above the action row", async () => {
+  const { application } = fixture();
+  const { text } = await get(application, "/account/sign-out");
+  expect(text).toMatch(
+    /<label class="check"><input type="checkbox" name="acknowledgeAccessLoss" value="yes" required> <span>I understand I may not be able to return to this account\.<\/span><\/label><div class="portal-actions"><button type="submit">Sign out<\/button><a class="button secondary" href="\/account">Stay signed in<\/a><\/div>/,
+  );
+});
 it("NAV-01 sign-out GET never mutates an expired or malformed request", async () => {
   const { application, email } = fixture(false);
   expect((await get(application, "/account/sign-out")).status).toBe(303);
