@@ -114,6 +114,7 @@ async function member() {
       display_name: "Invented Learner",
       background: "explorer",
       goal: "everyday",
+      signup_country: "CA",
       signup_email: email,
       signup_password: PASSWORD,
     },

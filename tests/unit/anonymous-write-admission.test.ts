@@ -281,6 +281,7 @@ it("ANON-01 refuses /start before the lookup and keeps what was typed", async ()
   const route = routes(refused, true);
   const response = await route.post("/start", {
     ...start,
+    signup_country: "CA",
     signup_email: "kept@example.invalid",
     signup_password: "synthetic signup phrase 31",
   });

@@ -1,4 +1,5 @@
 import { mountAdministratorDiagnostics } from "./administrator-diagnostics-routes.ts";
+import { OUTSIDE_MARKET_MESSAGE, servedCountry } from "./customer-market.ts";
 import { workQueueTools } from "./administrator-work-waiting-views.ts";
 import type { AdministratorDiagnostics } from "./administrator-diagnostics.ts";
 import {
@@ -1699,8 +1700,18 @@ export function app(
         ? body.signup_email
         : "";
     const signupPassword = body.signup_password;
+    const signupCountry =
+      body.signup_country === "other" || servedCountry(body.signup_country)
+        ? (body.signup_country as string)
+        : "";
     if (signup) {
       const problems: { field: string; message: string }[] = [];
+      // #12 D02: Canada first. Refused before any lookup, admission or save.
+      if (!servedCountry(body.signup_country))
+        problems.push({
+          field: "signup_country",
+          message: OUTSIDE_MARKET_MESSAGE,
+        });
       if (!normalizedEmail(signupEmail))
         problems.push({
           field: "signup_email",
@@ -1728,7 +1739,9 @@ export function app(
               [refused.message],
               start,
               Boolean(options.memberEmail),
-              signup ? { email: signupEmail } : undefined,
+              signup
+                ? { email: signupEmail, country: signupCountry }
+                : undefined,
             ),
           );
         return;
@@ -1753,7 +1766,7 @@ export function app(
             [],
             start,
             Boolean(options.memberEmail),
-            signup ? { email: signupEmail } : undefined,
+            signup ? { email: signupEmail, country: signupCountry } : undefined,
           ),
         );
       return;
