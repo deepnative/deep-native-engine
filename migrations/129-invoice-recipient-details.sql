@@ -25,5 +25,5 @@ END $$;
 DROP TRIGGER IF EXISTS member_email_link_address_used ON member_email_links;
 CREATE TRIGGER member_email_link_address_used BEFORE INSERT OR UPDATE ON member_email_links
  FOR EACH ROW EXECUTE FUNCTION drop_used_email_link_address();
-INSERT INTO schema_migrations(version) VALUES(126) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(129) ON CONFLICT DO NOTHING;
 COMMIT;

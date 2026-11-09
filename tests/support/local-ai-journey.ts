@@ -5,8 +5,10 @@ import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { COOKIE } from "../../src/session.ts";
 import { store } from "../../src/store.ts";
+import { browserOrigin } from "./browser-origin.ts";
 
-export const aiOrigin = "http://127.0.0.1:4317";
+// The focused-run override (#176) must reach the journey helpers too.
+export const aiOrigin = browserOrigin;
 
 export function aiStorage() {
   return fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!);

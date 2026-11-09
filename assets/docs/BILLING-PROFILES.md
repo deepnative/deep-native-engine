@@ -14,7 +14,7 @@ Migration086 creates only the member-owned billing_profiles table with cascade e
 
 - **Defaults before a recipient is saved.** Billing recipient, coaching months and course proposals suggest the member's registered display name and verified sign-in email. A saved recipient always wins over the defaults.
 - **Readable sign-in email (owner decision, 9 November 2026: "it should go with sign in email").**
-  - Migration 126 keeps the verified address readable on the member's own `member_email_identities` row, beside the unchanged fingerprint. Sign-in, session and verification checks still use only the fingerprint.
+  - Migration 129 keeps the verified address readable on the member's own `member_email_identities` row, beside the unchanged fingerprint. Sign-in, session and verification checks still use only the fingerprint.
   - The address is captured when a link that proves it is used: linking an email, or an email sign-in. Members verified earlier get theirs at their next email sign-in; until then the invoice email starts empty.
   - A waiting link holds the address only until it is used (a trigger clears it) or expires (later email activity clears it).
   - The address goes with the identity row, so it is removed with the account and replaced with the identity. It is in the member's own records download (`signInEmail`, v45).
@@ -28,7 +28,7 @@ Migration086 creates only the member-owned billing_profiles table with cascade e
   - It is snapshotted with a coaching submission and a course acceptance.
   - It is printed under **Bill to** on the invoice and in invoice email text only when set.
   - Issued invoices and earlier snapshots never change.
-- **Schema and export.** Migration 126 also adds nullable company columns to `billing_profiles`, `coaching_months` and `simple_invoice_plans` (`recipient_company`). The private export includes them in the existing sections.
+- **Schema and export.** Migration 129 also adds nullable company columns to `billing_profiles`, `coaching_months` and `simple_invoice_plans` (`recipient_company`). The private export includes them in the existing sections.
 
 | Scenario                                                                  | Executable evidence                                                                      |
 | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |

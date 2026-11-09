@@ -47,6 +47,7 @@ The check is about which tables the download reads, not which columns. Each sect
 | `review_time_grant_revocations`            | Administrator's record of revoking a staff review grant                                                                                           |
 | `review_time_grants`                       | Staff access grant for review time. The allocation, entries and events are in `reviewTimeAllocations`, `reviewTimeEntries` and `reviewTimeEvents` |
 | `reviewer_evidence_grants`                 | Staff access grant to review a submission. The feedback is in `sampleFeedback`                                                                    |
+| `sample_hold_staff_cancellations`          | Open on #27: why staff cancelled a sample hold. The hold, both credits and their events are in the download; the reason is on the receipt         |
 | `simple_invoice_operations`                | Staff operation keys for invoice actions. The invoices are in `invoices`                                                                          |
 | `staff_profiles`                           | The role of a staff account. Members have none                                                                                                    |
 | `support_access_grants`                    | Staff access grant to the workspace for support. The member sees each use in `staffAccess`                                                        |

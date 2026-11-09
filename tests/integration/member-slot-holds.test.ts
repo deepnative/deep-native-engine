@@ -164,8 +164,11 @@ it("requires an explicit current allowance for every background and returns a pr
         "expiresAt",
         "state",
         "quantity",
+        // #27 STAFFCANCEL: null unless staff cancelled the hold.
+        "cancellation",
       ].sort(),
     );
+    expect(receipt!.cancellation).toBeNull();
     expect(
       await memberHolds.request(
         owner.token,
