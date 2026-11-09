@@ -241,6 +241,7 @@ export function mountSimpleInvoiceRoutes(
         r.value.document,
         admin,
         r.value.payments,
+        r.value.service,
       );
       if (admin) {
         const i = r.value,
