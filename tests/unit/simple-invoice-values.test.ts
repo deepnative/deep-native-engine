@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  invoiceCompany,
   invoiceDate,
   invoiceEvidence,
   invoicePaymentStatus,
@@ -178,4 +179,14 @@ it("MANPAY-04 words refunds separately and never as unpaid", () => {
   expect(
     invoicePaymentStatus({ ...base, voidReason: "Wrong", paidCents: 0 }),
   ).toBe("Void");
+});
+
+it("RECIPIENT-04 reads an optional one-line company, blank as none", () => {
+  expect(invoiceCompany(undefined)).toBeNull();
+  expect(invoiceCompany(null)).toBeNull();
+  expect(invoiceCompany("   ")).toBeNull();
+  expect(invoiceCompany("  陳 Invented Co  ")).toBe("陳 Invented Co");
+  expect(invoiceCompany("a".repeat(200))).toBe("a".repeat(200));
+  for (const value of [3, "a".repeat(201), "Two\nlines", "Bad\u0000Co"])
+    expect(invoiceCompany(value)).toBeUndefined();
 });

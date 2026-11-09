@@ -850,3 +850,50 @@ it("SVC-07 reads the simulated service only once a signed test event reached the
     since: "2026-11-01",
   });
 });
+
+it("RECIPIENT-05 an accepted course keeps an optional company on its first and later invoices", async () => {
+  const document = (f: ReturnType<typeof fixture>) =>
+    JSON.parse(
+      f.query.mock.calls.find(([sql]) =>
+        sql.startsWith("INSERT INTO simple_invoices"),
+      )![1]![4] as string,
+    );
+  const f = fixture();
+  expect(
+    (
+      await f.service.accept(member, {
+        ...acceptance,
+        company: " Invented Co ",
+      })
+    ).kind,
+  ).toBe("ready");
+  expect(
+    f.query.mock.calls.find(([sql]) =>
+      sql.startsWith("UPDATE simple_invoice_plans SET state='active'"),
+    )![1],
+  ).toEqual([planId, acceptance.name, acceptance.email, "Invented Co"]);
+  expect(document(f)).toMatchObject({ billedToCompany: "Invented Co" });
+  const blank = fixture();
+  await blank.service.accept(member, { ...acceptance, company: "" });
+  expect(document(blank)).not.toHaveProperty("billedToCompany");
+  for (const company of ["a".repeat(201), "Bad\u0000Co", 4])
+    expect(
+      (
+        await fixture().service.accept(member, {
+          ...acceptance,
+          company,
+        } as never)
+      ).kind,
+    ).toBe("invalid");
+  const due = fixture({
+    due: true,
+    plan: {
+      ...plan,
+      state: "active",
+      terms: { ...terms, startsOn: "2026-09-30" },
+      company: "Invented Co",
+    } as InvoicePlan,
+  });
+  await due.service.generateScheduled();
+  expect(document(due)).toMatchObject({ billedToCompany: "Invented Co" });
+});

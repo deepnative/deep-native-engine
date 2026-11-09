@@ -82,7 +82,10 @@ function fixture(disabled = false, noSender = false) {
   };
   const sender = { send: vi.fn().mockResolvedValue(undefined) };
   const profiles = {
-    read: vi.fn().mockResolvedValue(ready(null)),
+    read: vi.fn(),
+    suggest: vi
+      .fn()
+      .mockResolvedValue(ready({ name: "", email: "", revision: 0 })),
     save: vi.fn().mockResolvedValue(ready({ revision: 1 })),
   };
   const options = {
@@ -580,7 +583,7 @@ it("BILLPROFILE02 offers a separate private billing profile even when invoices a
 });
 it("BILLPROFILE02/04 isolates profile validation, stale forms, unavailable outcomes and escaped prefills", async () => {
   const f = fixture();
-  f.profiles.read.mockResolvedValue(
+  f.profiles.suggest.mockResolvedValue(
     ready({
       name: "Invented <recipient>",
       email: "billing@example.invalid",
@@ -605,7 +608,7 @@ it("BILLPROFILE02/04 isolates profile validation, stale forms, unavailable outco
     revision: 2,
   });
   for (const kind of ["denied", "invalid", "conflict", "unavailable"]) {
-    f.profiles.read.mockResolvedValueOnce({ kind });
+    f.profiles.suggest.mockResolvedValueOnce({ kind });
     expect((await f.get("/account/billing")).status).toBe(
       { denied: 403, invalid: 422, conflict: 409, unavailable: 503 }[kind],
     );
@@ -650,7 +653,7 @@ it("BILLPROFILE02/04 isolates profile validation, stale forms, unavailable outco
   );
   r = await f.get(base);
   expect(r.text).toContain("Invented &lt;recipient&gt;");
-  f.profiles.read.mockResolvedValueOnce({ kind: "unavailable" });
+  f.profiles.suggest.mockResolvedValueOnce({ kind: "unavailable" });
   expect((await f.get(base)).status).toBe(503);
   const bare = express();
   bare.use(express.urlencoded({ extended: false }));
@@ -962,4 +965,75 @@ it("WALK-02 tells a member with no invoices that none have been issued, and list
   const listed = (await f.get(base)).text;
   expect(listed).toMatch(/<h2>Your invoices<\/h2><ul><li>/);
   expect(listed).not.toContain("No invoices have been issued");
+});
+
+it("RECIPIENT-01/04/05 the billing recipient and course forms suggest the member and keep an optional company", async () => {
+  const f = fixture();
+  f.profiles.suggest.mockResolvedValue(
+    ready({ name: "陳 Registered", email: "", revision: 0 }),
+  );
+  let r = await f.get("/account/billing");
+  expect(r.text).toContain('value="陳 Registered"');
+  expect(r.text).toContain(
+    '<label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value=""></label>',
+  );
+  f.profiles.suggest.mockResolvedValue(
+    ready({
+      name: "Saved",
+      email: "saved@example.invalid",
+      company: "<b>Invented</b> Co",
+      revision: 2,
+    }),
+  );
+  r = await f.get("/account/billing");
+  expect(r.text).toContain('value="&lt;b&gt;Invented&lt;/b&gt; Co"');
+  await f.post("/account/billing", {
+    name: "Saved",
+    email: "saved@example.invalid",
+    company: "Invented Co",
+    revision: "2",
+  });
+  expect(f.profiles.save).toHaveBeenLastCalledWith(token, {
+    name: "Saved",
+    email: "saved@example.invalid",
+    company: "Invented Co",
+    revision: 2,
+  });
+  f.profiles.save.mockResolvedValueOnce({ kind: "invalid" });
+  r = await f.post("/account/billing", {
+    name: "Saved",
+    email: "saved@example.invalid",
+    company: "Kept <attempt>",
+  });
+  expect(r.status).toBe(422);
+  expect(r.text).toContain('value="Kept &lt;attempt&gt;"');
+  expect(r.text).toContain("Company name must be 200 characters or fewer");
+  f.service.overview.mockResolvedValue(
+    ready({
+      plans: [{ id, terms, state: "offered", revision: 1 }],
+      invoices: [],
+      today: "2026-10-31",
+      unavailable: {},
+    }),
+  );
+  r = await f.get(base);
+  expect(r.text).toContain(
+    '<label>Company name (optional)<input name="company" maxlength="200" value="&lt;b&gt;Invented&lt;/b&gt; Co"></label>',
+  );
+  const operationId = randomUUID();
+  await f.post(`${base}/plans/${id}/accept`, {
+    operationId,
+    name: "陳",
+    email: "invented@example.invalid",
+    company: "Invented Co",
+    confirm: "accept",
+  });
+  expect(f.service.accept).toHaveBeenLastCalledWith(token, {
+    planId: id,
+    operationId,
+    expectedRevision: 1,
+    name: "陳",
+    email: "invented@example.invalid",
+    company: "Invented Co",
+  });
 });

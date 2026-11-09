@@ -20,7 +20,10 @@ const pool = {} as Pool,
     email: " RECIPIENT@EXAMPLE.INVALID ",
     revision: 0,
   };
-let member: unknown, workspace: boolean, current: unknown;
+let member: unknown,
+  workspace: boolean,
+  current: unknown,
+  registered: string | null;
 const query = vi.fn(async (sql: string) => ({
   rows: sql.startsWith("SELECT p.id")
     ? member
@@ -30,7 +33,9 @@ const query = vi.fn(async (sql: string) => ({
       ? current
         ? [current]
         : []
-      : [],
+      : sql.startsWith("SELECT display_name")
+        ? [{ displayName: registered }]
+        : [],
   rowCount: sql.startsWith("SELECT id FROM workspaces") ? Number(workspace) : 1,
 }));
 const observe = vi.fn();
@@ -39,6 +44,7 @@ beforeEach(() => {
   member = { id: "owned", expires: expiry };
   workspace = true;
   current = null;
+  registered = "陳 Registered";
   vi.mocked(practiceTransaction).mockImplementation(async (_pool, use) =>
     use({ query, observe } as unknown as PracticeTransaction),
   );
@@ -48,11 +54,16 @@ it("BILLPROFILE02 reads only the authenticated member profile and normalizes a s
   expect(await s.read(token)).toEqual({ kind: "ready", value: null });
   expect(await s.save(token, profile)).toEqual({
     kind: "ready",
-    value: { ...profile, email: "recipient@example.invalid", revision: 1 },
+    value: {
+      ...profile,
+      email: "recipient@example.invalid",
+      company: null,
+      revision: 1,
+    },
   });
   expect(query).toHaveBeenLastCalledWith(
     expect.stringContaining("INSERT INTO billing_profiles"),
-    ["owned", profile.name, "recipient@example.invalid", 1],
+    ["owned", profile.name, "recipient@example.invalid", null, 1],
   );
   current = { ...profile, email: "recipient@example.invalid", revision: 1 };
   expect(await s.read(token)).toEqual({ kind: "ready", value: current });
@@ -114,4 +125,61 @@ it("BILLPROFILE02 reports uncertain storage and authority failures without retry
           : "unavailable",
     });
   }
+});
+
+it("RECIPIENT-01/02 suggests the registered name until a recipient is saved, and a saved recipient always wins", async () => {
+  const s = billingProfileStore(pool);
+  // The verified sign-in email is stored only as a hash, so it is never suggested.
+  expect(await s.suggest(token)).toEqual({
+    kind: "ready",
+    value: { name: "陳 Registered", email: "", company: null, revision: 0 },
+  });
+  registered = null;
+  expect(await s.suggest(token)).toEqual({
+    kind: "ready",
+    value: { name: "", email: "", company: null, revision: 0 },
+  });
+  current = {
+    name: "Saved",
+    email: "saved@example.invalid",
+    company: "Invented Co",
+    revision: 3,
+  };
+  expect(await s.suggest(token)).toEqual({ kind: "ready", value: current });
+  expect(
+    query.mock.calls.filter(([sql]) => sql.startsWith("SELECT display_name")),
+  ).toHaveLength(2);
+  member = null;
+  expect(await s.suggest(token)).toEqual({ kind: "denied" });
+});
+it("RECIPIENT-04 saves an optional trimmed company and treats blank as none", async () => {
+  const s = billingProfileStore(pool);
+  expect(
+    await s.save(token, { ...profile, company: "  Invented Co  " }),
+  ).toEqual({
+    kind: "ready",
+    value: {
+      name: profile.name,
+      email: "recipient@example.invalid",
+      company: "Invented Co",
+      revision: 1,
+    },
+  });
+  expect(query).toHaveBeenLastCalledWith(
+    expect.stringContaining("INSERT INTO billing_profiles"),
+    ["owned", profile.name, "recipient@example.invalid", "Invented Co", 1],
+  );
+  expect((await s.save(token, { ...profile, company: " " })).kind).toBe(
+    "ready",
+  );
+  expect(query).toHaveBeenLastCalledWith(
+    expect.stringContaining("INSERT INTO billing_profiles"),
+    ["owned", profile.name, "recipient@example.invalid", null, 1],
+  );
+  query.mockClear();
+  for (const company of ["a".repeat(201), "Bad\u0000Co", 7])
+    expect(
+      await s.save(token, { ...profile, company } as typeof profile),
+    ).toEqual({ kind: "invalid" });
+  expect(query).not.toHaveBeenCalled();
 });

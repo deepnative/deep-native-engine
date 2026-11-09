@@ -10,6 +10,29 @@ Recipient edits use a revision and the existing member→workspace lifetime/eras
 
 Migration086 creates only the member-owned billing_profiles table with cascade erasure. Private export v30 appends section55 after all existing sections; previous cursor section identities remain stable. Learning-account removal erases the reusable profile. Existing issued financial history follows its separate sample/configured retention policy; profile edits/deletion do not silently change financial history.
 
+## Registered-name default, coaching edits and company name (#796)
+
+- **Default before a recipient is saved.** Billing recipient, coaching months and course proposals suggest the member's registered display name.
+  - The email starts empty: the verified sign-in email is stored only as a hash (see [account types](ACCOUNT-TYPES.md)), so it cannot be suggested without a separate privacy decision.
+  - A saved recipient always wins over the default.
+- **Coaching edits become the reusable recipient.** Saving a coaching draft also saves its name, email and company as the reusable billing recipient.
+  - This happens in the same transaction as the draft.
+  - The revision moves only when a value changed, so an open Billing recipient form reports the edit as a conflict instead of overwriting it.
+  - The sign-in email, sessions and other drafts never change.
+- **Optional company name.** Billing recipient, coaching months and course acceptance have an optional **Company name**: one line, up to 200 characters, blank meaning none.
+  - It is snapshotted with a coaching submission and a course acceptance.
+  - It is printed under **Bill to** on the invoice and in invoice email text only when set.
+  - Issued invoices and earlier snapshots never change.
+- **Migration and export.** Migration 126 adds nullable company columns to `billing_profiles`, `coaching_months` and `simple_invoice_plans` (`recipient_company`). The private export includes them in the existing billing profile, coaching month and course agreement sections.
+
+| Scenario | Executable evidence |
+| --- | --- |
+| RECIPIENT-01 registered name until saved | billing-profile and route units; coaching-invoices PostgreSQL; L280 |
+| RECIPIENT-02 saved recipient wins | billing-profile and coaching route units; coaching-invoices PostgreSQL; L280 |
+| RECIPIENT-03 coaching edits saved for later months | coaching-store unit; coaching-invoices PostgreSQL; L280 |
+| RECIPIENT-04 optional company validation | simple-invoice-values, billing-profile and route units; simple-invoices PostgreSQL; L280 |
+| RECIPIENT-05 company on the invoice | views, email, coaching-store and simple-invoice-store units; both PostgreSQL files; L280 |
+
 ## Acceptance mapping
 
 | Stable scenario | Executable evidence |

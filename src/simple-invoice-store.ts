@@ -7,6 +7,7 @@ import {
   type PracticeTransaction,
 } from "./practice-session-lifetime.ts";
 import {
+  invoiceCompany,
   invoiceCents,
   invoiceDate,
   invoiceEvidence,
@@ -288,6 +289,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
     name: string,
     email: string,
     cycle: number,
+    company: string | null,
   ) {
     const id = randomUUID(),
       period = invoicePeriod(plan.terms.startsOn, cycle);
@@ -300,6 +302,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
       ).rows[0]!.today,
       issuer: plan.terms.issuer,
       billedTo: name,
+      ...(company ? { billedToCompany: company } : {}),
       recipientEmail: email,
       lines: plan.terms.courses.map((c) => ({
         description: `${c.description} · ${c.id} version ${c.version}`,
@@ -351,8 +354,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
     for (const candidate of candidates) {
       await owner(tx, candidate.owner_id, true);
       const plan = (
-        await tx.query<InvoicePlan & { name: string; email: string }>(
-          `SELECT ${planColumns},recipient_name AS name,recipient_email AS email FROM simple_invoice_plans WHERE id=$1 FOR UPDATE`,
+        await tx.query<
+          InvoicePlan & { name: string; email: string; company?: string | null }
+        >(
+          `SELECT ${planColumns},recipient_name AS name,recipient_email AS email,recipient_company AS company FROM simple_invoice_plans WHERE id=$1 FOR UPDATE`,
           [candidate.id],
         )
       ).rows[0];
@@ -368,7 +373,14 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         !(await coursesEligible(tx, plan.ownerId, plan.terms, false))
       )
         continue;
-      await issue(tx, plan, plan.name, plan.email, plan.nextCycle);
+      await issue(
+        tx,
+        plan,
+        plan.name,
+        plan.email,
+        plan.nextCycle,
+        plan.company ?? null,
+      );
       if (actor)
         await logChange(tx, actor, "monthly_invoice_issued", {
           memberId: plan.ownerId,
@@ -393,7 +405,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
   ): Promise<CoachingMonth | null> {
     const row = (
       await tx.query<CoachingMonth>(
-        `SELECT month,minutes,name,email,state,revision,submitted_revision AS "submittedRevision",invoice_id AS "invoiceId",previous_invoice_id AS "previousInvoiceId",return_reason AS "returnReason" FROM coaching_months WHERE owner_id=$1 AND month=$2 FOR UPDATE`,
+        `SELECT month,minutes,name,email,company,state,revision,submitted_revision AS "submittedRevision",invoice_id AS "invoiceId",previous_invoice_id AS "previousInvoiceId",return_reason AS "returnReason" FROM coaching_months WHERE owner_id=$1 AND month=$2 FOR UPDATE`,
         [memberId, month],
       )
     ).rows[0];
@@ -536,6 +548,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         minutes: number;
         name: string;
         email: string;
+        company?: string;
         expectedRevision: number;
         operationId: string;
       },
@@ -547,9 +560,12 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         !invoiceCents(input.expectedRevision) ||
         !invoiceText(input.name, 200) ||
         typeof input.email !== "string" ||
-        !normalizedEmail(input.email)
+        !normalizedEmail(input.email) ||
+        invoiceCompany(input.company) === undefined
       )
         return fail("invalid");
+      const email = normalizedEmail(input.email)!,
+        company = invoiceCompany(input.company)!;
       return run(token, false, async (tx, actor) => {
         await owner(tx, actor);
         const digest = invoiceDigest({ action: "coaching-save", input }),
@@ -569,15 +585,23 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           return fail("conflict");
         const revision = input.expectedRevision + 1;
         await tx.query(
-          "INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision) VALUES($1,$2,$3,$4,$5,'draft',$6) ON CONFLICT(owner_id,month) DO UPDATE SET minutes=EXCLUDED.minutes,name=EXCLUDED.name,email=EXCLUDED.email,revision=EXCLUDED.revision",
+          "INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision,company) VALUES($1,$2,$3,$4,$5,'draft',$6,$7) ON CONFLICT(owner_id,month) DO UPDATE SET minutes=EXCLUDED.minutes,name=EXCLUDED.name,email=EXCLUDED.email,revision=EXCLUDED.revision,company=EXCLUDED.company",
           [
             actor,
             input.month,
             input.minutes,
             input.name,
-            normalizedEmail(input.email),
+            email,
             revision,
+            company,
           ],
+        );
+        // RECIPIENT-03: the saved recipient becomes the reusable billing
+        // recipient for later months. Its revision moves only on a change, so
+        // an open Billing recipient form sees the edit. Sign-in is untouched.
+        await tx.query(
+          "INSERT INTO billing_profiles AS b(owner_id,name,email,company,revision) VALUES($1,$2,$3,$4,1) ON CONFLICT(owner_id) DO UPDATE SET name=EXCLUDED.name,email=EXCLUDED.email,company=EXCLUDED.company,revision=b.revision+1 WHERE (b.name,b.email,b.company) IS DISTINCT FROM (EXCLUDED.name,EXCLUDED.email,EXCLUDED.company)",
+          [actor, input.name, email, company],
         );
         return remember(tx, actor, input.operationId, digest, {
           month: input.month,
@@ -641,6 +665,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             subtotalCents,
             name: entry.name,
             email: entry.email,
+            ...(entry.company ? { company: entry.company } : {}),
             sample: settings.sample,
           };
         await tx.query(
@@ -790,6 +815,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           ).rows[0]!.today,
           issuer: settings.issuer,
           billedTo: snapshot.name,
+          ...(snapshot.company ? { billedToCompany: snapshot.company } : {}),
           recipientEmail: snapshot.email,
           lines: [
             {
@@ -1095,6 +1121,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         operationId: string;
         name: string;
         email: string;
+        company?: string;
       },
     ): Promise<InvoiceResult<{ invoiceId: string }>> {
       if (
@@ -1104,9 +1131,11 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         !invoiceCents(input.expectedRevision) ||
         !invoiceText(input.name, 200) ||
         typeof input.email !== "string" ||
-        !normalizedEmail(input.email)
+        !normalizedEmail(input.email) ||
+        invoiceCompany(input.company) === undefined
       )
         return fail("invalid");
+      const company = invoiceCompany(input.company)!;
       return run(token, false, async (tx, actor) => {
         await owner(tx, actor);
         const digest = invoiceDigest({ action: "accept", input }),
@@ -1145,8 +1174,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         )
           return fail("conflict");
         await tx.query(
-          "UPDATE simple_invoice_plans SET state='active',accepted_at=clock_timestamp(),recipient_name=$2,recipient_email=$3 WHERE id=$1",
-          [plan.id, input.name, normalizedEmail(input.email)],
+          "UPDATE simple_invoice_plans SET state='active',accepted_at=clock_timestamp(),recipient_name=$2,recipient_email=$3,recipient_company=$4 WHERE id=$1",
+          [plan.id, input.name, normalizedEmail(input.email), company],
         );
         const invoiceId = await issue(
           tx,
@@ -1154,6 +1183,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           input.name,
           normalizedEmail(input.email)!,
           0,
+          company,
         );
         return remember(tx, actor, input.operationId, digest, { invoiceId });
       });

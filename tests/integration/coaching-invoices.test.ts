@@ -26,6 +26,7 @@ const application = app(members, {
 });
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { memberExportStore } from "../../src/member-export.ts";
+import { billingProfileStore } from "../../src/billing-profile.ts";
 import type { Pool, PoolClient } from "pg";
 const auth = authorizationStore(pool),
   settings = {
@@ -1167,4 +1168,79 @@ it("DASH-01/02 summarizes one month's contractor hours and invoices exactly", as
   expect(ready(await invoices.coachingDashboard(admin)).month).toBe(
     previous.toISOString().slice(0, 7),
   );
+});
+
+it("RECIPIENT-01/02/03/05 suggests the registered name, keeps coaching-form edits as the reusable recipient and prints the company", async () => {
+  const profiles = billingProfileStore(pool),
+    token = randomBytes(32).toString("hex");
+  await members.create(token, {
+    background: "explorer",
+    goal: "everyday",
+    displayName: "陳 Registered member",
+  });
+  const s = await members.session(token, "account");
+  if (s.kind !== "active") throw Error();
+  const id = s.learner.id;
+  // RECIPIENT-01: only the name; the sign-in email is never stored in plain text.
+  expect(ready(await profiles.suggest(token))).toEqual({
+    name: "陳 Registered member",
+    email: "",
+    company: null,
+    revision: 0,
+  });
+  const edit = {
+    ...saveInput(),
+    name: "Edited recipient",
+    email: "Edited@Example.invalid",
+    company: "  Invented Co  ",
+  };
+  const saved = ready(await invoices.saveCoaching(token, edit));
+  const reusable = {
+    name: "Edited recipient",
+    email: "edited@example.invalid",
+    company: "Invented Co",
+    revision: 1,
+  };
+  expect(ready(await profiles.read(token))).toEqual(reusable);
+  // Saving the same recipient again keeps the reusable revision.
+  const again = ready(
+    await invoices.saveCoaching(token, {
+      ...edit,
+      expectedRevision: saved.revision,
+      operationId: randomUUID(),
+    }),
+  );
+  expect(ready(await profiles.read(token))).toEqual(reusable);
+  // RECIPIENT-02: the saved recipient wins over the registered name.
+  expect(ready(await profiles.suggest(token))).toEqual(reusable);
+  expect((await members.session(token, "account")).kind).toBe("active");
+  const rate = ready(await invoices.setCoachingRate(admin, rateInput(id)));
+  const submission = ready(
+    await invoices.submitCoaching(token, {
+      month,
+      rateId: rate.rateId,
+      sample: settings.sample,
+      expectedRevision: again.revision,
+      operationId: randomUUID(),
+    }),
+  );
+  const issued = ready(
+    await invoices.issueCoaching(
+      admin,
+      issueInput({ id, revision: submission.revision }),
+    ),
+  );
+  const document = ready(
+    await invoices.invoice(token, issued.invoiceId),
+  ).document;
+  expect(document).toMatchObject({
+    billedTo: "Edited recipient",
+    billedToCompany: "Invented Co",
+  });
+  // A later profile edit never rewrites the issued invoice.
+  ready(await profiles.save(token, { ...reusable, company: "Changed Co" }));
+  expect(
+    ready(await invoices.invoice(token, issued.invoiceId)).document
+      .billedToCompany,
+  ).toBe("Invented Co");
 });

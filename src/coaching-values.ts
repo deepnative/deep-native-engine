@@ -13,6 +13,8 @@ export interface CoachingSnapshot {
   subtotalCents: number;
   name: string;
   email: string;
+  /** RECIPIENT-05: present only when the member gave a company. */
+  company?: string;
   sample: boolean;
 }
 export interface CoachingMonth {
@@ -20,6 +22,7 @@ export interface CoachingMonth {
   minutes: number;
   name: string;
   email: string;
+  company?: string | null;
   state: "draft" | "submitted" | "invoiced";
   revision: number;
   submittedRevision: number | null;
