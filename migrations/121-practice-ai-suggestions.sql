@@ -38,5 +38,5 @@ END $$;
 DROP TRIGGER IF EXISTS practice_ai_suggestions_guard ON practice_ai_suggestions;
 CREATE TRIGGER practice_ai_suggestions_guard BEFORE INSERT OR UPDATE ON practice_ai_suggestions
  FOR EACH ROW EXECUTE FUNCTION guard_practice_ai_suggestion();
-INSERT INTO schema_migrations(version) VALUES(120) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(121) ON CONFLICT DO NOTHING;
 COMMIT;
