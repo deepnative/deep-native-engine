@@ -12,6 +12,8 @@ import { mountAccountViews } from "./account-view-routes.ts";
 import { mountCoachView } from "./coach-view-routes.ts";
 import type { MemberSharing } from "./member-sharing.ts";
 import { mountMemberSharing } from "./member-sharing-routes.ts";
+import { mountMemberRecordAccess } from "./member-record-access-routes.ts";
+import type { MemberRecordAccess } from "./member-record-access.ts";
 import { mountAccountRoleAdmin } from "./account-role-admin-routes.ts";
 import type { AccountRoleAdmin } from "./account-role-admin.ts";
 import type { CoachView } from "./coach-view.ts";
@@ -452,6 +454,7 @@ export function app(
     administratorEntry?: AdministratorEntry;
     coachView?: CoachView;
     memberSharing?: MemberSharing;
+    memberRecordAccess?: MemberRecordAccess;
     roleAdmin?: AccountRoleAdmin;
     administratorDiagnostics?: AdministratorDiagnostics;
     localStaffEntry?: boolean;
@@ -831,6 +834,7 @@ export function app(
     workflowReviews: Boolean(options.workflowReviewStaff),
     invoices: Boolean(options.simpleInvoices),
     capacity: Boolean(options.staffCapacity),
+    recordAccess: Boolean(options.memberRecordAccess),
     myTime: Boolean(options.myStaffTime),
     agreements: Boolean(options.agreementOutcomes),
     localAi: Boolean(options.localAiControl),
@@ -4434,6 +4438,7 @@ export function app(
   mountMemberSharing(app, options.memberSharing, {
     contributions: options.memberContributions === true,
   });
+  mountMemberRecordAccess(app, options.memberRecordAccess);
   app.get("/account", async (_req, res) => {
     const memberToken = res.locals.token as string;
     const memberId = (res.locals.learner as Learner).id;
