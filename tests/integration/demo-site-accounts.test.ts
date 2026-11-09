@@ -67,11 +67,15 @@ async function active(person: { token: string; id: string }, n: number) {
      VALUES(gen_random_uuid(),$1,'career','Invented plan','Invented step','Invented outcome')`,
     [person.id],
   );
-  const draft = (await proposals.createDraft(person.token, {
-    title: `Invented member method ${n}`,
-    body: "Original invented text with two source checks.",
-    sources: "Original fixture text only.",
-  }))!;
+  const draft = (await proposals.createDraft(
+    person.token,
+    {
+      title: `Invented member method ${n}`,
+      body: "Original invented text with two source checks.",
+      sources: "Original fixture text only.",
+    },
+    false,
+  ))!;
   expect(await proposals.submit(person.token, draft, true, 1)).toBe(
     "submitted",
   );
