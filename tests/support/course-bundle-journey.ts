@@ -28,7 +28,8 @@ export async function prepareBundle(
   terms: {
     amounts: readonly (readonly [string, string])[];
     cadence: Cadence;
-    tax: string;
+    /** Sample billing only; configured billing adds 13% HST itself (ISSUER-02). */
+    tax?: string;
   },
 ) {
   await admin.goto(f.origin + "/operator/invoices");
@@ -41,9 +42,14 @@ export async function prepareBundle(
     .getByLabel("Billing", { exact: true })
     .selectOption(terms.cadence);
   await admin.getByLabel("Starts on (UTC date)").fill(await utcToday(f));
-  await admin
-    .getByLabel("Configured tax amount per invoice (CAD)")
-    .fill(terms.tax);
+  if (terms.tax === undefined)
+    await expect(
+      admin.getByText("HST at 13% is added to each invoice"),
+    ).toBeVisible();
+  else
+    await admin
+      .getByLabel("Configured tax amount per invoice (CAD)")
+      .fill(terms.tax);
   await admin
     .getByRole("button", { name: "Prepare course billing proposal" })
     .click();

@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import {
   shiftMonth,
   simpleInvoiceStore,
+  type InvoiceSettings,
 } from "../../src/simple-invoice-store.ts";
 import {
   practiceTransaction,
@@ -97,7 +98,7 @@ function fixture(
       paidCents: number;
       delivery: string;
     } | null;
-    settings?: { sample: boolean; issuer: string; instructions: string };
+    settings?: InvoiceSettings;
     dashboard?: { summary: unknown; rows: unknown[] };
   } = {},
 ) {
@@ -612,4 +613,41 @@ it("DASH-01/02 maps one month's records to manager figures and contractor status
   expect(
     (await fixture().service.coachingDashboard(token, "2026-09")).kind,
   ).toBe("denied");
+});
+
+it("ISSUER-03 computes HST on a configured coaching invoice and refuses a typed tax", async () => {
+  const settings = {
+      sample: false,
+      issuer: "Deep Native Inc. · Ontario, Canada",
+      instructions: "Invented offline instructions",
+      tax: {
+        label: "HST" as const,
+        registration: "713254472RT0001",
+        rateBasisPoints: 1300,
+      },
+    },
+    real = { ...snapshot, sample: false },
+    entry = { ...submitted, snapshot: real },
+    computed = { ...action, taxCents: undefined };
+  expect(
+    (
+      await fixture({
+        admin: true,
+        entry,
+        snapshot: real,
+        settings,
+      }).service.issueCoaching(token, action)
+    ).kind,
+  ).toBe("invalid");
+  const f = fixture({ admin: true, entry, snapshot: real, settings });
+  expect((await f.service.issueCoaching(token, computed)).kind).toBe("ready");
+  const write = f.query.mock.calls.find(([sql]) =>
+    sql.startsWith("INSERT INTO simple_invoices"),
+  )!;
+  // 13% of CAD 180.00.
+  expect(JSON.parse(write[1]![2] as string)).toMatchObject({
+    taxCents: 2340,
+    tax: settings.tax,
+  });
+  expect(write[1]![4]).toBe(18000 + 2340);
 });

@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import {
   simpleInvoiceStore,
   type InvoicePlan,
+  type InvoiceSettings,
   type StoredInvoice,
 } from "../../src/simple-invoice-store.ts";
 import {
@@ -120,6 +121,7 @@ function fixture(
     first?: string | null;
     payments?: unknown[];
     services?: unknown[];
+    settings?: InvoiceSettings;
   } = {},
 ) {
   const result = (rows: unknown[], rowCount = rows.length) => ({
@@ -226,11 +228,14 @@ function fixture(
     use({ query, observe } as unknown as PracticeTransaction),
   );
   return {
-    service: simpleInvoiceStore({} as Pool, {
-      sample: true,
-      issuer: terms.issuer,
-      instructions: terms.instructions,
-    }),
+    service: simpleInvoiceStore(
+      {} as Pool,
+      options.settings ?? {
+        sample: true,
+        issuer: terms.issuer,
+        instructions: terms.instructions,
+      },
+    ),
     query,
     observe,
   };
@@ -848,5 +853,39 @@ it("SVC-07 reads the simulated service only once a signed test event reached the
   expect(withdrawn.kind === "ready" && withdrawn.value.service).toEqual({
     state: "withdrawn",
     since: "2026-11-01",
+  });
+});
+
+it("ISSUER-02/04 computes configured HST at proposal and copies it into the issued invoice", async () => {
+  const settings = {
+    sample: false,
+    issuer: "Deep Native Inc. · Ontario, Canada",
+    instructions: "Invented offline instructions",
+    tax: {
+      label: "HST" as const,
+      registration: "713254472RT0001",
+      rateBasisPoints: 1300,
+    },
+  };
+  const computed = { ...proposal, taxCents: undefined };
+  expect(
+    (await fixture({ settings }).service.propose(admin, proposal)).kind,
+  ).toBe("invalid");
+  const f = fixture({ settings });
+  expect((await f.service.propose(admin, computed)).kind).toBe("ready");
+  const write = f.query.mock.calls.find(([sql]) =>
+    sql.startsWith("INSERT INTO simple_invoice_plans"),
+  )!;
+  const prepared = JSON.parse(write[1]![2] as string);
+  expect(prepared).toMatchObject({ taxCents: 130, tax: settings.tax });
+  const g = fixture({ plan: { ...plan, terms: prepared } });
+  expect((await g.service.accept(member, acceptance)).kind).toBe("ready");
+  const issued = g.query.mock.calls.find(([sql]) =>
+    sql.startsWith("INSERT INTO simple_invoices"),
+  )!;
+  expect(JSON.parse(issued[1]![4] as string)).toMatchObject({
+    taxCents: 130,
+    tax: settings.tax,
+    sample: false,
   });
 });
