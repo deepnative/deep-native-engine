@@ -50,5 +50,5 @@ export function coachPracticeSection(state: CoachPracticeState): string {
                 .join("")}</ul>`
             : ""
         }`;
-  return `<section aria-labelledby="coach-practice-title"><h2 id="coach-practice-title">Practice interview with a coach</h2><p>The sessions listed here are simulated practice. No person reads them, and their comparisons don't come from a coach.</p>${body}</section>`;
+  return `<section aria-labelledby="coach-practice-title"><h2 id="coach-practice-title">Practice interview with a coach</h2><p>The sessions listed here are simulated practice. No person reads them, and their comparisons don't come from a coach.</p><p>No coaches are available to book yet, so a practice interview with a person can't be arranged.</p>${body}</section>`;
 }

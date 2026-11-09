@@ -376,10 +376,17 @@ test("[L172] STAFF-01-ROLES STAFF-03-CREDENTIAL six roles have truthful tools an
         ),
       );
       await signin(page, credential);
-      if (role === "coach")
+      // #193: a coach's only tool is their own booked time.
+      if (role === "coach") {
+        await expect(page.locator("main li")).toHaveCount(1);
         await expect(
-          page.getByText("No browser tools are available", { exact: false }),
+          page.getByRole("link", { name: "My booked time", exact: true }),
         ).toBeVisible();
+      }
+      if (role !== "coach" && role !== "reviewer")
+        await expect(
+          page.getByRole("link", { name: "My booked time", exact: true }),
+        ).toHaveCount(0);
       if (role === "editor" || role === "reviewer")
         await expect(
           page.getByRole("link", { name: "Content workflow", exact: true }),
