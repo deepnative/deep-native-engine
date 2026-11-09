@@ -2883,6 +2883,15 @@
       "expected": "Real agreements read 4 offered, 2 of 4 (50%) accepted, 1 withdrawn and 1 of 2 (50%) cancelled after acceptance; the one test agreement is counted apart and never in the real figures; no member name, email, amount or agreement ID appears; no sideways scrolling; the operator is refused (403) with no figures",
       "issues": [123],
       "critical": true
+    },
+    {
+      "id": "L324",
+      "actor": "Coach reading their own booked time, their backup, a staff member with no roster record and a refused member",
+      "preconditions": "Dedicated synthetic PostgreSQL database, port0 server, invented administrator, operator, two coaches with verified coaching records naming each other as backup, two future slots on the first coach's record and one member sample hold; desktop/mobile Chromium; no provider",
+      "steps": "MYTIME-01/02/05/06/07: the coach follows My booked time from the staff page; the backup, the operator and the member open the same page",
+      "expected": "The coach sees one record with 120 min open slots, 1 held slot at its start time and 120 min room left (300 declared - 60 committed - 120 slots); no member, grant, slot, record or staff ID, reference or cost appears; no sideways scrolling; the backup sees only their own record with nothing held; the operator sees that nothing is bookable; the member is refused (403) with no figures",
+      "issues": [193],
+      "critical": true
     }
   ],
   "fullMvp": [
