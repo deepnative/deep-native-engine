@@ -2,7 +2,7 @@
 
 This bounded #97 implementation adds ordinary private proposal intake and a complete exact-revision editorial acceptance, owner sharing and withdrawal path. It does not publish the #93 foundation pack or complete the broader #40/#97/#122 acceptance.
 
-`DNE_MEMBER_CONTRIBUTIONS=enabled` deliberately enables new ordinary intake, editorial acceptance and publication. The default is disabled. Hosted configuration permits the flag, but this change does not enable it, appoint staff or claim actual moderation coverage. A real moderation contact and current authorized staff are factual inputs before real shared-space use; no response SLA is promised. Existing invented sample intake remains available under its original attestation when ordinary creation is off.
+`DNE_MEMBER_CONTRIBUTIONS=enabled` deliberately enables new ordinary intake, editorial acceptance and publication. The default is disabled. Every Azure release enables it on the hosted demo (#40, 4 Nov 2026). The contribution review contact is info@deepnative.io (owner decision on #97); no response time is promised. Enabling it appoints no staff and claims no actual moderation coverage. The public `/terms` page says a shared contribution stays readable to signed-in members until the author withdraws sharing or deletes the account, and that copies already saved can't be recalled (TERMS-08). Existing invented sample intake remains available under its original attestation when ordinary creation is off.
 
 ## Page wording (#115)
 
