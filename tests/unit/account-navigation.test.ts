@@ -192,7 +192,9 @@ it("ACCT-PLAIN-05 the export paragraph lists the same records in plain language"
 const KEPT_AFTER_DELETION = [
   "Deleting removes your profile, learning records, saved work, files and sharing choices, and signs you out on every browser.",
   "Some records stay after deletion:",
-  "Issued invoices and the payments and refunds recorded against them, including the billing name and email on them, for accounting. Sample invoices are deleted.",
+  // #12 RETAIN-01: the owner set six-year billing retention on 10 Nov 2026.
+  "Issued invoices and the payments and refunds recorded against them are kept for 6 years after the account is deleted, following Canada Revenue Agency record-keeping rules (records are kept 6 years from the end of the last tax year they relate to).",
+  "They hold only what the invoice needs: its number and date, the issuer, the billing name, company and email, the items, amounts and tax, whether it was voided, and the payments and refunds recorded. Sample invoices are deleted with the account.",
   "Change history entries for staff changes to your coaches or billing, with your student reference and any amount, but no name or email.",
   "A note that an administrator looked up your email address, which keeps a fingerprint of the address, not the address.",
   "Counts that limit repeated sign-in and email attempts, tied to a fingerprint of your email address. Later sign-in activity on the site clears them once they are a day or 30 days old.",
