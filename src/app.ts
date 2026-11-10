@@ -857,6 +857,7 @@ export function app(
     invoices: Boolean(options.simpleInvoices),
     capacity: Boolean(options.staffCapacity),
     recordAccess: Boolean(options.memberRecordAccess),
+    sampleHolds: Boolean(options.sampleHoldCancellations),
     myTime: Boolean(options.myStaffTime),
     agreements: Boolean(options.agreementOutcomes),
     localAi: Boolean(options.localAiControl),

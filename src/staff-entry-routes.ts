@@ -51,6 +51,8 @@ export interface StaffTools {
   /** #123 CAP: the staff capacity report is available here. */
   capacity?: boolean;
   recordAccess?: boolean;
+  /** #27 STAFFCANCEL: staff cancellation of sample holds is available here. */
+  sampleHolds?: boolean;
   /** #193 MYTIME: a staff member's own booked time is available here. */
   myTime?: boolean;
   localAi: boolean;
@@ -105,6 +107,11 @@ function links(role: StaffRole, tools: StaffTools) {
         tools.recordAccess === true,
         "/operator/member-records",
         "Download a member's records (with their permission)",
+      ],
+      [
+        tools.sampleHolds === true,
+        "/operator/sample-holds",
+        "Staff sample holds",
       ],
       [
         tools.metrics,

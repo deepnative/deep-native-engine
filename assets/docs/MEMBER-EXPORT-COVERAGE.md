@@ -12,6 +12,7 @@ Download my records (My account → Download my records, `src/member-export.ts`)
 - **SIGNEMAIL-05:** the member's verified sign-in email is in the download (`signInEmail`, v46, #796) as the readable address and when it was verified, without its fingerprint. Members verified before #796 have no row content until their next email-link or password sign-in.
 - **RECACCESS-07:** each permission the member gave operators to download their records is in the download (`recordAccess`, v44), with how many downloads were made, and each download is in `staffAccess`, without the operator.
 - **TERMS316-07:** every version of the coaching terms an administrator set for the member is in the download (`coachingTerms`, v45), without the administrator.
+- **HOLDCANCEL-EXP-01:** when staff cancel one of the member's sample holds, the reason, the time and the original and replacement credit are in the download (`sampleHoldCancellations`, v47, #27), named by the same hold ID as `sampleHolds`. The reason is the stored code (`coach-unavailable`, `scheduling-error` or `member-request`); the member's receipt shows it in words. Never the staff member or the staff request.
 
 The check is about which tables the download reads, not which columns. Each section's own tests decide which fields a member sees.
 
@@ -50,7 +51,6 @@ The check is about which tables the download reads, not which columns. Each sect
 | `review_time_grant_revocations`            | Administrator's record of revoking a staff review grant                                                                                                                              |
 | `review_time_grants`                       | Staff access grant for review time. The allocation, entries and events are in `reviewTimeAllocations`, `reviewTimeEntries` and `reviewTimeEvents`                                    |
 | `reviewer_evidence_grants`                 | Staff access grant to review a submission. The feedback is in `sampleFeedback`                                                                                                       |
-| `sample_hold_staff_cancellations`          | Open on #27: why staff cancelled a sample hold. The hold, both credits and their events are in the download; the reason is on the receipt                                            |
 | `simple_invoice_operations`                | Staff operation keys for invoice actions. The invoices are in `invoices`                                                                                                             |
 | `staff_profiles`                           | The role of a staff account. Members have none                                                                                                                                       |
 | `support_access_grants`                    | Staff access grant to the workspace for support. The member sees each use in `staffAccess`                                                                                           |
