@@ -859,6 +859,7 @@ export function app(
     invoices: Boolean(options.simpleInvoices),
     capacity: Boolean(options.staffCapacity),
     recordAccess: Boolean(options.memberRecordAccess),
+    sampleHolds: Boolean(options.sampleHoldCancellations),
     myTime: Boolean(options.myStaffTime),
     agreements: Boolean(options.agreementOutcomes),
     localAi: Boolean(options.localAiControl),
@@ -3119,10 +3120,23 @@ export function app(
       ),
     );
   });
+  // WFB-LABEL (#115): a refused correction is worded for the owner's own
+  // proposal. Anything else (not theirs, unreadable) yields nothing. An
+  // unconfirmed save (503) is not followed by another read of a failing store.
+  const ownProposalOrigin = async (token: string, id: string) => {
+    try {
+      const proposal = await proposals.preview(token, id);
+      return proposal ? (proposal.origin ?? "sample") : undefined;
+    } catch {
+      return undefined;
+    }
+  };
   app.post("/contribute/:id/edit", async (req, res) => {
     const fields = (req.body ?? {}) as Fields;
     const attempted = proposalAttempt(fields);
     const revision = proposalRevision(fields.revision);
+    const proposalOrigin = () =>
+      ownProposalOrigin(res.locals.token as string, req.params.id as string);
     const permitted = new Set(["csrf", "revision", "title", "body", "sources"]);
     const malformed =
       Object.keys(req.query).length > 0 ||
@@ -3139,15 +3153,18 @@ export function app(
         !/[\0\uD800-\uDFFF]/u.test(value),
     );
     if (revision === undefined || malformed || !textValid) {
+      const origin = await proposalOrigin();
       res
         .status(422)
         .send(
           proposalEditRecoveryPage(
             req.params.id as string,
             res.locals.csrf as string,
-            "Complete the title, original sample and sources notes within their limits. Use one value per field and reopen the current preview if its revision is missing or changed. No correction was saved.",
+            `Complete the title, original ${origin === "member" ? "contribution" : "sample"} and sources notes within their limits. Use one value per field and reopen the current preview if its revision is missing or changed. No correction was saved.`,
             attempted,
             revision,
+            false,
+            origin,
           ),
         );
       return;
@@ -3200,6 +3217,9 @@ export function app(
             ? "The saved draft changed after this form opened. Nothing was saved. Open the current private preview before choosing what to keep."
             : "The correction fields or revision could not be accepted, or this workflow version is no longer current. Nothing was saved. Check the field limits and open the current private preview before trying again.",
           attempted,
+          undefined,
+          false,
+          await proposalOrigin(),
         ),
       );
   });
@@ -3223,6 +3243,12 @@ export function app(
             res.locals.csrf as string,
             "Submission needs one valid saved revision and explicit rights confirmation. Nothing was submitted.",
             { title: "", body: "", sources: "" },
+            undefined,
+            false,
+            await ownProposalOrigin(
+              res.locals.token as string,
+              req.params.id as string,
+            ),
           ),
         );
       return;
@@ -3252,6 +3278,12 @@ export function app(
               ? "The saved draft changed after this submission form opened. Nothing was submitted. Review the current private preview and confirm rights for its revision."
               : "Confirm original rights and check the current draft state. Nothing was submitted.",
             { title: "", body: "", sources: "" },
+            undefined,
+            false,
+            await ownProposalOrigin(
+              res.locals.token as string,
+              req.params.id as string,
+            ),
           ),
         );
       return;

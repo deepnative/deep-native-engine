@@ -674,6 +674,29 @@ const sections = {
     "member_email_identities WHERE principal_id=$1",
     "principal_id",
   ),
+  // v47 appends #27 STAFFCANCEL: why and when staff cancelled one of the
+  // member's sample holds, and the credit that replaced the original. The hold
+  // is named as in sampleHolds; never the staff member or the staff request.
+  sampleHoldCancellations: section(
+    `r.request_id AS "sampleHoldId",c.reason,c.cancelled_at AS "cancelledAt",
+    c.original_grant_id AS "originalGrantId",
+    c.replacement_grant_id AS "replacementGrantId",
+    'SAMPLE HOLD · NOT A BOOKING' AS label`,
+    `sample_hold_staff_cancellations c
+    JOIN synthetic_member_hold_receipts r ON r.hold_id=c.hold_id AND r.member_id=c.member_id
+    WHERE c.member_id=$1`,
+    "r.request_id",
+  ),
+  // v47 also appends #40 EXPCOV: what the platform derived from the member's
+  // uploaded files, such as extracted text: which upload, kind, size, checksum
+  // and when. Never the storage key, and nothing for an upload being removed.
+  evidenceDerivatives: section(
+    `d.id,d.evidence_id AS "evidenceId",d.kind,d.byte_size AS "byteSize",
+    d.sha256,d.created_at AS "createdAt"`,
+    `evidence_derivatives d JOIN evidence_objects e ON e.id=d.evidence_id
+    WHERE e.owner_principal_id=$1 AND e.quarantine_state<>'deleting'`,
+    "d.id",
+  ),
 } as const;
 /** Section SQL, shared with the member-authorized operator download (#40). */
 export const MEMBER_EXPORT_SECTIONS = sections;
@@ -689,7 +712,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v46";
+  version: "local-member-records-v47";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -823,7 +846,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v46",
+          version: "local-member-records-v47",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

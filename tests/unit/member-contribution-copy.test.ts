@@ -77,3 +77,63 @@ it("WFB-NORMAL-03 keeps the sample wording while contributions are off", () => {
   }
   expect(proposalListPage([], "csrf")).toContain("No sample proposals yet.");
 });
+
+// WFB-LABEL-01/02 (#115): when the proposal is known, a failed correction
+// uses that proposal's own wording, as its preview page does, whatever the
+// site-wide switch says.
+it("WFB-LABEL-01 a failed correction of a proposal created as a sample keeps the sample wording while contributions are on", () => {
+  const html = withMemberContributions(true, () => ({
+    edit: proposalEditRecoveryPage(
+      "p",
+      "csrf",
+      "Check the title.",
+      attempted,
+      2,
+      false,
+      "sample",
+    ),
+    unsaved: proposalEditRecoveryPage(
+      "p",
+      "csrf",
+      "Unconfirmed.",
+      attempted,
+      undefined,
+      true,
+      "sample",
+    ),
+  }));
+  expect(html.edit).toContain("PRIVATE SAMPLE · CORRECTIONS NOT SAVED");
+  expect(html.edit).toContain(">Original sample</label>");
+  expect(html.edit).not.toContain("Original contribution");
+  expect(html.unsaved).toContain("PRIVATE SAMPLE · OUTCOME UNCONFIRMED");
+  expect(html.unsaved).toContain("Attempted sample");
+});
+
+it("WFB-LABEL-02 a failed correction of a member contribution uses the contribution wording, also with the site-wide switch off", () => {
+  for (const enabled of [true, false]) {
+    const html = withMemberContributions(enabled, () => ({
+      edit: proposalEditRecoveryPage(
+        "p",
+        "csrf",
+        "Check the title.",
+        attempted,
+        2,
+        false,
+        "member",
+      ),
+      unsaved: proposalEditRecoveryPage(
+        "p",
+        "csrf",
+        "Unconfirmed.",
+        attempted,
+        undefined,
+        false,
+        "member",
+      ),
+    }));
+    expect(html.edit).toContain("PRIVATE CONTRIBUTION · CORRECTIONS NOT SAVED");
+    expect(html.edit).toContain(">Original contribution</label>");
+    expect(html.unsaved).toContain("Attempted text");
+    expect(html.unsaved).not.toContain("PRIVATE SAMPLE");
+  }
+});
