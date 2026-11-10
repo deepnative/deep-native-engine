@@ -22,6 +22,7 @@ const member: SupportMemberDetail = {
   resolvedAt: null,
   withdrawnAt: null,
   coverageState: "unverified",
+  coverageReviewedAt: null,
   subject: "Invented <subject>",
   body: "  Sample <body>\n",
   replies: { items: [], nextCursor: null },
@@ -44,6 +45,7 @@ const keys = {
   reply: "reply-key",
   note: "note-key",
   resolve: "resolve-key",
+  "coverage-review": "coverage-key",
 };
 const minutes: SupportTimeReceipt = {
   allocationId: "allocation",
@@ -253,7 +255,13 @@ it("provides only exact-granted operator navigation with bounded worklist pages"
 });
 it("keeps acknowledgement, internal notes, member replies and resolution as separate deliberate actions", () => {
   const html = supportOperatorDetailPage(operator, "csrf", keys);
-  for (const path of ["acknowledge", "notes", "replies", "resolve"])
+  for (const path of [
+    "acknowledge",
+    "notes",
+    "replies",
+    "resolve",
+    "coverage-review",
+  ])
     expect(html).toContain(`action="/operator/support/${id}/${path}"`);
   for (const key of Object.values(keys))
     expect(html).toContain(`name="idempotencyKey" value="${key}"`);
@@ -415,4 +423,40 @@ it("FRICTION-03 offers no hold to a member without support minutes", () => {
       null,
     ),
   ).toContain("Hold support test minutes");
+});
+it("#195 AC3 shows outside-current-support without an entitlement and offers it once", () => {
+  const reviewed = { ...operator, coverageReviewedAt: date };
+  const open = supportOperatorDetailPage(operator, "csrf", keys);
+  expect(open).toContain("Mark outside current support");
+  expect(open).toContain("grants no entitlement, booking, price");
+  const done = supportOperatorDetailPage(reviewed, "csrf", keys);
+  expect(done).not.toContain(
+    `action="/operator/support/${id}/coverage-review"`,
+  );
+  expect(done).toContain("Outside current support · recorded");
+  const context = supportOperatorDetailPage(
+    {
+      ...operator,
+      operatorContext: {
+        ...operator.operatorContext,
+        allowedActions: ["coverage-review"],
+      },
+    },
+    "csrf",
+    keys,
+  );
+  expect(context).toContain(
+    "<dt>Allowed request-purpose actions</dt><dd>Outside current support</dd>",
+  );
+  const receipt = supportMemberDetailPage(
+    { ...member, coverageReviewedAt: date },
+    "csrf",
+  );
+  expect(receipt).toContain("Outside current support · recorded");
+  expect(receipt).toContain(
+    "No booking, price, entitlement or completion is promised",
+  );
+  expect(supportMemberDetailPage(member, "csrf")).not.toContain(
+    "Outside current support",
+  );
 });

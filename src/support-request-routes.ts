@@ -41,6 +41,7 @@ const operatorKeys = (): SupportOperatorKeys => ({
   reply: randomUUID(),
   note: randomUUID(),
   resolve: randomUUID(),
+  "coverage-review": randomUUID(),
 });
 const attempt = (req: Request) => ({
   subject: typeof req.body?.subject === "string" ? req.body.subject : "",
@@ -583,7 +584,13 @@ export function mountSupportRequestRoutes(
         : resultFailure(res, result.kind, "/operator/support");
     }),
   );
-  for (const action of ["acknowledge", "reply", "note", "resolve"] as const) {
+  for (const action of [
+    "acknowledge",
+    "reply",
+    "note",
+    "resolve",
+    "coverage-review",
+  ] as const) {
     const path =
       action === "reply" ? "replies" : action === "note" ? "notes" : action;
     const messageAction = action === "reply" || action === "note";
@@ -620,11 +627,9 @@ export function mountSupportRequestRoutes(
               req.body.idempotencyKey,
               req.body.body!,
             )
-          : await store[action](
-              res.locals.token,
-              scope,
-              req.body.idempotencyKey,
-            );
+          : await store[
+              action === "coverage-review" ? "reviewCoverage" : action
+            ](res.locals.token, scope, req.body.idempotencyKey);
         if ("receipt" in result) return res.redirect(303, href);
         if (result.kind !== "invalid")
           return resultFailure(res, result.kind, href);

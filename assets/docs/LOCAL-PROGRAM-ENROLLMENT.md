@@ -49,3 +49,7 @@ PROGRAM-01–03/05/15 map to ENR-01–07. Three critical journeys L254/L255/L256
 Passing tests are not independent review, a launched program, staffed support, a complete academic term or whole-parent acceptance. Monthly-versus-installment relationship, amounts/currency, academic workload/calendar, real capacity, course feedback/support integration, cancellation/refunds and paid access remain future explicit scope. The owner’s production parking remains in force.
 
 After verified-main delivery, its dedicated demonstration receipt records the actual source revision, owned database/storage, finite roles, observed browser stages/captures and guarded preview restart. Reuse that receipt rather than relabelling a component fixture as the product demonstration.
+
+## Withdrawing from the term (#121)
+
+On **My courses**, an enrolled member can confirm **Withdraw from this term**. Migration 135 records one immutable `local_program_withdrawals` row with its date (PROGWD-01..04, L336). The receipt, its download (now with `withdrawnAt`) and earlier activity stay. The place is not reopened, and the member can't enroll in this term again. Repeating the action keeps the first date. Another member, staff or a forged enrollment reference is refused. Withdrawal is not account deletion: deleting the account removes the enrollment and the withdrawal along with everything else, and deleted accounts are never counted. The staff learning snapshot shows banded **enrolled** and **withdrew** counts, under the same 20-member and five-member suppression as its other measures.

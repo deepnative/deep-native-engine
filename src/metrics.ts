@@ -32,6 +32,8 @@ export interface PreviewMetrics {
     returnEligible: string;
     crossContentReturned: string;
     reportedOutcome: string;
+    enrolledInProgram: string;
+    withdrewFromProgram: string;
     usefulness: string;
     segments: string;
     cohorts: string;
@@ -181,6 +183,10 @@ export async function exactMetrics(
              -- #123 OUTCOME: the member's own words on their own plan entries.
              EXISTS(SELECT 1 FROM career_entries c WHERE c.member_id=l.id
                AND btrim(c.self_reported_outcome)<>'') AS reported_outcome,
+             EXISTS(SELECT 1 FROM local_program_enrollments e WHERE e.workspace_id=l.id)
+               AS enrolled_in_program,
+             EXISTS(SELECT 1 FROM local_program_withdrawals w WHERE w.workspace_id=l.id)
+               AS withdrew_from_program,
              l.background,l.goal,l.background_tags,j.joined,
              anchor.opened_at AS first_open,
              anchor.content_id AS first_lesson_id
@@ -264,6 +270,8 @@ export async function exactMetrics(
            COUNT(*) FILTER(WHERE return_eligible)::integer AS "returnEligible",
            COUNT(*) FILTER(WHERE cross_content_returned)::integer AS "crossContentReturned",
            COUNT(*) FILTER(WHERE reported_outcome)::integer AS "reportedOutcome",
+           COUNT(*) FILTER(WHERE enrolled_in_program)::integer AS "enrolledInProgram",
+           COUNT(*) FILTER(WHERE withdrew_from_program)::integer AS "withdrewFromProgram",
            COALESCE(MAX(uc.respondents),0)::integer AS "usefulnessRespondents",
            COALESCE(MAX(uc.helpful),0)::integer AS "usefulnessHelpful",
            COALESCE(MAX(uc.not_yet),0)::integer AS "usefulnessNotYet",
@@ -305,6 +313,10 @@ export function metricDefinitions(
       "Of returnEligible, distinct members with a different lesson content ID first opened or an assignment submitted at or after 7 full days and before 14 full days from their first lesson open. This is an observed cross-content return proxy, not general learning retention; the same lesson or a newer version alone is not a return. Zero eligible means the rate is undefined.",
     reportedOutcome:
       "Member-reported: distinct retained members who wrote a self-reported outcome on at least one of their own private career, opportunity or contract plan entries, divided by members. It is not verified, and it is not a hiring, placement, contract or income rate. Plans without an outcome don't count. Outcome text is never read into this report.",
+    enrolledInProgram:
+      "Distinct retained members with a dated enrollment in the foundation program term, divided by members. Enrolling is a simulation with no charge, teaching service or qualification.",
+    withdrewFromProgram:
+      "Of all members, distinct retained members who deliberately withdrew from their program term, each with its own date. Withdrawal is separate from deleting an account: deleted accounts are not counted anywhere, and a withdrawal keeps the enrollment and earlier activity.",
     usefulness: `Member self-reported usefulness ${hostingText("in this synthetic local preview", "on this site")}, not observed skill, qualified review or current curriculum quality. Each retained member contributes only their latest corrected exact-version answer; historical versions remain historical. The denominator is respondents, not all members or an enrollment cohort. No exact respondent or choice counts are exposed. The whole block is suppressed below 20 respondents or when either choice has fewer than five; otherwise only a coarse helpful-share band is shown. Repeated snapshots can still permit inference, so this is not approved live analytics.`,
     segments:
       "The same measures for each current starting point, current goal and interest tag. Interest tags overlap, so segment rows can add up to more than the total. A segment is suppressed below 20 members or when fewer than five members lie outside it; every segment is always listed, so a suppressed row may be zero or not. A segment is a member's own current choice; it never implies a paid tier, career path or staff right.",

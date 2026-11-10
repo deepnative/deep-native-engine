@@ -50,6 +50,8 @@ export interface ProgramOverview {
 export interface ProgramReceipt {
   id: string;
   enrolledAt: string;
+  /** #121: dated member withdrawal from this term; not account deletion. */
+  withdrawnAt: string | null;
   manifest: ProgramManifest;
   digest: string;
   activity: Array<{
@@ -63,6 +65,7 @@ export function publicProgramReceipt(receipt: ProgramReceipt) {
   return {
     id: receipt.id,
     enrolledAt: receipt.enrolledAt,
+    withdrawnAt: receipt.withdrawnAt,
     manifest: {
       programId: receipt.manifest.programId,
       programVersion: receipt.manifest.programVersion,
@@ -117,6 +120,10 @@ export interface ProgramStore {
     token: string,
     key: string,
   ): Promise<ProgramResult<ProgramReceipt | null>>;
+  withdraw(
+    token: string,
+    enrollmentId: string,
+  ): Promise<ProgramResult<ProgramReceipt>>;
 }
 export const programKey = (value: unknown): value is string =>
   typeof value === "string" &&
@@ -153,5 +160,6 @@ export function disabledProgramStore(): ProgramStore {
     enroll: unavailable,
     mine: unavailable,
     inspect: unavailable,
+    withdraw: unavailable,
   };
 }

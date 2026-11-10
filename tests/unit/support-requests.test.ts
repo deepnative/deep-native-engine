@@ -43,6 +43,7 @@ const row = {
   resolvedAt: null,
   withdrawnAt: null,
   coverageState: "unverified",
+  coverageReviewedAt: null,
   memberId: owner,
   workspaceId: owner,
 };
@@ -202,6 +203,8 @@ const calls = {
   note: (s: SupportRequestStore, t = token) =>
     s.note(t, scope, key, input.body),
   resolve: (s: SupportRequestStore, t = token) => s.resolve(t, scope, key),
+  reviewCoverage: (s: SupportRequestStore, t = token) =>
+    s.reviewCoverage(t, scope, key),
   withdraw: (s: SupportRequestStore, t = token) => s.withdraw(t, requestId),
   grant: (s: SupportRequestStore, t = token) => s.grant(t, grantInput),
   revoke: (s: SupportRequestStore, t = token) => s.revoke(t, grantId),
@@ -216,6 +219,7 @@ const actorFor = (name: keyof typeof calls) =>
           "reply",
           "note",
           "resolve",
+          "reviewCoverage",
         ].includes(name)
       ? ("operator" as const)
       : ("member" as const);
@@ -531,7 +535,13 @@ it("requires current staff kind, profile, precise grant and unchanged request sc
   ).toEqual({ kind: "unavailable" });
 });
 it("honors terminal precedence and exact per-action replay", async () => {
-  for (const action of ["acknowledge", "resolve", "reply", "note"] as const) {
+  for (const action of [
+    "acknowledge",
+    "resolve",
+    "reply",
+    "note",
+    "reviewCoverage",
+  ] as const) {
     const replay = fixture({
       actor: "operator",
       override: (sql) =>
@@ -579,6 +589,16 @@ it("honors terminal precedence and exact per-action replay", async () => {
           ? [{ ...row, acknowledgedAt: date }]
           : undefined,
     }).use.acknowledge(token, scope, key),
+  ).toEqual({ kind: "conflict" });
+  // #195 AC3: the outside-current-support record is set once.
+  expect(
+    await fixture({
+      actor: "operator",
+      override: (sql) =>
+        sql.includes("FROM support_requests r WHERE r.id=ANY")
+          ? [{ ...row, coverageReviewedAt: date }]
+          : undefined,
+    }).use.reviewCoverage(token, scope, key),
   ).toEqual({ kind: "conflict" });
   for (const original of [[], [{ body: "changed" }]])
     expect(
@@ -957,7 +977,13 @@ it("returns allocation-specific quantities and one common observed context with 
         elapsedSeconds: 0,
         grantStartsAt: date,
         grantExpiresAt: future,
-        allowedActions: ["acknowledge", "note", "reply", "resolve"],
+        allowedActions: [
+          "acknowledge",
+          "note",
+          "reply",
+          "resolve",
+          "coverage-review",
+        ],
       },
       authorizedEffort: {
         allocationId: id(20),
@@ -1087,7 +1113,12 @@ it("withholds connection handback failure rather than acknowledging a successful
 });
 it("does not advertise new request actions after acknowledgement or resolution", async () => {
   for (const [changes, actions] of [
-    [{ acknowledgedAt: date }, ["note", "reply", "resolve"]],
+    [{ acknowledgedAt: date }, ["note", "reply", "resolve", "coverage-review"]],
+    [
+      { acknowledgedAt: date, coverageReviewedAt: date },
+      ["note", "reply", "resolve"],
+    ],
+    [{ coverageReviewedAt: date }, ["acknowledge", "note", "reply", "resolve"]],
     [{ resolvedAt: date }, []],
   ] as const) {
     expect(
@@ -1172,6 +1203,30 @@ it("requires a separate exact request grant even for a platform administrator's 
   expect(await f.use.acknowledge(token, scope, key)).toMatchObject({
     kind: "applied",
   });
+});
+it("#195 AC3 records outside-current-support as one content-free transition", async () => {
+  const f = fixture({ actor: "operator" });
+  expect(await f.use.reviewCoverage(token, scope, key)).toMatchObject({
+    kind: "applied",
+  });
+  const sql = f.query.mock.calls.map(([text]) => String(text));
+  expect(
+    sql.filter((text) =>
+      text.includes("SET coverage_state='outside-current-support'"),
+    ),
+  ).toHaveLength(1);
+  expect(
+    sql.some(
+      (text) =>
+        text.includes("UPDATE support_requests SET") &&
+        /acknowledged_|resolved_/.test(text),
+    ),
+  ).toBe(false);
+  const event = f.query.mock.calls.find(([text]) =>
+    String(text).startsWith("INSERT INTO support_request_events"),
+  )!;
+  expect(event[1]).toContain("coverage-reviewed");
+  expect(event[1]).not.toContain(input.body);
 });
 
 it.each([

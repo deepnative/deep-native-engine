@@ -1323,7 +1323,7 @@ export function lesson(
     )
     .map(
       (row) =>
-        `<li id="starter-version-${row.version}-${row.goalAtStart ?? "unattributed"}"><h3>Earlier starter exercise · version ${row.version}</h3>${starterRecord(row, csrf)}</li>`,
+        `<li id="starter-version-${row.version}-${row.goalAtStart ?? "unattributed"}" tabindex="-1"><h3>Earlier starter exercise · version ${row.version}</h3>${starterRecord(row, csrf)}</li>`,
     )
     .join("");
   const guidedEntry = errors.length
@@ -1350,7 +1350,7 @@ export function starterRecordPage(row: ExerciseHistory, csrf: string) {
       : "This retained record is read-only. Open your current goal's lesson for current practice.";
   return page(
     "Saved starter practice",
-    `<section class="reading" id="starter-version-${row.version}-${row.goalAtStart ?? "unattributed"}"><h1>Saved starter practice · version ${row.version}</h1>${starterRecord(row, csrf)}<p>This is the exact saved record. ${guidance}</p><a href="/progress">Return to private activity</a> <a href="/lesson">Open your current goal's lesson</a></section>`,
+    `<section class="reading" id="starter-version-${row.version}-${row.goalAtStart ?? "unattributed"}" tabindex="-1"><h1>Saved starter practice · version ${row.version}</h1>${starterRecord(row, csrf)}<p>This is the exact saved record. ${guidance}</p><a href="/progress">Return to private activity</a> <a href="/lesson">Open your current goal's lesson</a></section>`,
   );
 }
 export function exerciseWriteRecoveryPage(

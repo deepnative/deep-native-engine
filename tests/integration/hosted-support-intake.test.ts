@@ -165,6 +165,7 @@ it("SI-03 metadata pages are bounded, actor-bound, content-free and reflect with
   for (const item of [...first.value.items, ...second.value.items])
     expect(Object.keys(item).sort()).toEqual([
       "acknowledgedAt",
+      "coverageReviewedAt",
       "receivedAt",
       "requestId",
       "resolvedAt",

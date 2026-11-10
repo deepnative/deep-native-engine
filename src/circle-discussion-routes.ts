@@ -6,6 +6,9 @@ import {
   CIRCLE_DISCUSSION_POLICY,
   REPORT_CATEGORIES,
   CIRCLE_APPEAL_REASONS,
+  REPORT_DISPOSITION_REASONS,
+  type ModeratorReport,
+  type ReportDispositionAction,
   type CircleActivity,
   type CircleAppeal,
   type CircleDiscussionStore,
@@ -30,6 +33,44 @@ function shell(circle: string, title: string, body: string) {
 function confirmation(text: string) {
   return `<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>${escape(text)}</span></label>`;
 }
+const DISPOSITION_LABELS: Record<string, string> = {
+  open: "Open",
+  escalated: "Waiting for a local second look",
+  rejected: "Rejected as not actionable",
+  closed: "Closed after a recorded decision",
+};
+const REASON_LABELS: Record<string, string> = {
+  needs_another_look: "Needs another look",
+  policy_unclear: "Policy unclear",
+  rule_not_breached: "No rule was breached",
+  insufficient_context: "Not enough context",
+  recorded_target_decision: "Recorded hide or restore decision",
+};
+// #196 RPTD-01..03: deliberate per-report disposition forms for a current
+// granted moderator. Rejecting a report never changes its contribution.
+function dispositionForms(
+  circle: string,
+  csrf: string,
+  report: ModeratorReport,
+) {
+  const state = report.disposition ?? "open",
+    revision = report.dispositionRevision ?? 1,
+    action = `/moderate/circles/${encodeURIComponent(circle)}/reports/${encodeURIComponent(report.id)}/disposition`,
+    id = escape(report.id);
+  const status = `<p role="status">Report disposition: ${escape(DISPOSITION_LABELS[state]!)} · revision ${revision}</p>`;
+  if (!report.target || state === "rejected" || state === "closed")
+    return status;
+  const form = (
+    kind: ReportDispositionAction,
+    label: string,
+    confirm: string,
+    extra = "",
+  ) => {
+    const reasons = REPORT_DISPOSITION_REASONS[kind];
+    return `<form method="post" action="${action}">${hidden(csrf)}${originalKey(circle, "report-disposition")}<input type="hidden" name="action" value="${kind}"><input type="hidden" name="reportRevision" value="${revision}"><input type="hidden" name="sourceRevision" value="${report.target!.revision}">${extra}${reasons.length > 1 ? `<label for="${kind}-reason-${id}">${kind === "escalate" ? "Why it needs a second look" : "Why this report is rejected"}</label><select id="${kind}-reason-${id}" name="reason">${reasons.map((r) => `<option value="${r}">${escape(REASON_LABELS[r]!)}</option>`).join("")}</select>` : `<input type="hidden" name="reason" value="${reasons[0]}">`}${confirmation(confirm)}<button type="submit">${escape(label)}</button></form>`;
+  };
+  return `${status}${state === "open" ? form("escalate", "Ask for a local second look", "Record that this report needs a local second look. Nobody is assigned or notified, and no response is promised.") : ""}${form("reject", "Reject this report", "Reject this one report as not actionable. Its contribution and every other report stay unchanged.")}${report.decisionRevision ? form("close", `Close against decision revision ${report.decisionRevision}`, `Close this report after inspecting the recorded decision at revision ${report.decisionRevision}. This does not claim the report caused it.`, `<input type="hidden" name="decisionRevision" value="${report.decisionRevision}">`) : ""}`;
+}
 function originalKey(
   circle: string,
   kind:
@@ -38,11 +79,14 @@ function originalKey(
     | "choice"
     | "moderation"
     | "appeal"
-    | "appeal-resolution",
+    | "appeal-resolution"
+    | "report-disposition",
 ) {
   const key = randomUUID();
   const url =
-    kind === "moderation" || kind === "appeal-resolution"
+    kind === "moderation" ||
+    kind === "appeal-resolution" ||
+    kind === "report-disposition"
       ? `/moderate/circles/${encodeURIComponent(circle)}/reconcile`
       : `${base(circle)}/reconcile`;
   return `<input type="hidden" name="idempotencyKey" value="${key}"><details><summary>Submission recovery</summary><p>Keep <a href="${escape(`${url}?kind=${kind}&key=${key}`)}">this original-key recovery link</a> if the result is unconfirmed. It checks only your retained receipt and does not submit anything.</p></details>`;
@@ -199,9 +243,14 @@ export function registerCircleDiscussion(
                     ? "appeal"
                     : path === "/moderate/circles/:id/appeals/:appealId/resolve"
                       ? "appeal-resolution"
-                      : null;
+                      : path ===
+                          "/moderate/circles/:id/reports/:reportId/disposition"
+                        ? "report-disposition"
+                        : null;
         const receiptUrl =
-          kind === "moderation" || kind === "appeal-resolution"
+          kind === "moderation" ||
+          kind === "appeal-resolution" ||
+          kind === "report-disposition"
             ? `/moderate/circles/${encodeURIComponent(circle)}/reconcile`
             : `${base(circle)}/reconcile`;
         const recovery =
@@ -237,7 +286,7 @@ export function registerCircleDiscussion(
     const url = moderator
       ? `/moderate/circles/${encodeURIComponent(circle)}/reconcile`
       : `${base(circle)}/reconcile`;
-    return `<form method="get" action="${url}">${moderator ? '<label for="receipt-kind">Original action type</label><select id="receipt-kind" name="kind"><option value="moderation">Moderation</option><option value="appeal-resolution">Reconsideration result</option></select>' : '<label for="receipt-kind">Original submission type</label><select id="receipt-kind" name="kind"><option value="post">Contribution</option><option value="report">Sample report</option><option value="choice">Sharing choice</option><option value="appeal">Reconsideration request</option></select>'}<label for="receipt-key">Original form key</label><input id="receipt-key" name="key" maxlength="36" required><button type="submit">Check original form key</button></form>`;
+    return `<form method="get" action="${url}">${moderator ? '<label for="receipt-kind">Original action type</label><select id="receipt-kind" name="kind"><option value="moderation">Moderation</option><option value="appeal-resolution">Reconsideration result</option><option value="report-disposition">Report disposition</option></select>' : '<label for="receipt-kind">Original submission type</label><select id="receipt-kind" name="kind"><option value="post">Contribution</option><option value="report">Sample report</option><option value="choice">Sharing choice</option><option value="appeal">Reconsideration request</option></select>'}<label for="receipt-key">Original form key</label><input id="receipt-key" name="key" maxlength="36" required><button type="submit">Check original form key</button></form>`;
   }
   for (const moderator of [false, true])
     app.get(
@@ -272,7 +321,11 @@ export function registerCircleDiscussion(
             typeof req.query.kind !== "string" ||
             typeof req.query.key !== "string" ||
             (moderator
-              ? !["moderation", "appeal-resolution"].includes(req.query.kind)
+              ? ![
+                  "moderation",
+                  "appeal-resolution",
+                  "report-disposition",
+                ].includes(req.query.kind)
               : !["post", "report", "choice", "appeal"].includes(
                   req.query.kind,
                 ))
@@ -801,7 +854,7 @@ export function registerCircleDiscussion(
       const rows = value.items
         .map(
           (report) =>
-            `<li><article><h2>Sample report ${escape(report.category.replace("_", " "))}</h2>${report.target ? `<p>${escape(report.target.pseudonym)} · ${escape(report.target.state)} · revision ${report.target.revision}</p><pre class="content-text">${escape(report.target.body!)}</pre><form method="post" action="${url}/posts/${encodeURIComponent(report.target.id)}">${hidden(csrf)}${originalKey(circle, "moderation")}<input type="hidden" name="expectedRevision" value="${report.target.revision}"><input type="hidden" name="action" value="${report.target.state === "hidden" ? "restore" : "hide"}"><label for="reason-${escape(report.id)}">Synthetic decision reason</label><select id="reason-${escape(report.id)}" name="reason"><option value="privacy">Privacy</option><option value="conduct">Conduct</option><option value="off_topic">Off topic</option><option value="test_correction">Test correction</option></select><button type="submit">${report.target.state === "hidden" ? "Restore invented contribution" : "Hide invented contribution"}</button></form>` : "<p>Target unavailable. No text or restoration action is available.</p>"}</article></li>`,
+            `<li><article><h2>Sample report ${escape(report.category.replace("_", " "))}</h2>${report.target ? `<p>${escape(report.target.pseudonym)} · ${escape(report.target.state)} · revision ${report.target.revision}</p><pre class="content-text">${escape(report.target.body!)}</pre><form method="post" action="${url}/posts/${encodeURIComponent(report.target.id)}">${hidden(csrf)}${originalKey(circle, "moderation")}<input type="hidden" name="expectedRevision" value="${report.target.revision}"><input type="hidden" name="action" value="${report.target.state === "hidden" ? "restore" : "hide"}"><label for="reason-${escape(report.id)}">Synthetic decision reason</label><select id="reason-${escape(report.id)}" name="reason"><option value="privacy">Privacy</option><option value="conduct">Conduct</option><option value="off_topic">Off topic</option><option value="test_correction">Test correction</option></select><button type="submit">${report.target.state === "hidden" ? "Restore invented contribution" : "Hide invented contribution"}</button></form>` : "<p>Target unavailable. No text or restoration action is available.</p>"}${dispositionForms(circle, csrf, report)}</article></li>`,
         )
         .join("");
       res.send(
@@ -812,6 +865,108 @@ export function registerCircleDiscussion(
       );
     }),
   );
+  app.post(
+    "/moderate/circles/:id/reports/:reportId/disposition",
+    route(async (req, res, circle, token) => {
+      const revision = /^[1-9][0-9]{0,9}$/;
+      if (
+        !fields(req, [
+          "idempotencyKey",
+          "action",
+          "reason",
+          "reportRevision",
+          "sourceRevision",
+          "decisionRevision",
+          "confirm",
+        ]) ||
+        req.body.confirm !== "yes" ||
+        !revision.test(req.body.reportRevision ?? "") ||
+        !revision.test(req.body.sourceRevision ?? "") ||
+        (req.body.decisionRevision !== undefined &&
+          !revision.test(req.body.decisionRevision))
+      ) {
+        rejectFields(res, circle);
+        return;
+      }
+      if (
+        staffResult(
+          res,
+          circle,
+          await store.disposeReport(
+            token,
+            circle,
+            req.params.reportId as string,
+            req.body.idempotencyKey,
+            req.body.action,
+            req.body.reason,
+            Number(req.body.reportRevision),
+            Number(req.body.sourceRevision),
+            req.body.decisionRevision === undefined
+              ? null
+              : Number(req.body.decisionRevision),
+          ),
+        )
+      )
+        res.redirect(
+          303,
+          `/moderate/circles/${encodeURIComponent(circle)}/reports`,
+        );
+    }),
+  );
+  for (const download of [false, true])
+    app.get(
+      `/circles/:id/discussion/reports/:reportId/disposition${download ? "/download" : ""}`,
+      route(async (req, res, circle, token) => {
+        res.set({
+          "Cache-Control": "no-store",
+          "X-Content-Type-Options": "nosniff",
+        });
+        if (Object.keys(req.query).length) {
+          rejectFields(res, circle);
+          return;
+        }
+        const value = result(
+          res,
+          circle,
+          await store.reportDisposition(
+            token,
+            circle,
+            req.params.reportId as string,
+          ),
+        );
+        if (!value) return;
+        // RPTD-05: explicit public fields only; no actor, source or key.
+        const record = {
+          reportDispositionVersion: 1,
+          circleId: value.circleId,
+          reportId: value.reportId,
+          category: value.category,
+          reportedAt: value.reportedAt,
+          disposition: value.disposition,
+          revision: value.revision,
+          history: value.history.map((h) => ({
+            action: h.action,
+            reason: h.reason,
+            occurredAt: h.occurredAt,
+          })),
+        };
+        if (download) {
+          res
+            .attachment("circle-report-disposition.json")
+            .type("application/json")
+            .send(JSON.stringify(record));
+          return;
+        }
+        const url = `${base(circle)}/reports/${encodeURIComponent(record.reportId)}`;
+        res.send(
+          shell(
+            circle,
+            "What happened to your report",
+            `<p>Report category: ${escape(record.category.replace("_", " "))} · reported at ${timeTag(record.reportedAt)}.</p><p role="status">Report disposition: ${escape(DISPOSITION_LABELS[record.disposition]!)} · revision ${record.revision}.</p>${record.history.length ? `<ol>${record.history.map((h) => `<li>${escape(DISPOSITION_LABELS[h.action]!)} · ${escape(REASON_LABELS[h.reason]!)} · ${timeTag(h.occurredAt)}</li>`).join("")}</ol>` : "<p>No action has been recorded on this report yet.</p>"}<p>This records what a moderator with current test-purpose access did with your one report. A local second look assigns nobody and promises no response. Rejecting your report doesn't change the contribution, and closing it doesn't mean your report caused a decision. None of this is independent or qualified review.</p><p>Only you can see this, until your account is deleted. It contains no contribution text and no member or staff identity.</p><p><a href="${url}/disposition/download">Download this report outcome</a></p><p>A download saves a device copy that account deletion cannot remove.</p><p><a href="${url}">Return to your report receipt</a></p>`,
+          ),
+        );
+      }),
+    );
   app.post(
     "/moderate/circles/:id/posts/:postId",
     route(async (req, res, circle, token) => {
@@ -893,7 +1048,7 @@ export function registerCircleDiscussion(
           shell(
             circle,
             "Your private sample report receipt",
-            `<p>Receipt ${escape(value.id)} · ${escape(value.category)} · ${escape(utc(value.createdAt))}</p><p role="status">${value.status === "unavailable" ? "Target unavailable" : value.status === "hidden" ? "Sample target hidden" : "Sample report retained"}. This content-free record does not promise staffed moderation, a response or formal review.</p><p><a href="${base(circle)}/reports/${encodeURIComponent(value.id)}/moderation-notice">Inspect the latest decision available for this report</a></p><p><a href="${base(circle)}/reports">Your private sample reports</a></p>`,
+            `<p>Receipt ${escape(value.id)} · ${escape(value.category)} · ${escape(utc(value.createdAt))}</p><p role="status">${value.status === "unavailable" ? "Target unavailable" : value.status === "hidden" ? "Sample target hidden" : "Sample report retained"}. This content-free record does not promise staffed moderation, a response or formal review.</p><p><a href="${base(circle)}/reports/${encodeURIComponent(value.id)}/moderation-notice">Inspect the latest decision available for this report</a></p><p><a href="${base(circle)}/reports/${encodeURIComponent(value.id)}/disposition">Inspect what happened to this report</a></p><p><a href="${base(circle)}/reports">Your private sample reports</a></p>`,
           ),
         );
     }),

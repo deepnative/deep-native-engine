@@ -631,6 +631,8 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         returnEligible: "matured first-open cohort",
         crossContentReturned: "bounded observed return",
         reportedOutcome: "member-reported outcome",
+        enrolledInProgram: "Enrolled in the program term.",
+        withdrewFromProgram: "Withdrew from the program term.",
         usefulness: "coarse self-reported usefulness",
         segments: "Segments.",
         cohorts: "Cohorts.",
@@ -649,6 +651,8 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         returnEligible: 20,
         crossContentReturned: 8,
         reportedOutcome: 5,
+        enrolledInProgram: 5,
+        withdrewFromProgram: 5,
       }),
       segments: learningSegments(null, 30),
       cohorts: [],
@@ -684,6 +688,8 @@ it("denies an unconfigured operator metrics route and returns only a configured 
       returnEligible: "20-49",
       crossContentReturned: "5-19",
       reportedOutcome: "5-19",
+      enrolledInProgram: "5-19",
+      withdrewFromProgram: "5-19",
     },
   });
   expect(response.body.scope).toBe("synthetic-local-preview");

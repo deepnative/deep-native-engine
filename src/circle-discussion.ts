@@ -52,6 +52,32 @@ export interface ModeratorReport {
   id: string;
   category: ReportCategory;
   target: CircleItem | null;
+  /** #196 RPTD: current report disposition and its revision (open is 1). */
+  disposition?: CircleReportDisposition["disposition"];
+  dispositionRevision?: number;
+  /** The latest recorded hide/restore revision at or after the report. */
+  decisionRevision?: number | null;
+}
+// #196 RPTD-01..03: structured reasons for each report disposition action.
+export const REPORT_DISPOSITION_REASONS = {
+  escalate: ["needs_another_look", "policy_unclear"],
+  reject: ["rule_not_breached", "insufficient_context"],
+  close: ["recorded_target_decision"],
+} as const;
+export type ReportDispositionAction = keyof typeof REPORT_DISPOSITION_REASONS;
+export interface CircleReportDisposition {
+  reportDispositionVersion: 1;
+  circleId: string;
+  reportId: string;
+  category: ReportCategory;
+  reportedAt: string;
+  disposition: "open" | "escalated" | "rejected" | "closed";
+  revision: number;
+  history: {
+    action: "escalated" | "rejected" | "closed";
+    reason: string;
+    occurredAt: string;
+  }[];
 }
 export interface CircleReconciliation {
   found: boolean;
@@ -186,6 +212,22 @@ export interface CircleDiscussionStore {
     kind: string,
     key: string,
   ): Promise<CircleResult<CircleReconciliation>>;
+  reportDisposition(
+    token: string,
+    circle: string,
+    reportId: string,
+  ): Promise<CircleResult<CircleReportDisposition>>;
+  disposeReport(
+    token: string,
+    circle: string,
+    reportId: string,
+    key: string,
+    action: string,
+    reason: string,
+    reportRevision: number,
+    sourceRevision: number,
+    decisionRevision: number | null,
+  ): Promise<CircleResult<{ id: string; revision: number }>>;
   reports(
     token: string,
     circle: string,
@@ -322,6 +364,8 @@ export function disabledCircleDiscussionStore(): CircleDiscussionStore {
     resolveAppeal: async () => denied,
     moderationNotice: async () => denied,
     reconcile: async () => denied,
+    reportDisposition: async () => denied,
+    disposeReport: async () => denied,
     reports: async () => denied,
     reportReceipt: async () => denied,
     grantModerator: async () => denied,
@@ -1747,6 +1791,7 @@ export function circleDiscussionStore(
           "moderation",
           "appeal",
           "appeal-resolution",
+          "report-disposition",
         ].includes(kind)
       )
         return invalid;
@@ -1754,7 +1799,9 @@ export function circleDiscussionStore(
         // These receipts convey retained ownership, not visibility/publication
         // permission. No source body, root ID, reporter or target identity is read.
         const context =
-          kind === "moderation" || kind === "appeal-resolution"
+          kind === "moderation" ||
+          kind === "appeal-resolution" ||
+          kind === "report-disposition"
             ? await moderatorContext(client, token, circle, [])
             : await authorize(client, token, circle, [], false, true);
         if (!context) return denied;
@@ -1770,7 +1817,9 @@ export function circleDiscussionStore(
                   ? "SELECT id,state AS status,decision_revision AS revision FROM preview_circle_appeals WHERE member_id=$1 AND circle_id=$2 AND idempotency_key=$3 FOR SHARE"
                   : kind === "appeal-resolution"
                     ? "SELECT id,state AS status,resolved_revision AS revision FROM preview_circle_appeals WHERE resolver_id=$1 AND circle_id=$2 AND resolution_key=$3 FOR SHARE"
-                    : "SELECT NULL::uuid id,action AS status,new_revision AS revision FROM preview_circle_moderation_audit WHERE actor_id=$1 AND circle_id=$2 AND idempotency_key=$3 FOR SHARE";
+                    : kind === "report-disposition"
+                      ? "SELECT report_id AS id,action AS status,revision FROM preview_circle_report_dispositions WHERE actor_id=$1 AND circle_id=$2 AND idempotency_key=$3 FOR SHARE"
+                      : "SELECT NULL::uuid id,action AS status,new_revision AS revision FROM preview_circle_moderation_audit WHERE actor_id=$1 AND circle_id=$2 AND idempotency_key=$3 FOR SHARE";
         const row = (
           await client.query<{
             id: string | null;
@@ -1788,6 +1837,192 @@ export function circleDiscussionStore(
               }
             : { found: false, id: null, status: null, revision: null },
         );
+      });
+    },
+    async reportDisposition(token, circle, reportId) {
+      if (!input(token, circle)) return denied;
+      if (!uuid.test(reportId)) return invalid;
+      return transaction(circle, false, async (client, finish) => {
+        // RPTD-05: the reporter keeps this content-free record after leaving,
+        // source loss or a write pause, while their own account is current.
+        const context = await authorize(client, token, circle, [], false, true);
+        if (!context) return denied;
+        finish(context);
+        const report = (
+          await client.query<{ category: ReportCategory; reportedAt: string }>(
+            `SELECT category,created_at::text AS "reportedAt" FROM preview_circle_reports WHERE id=$1 AND member_id=$2 AND circle_id=$3 FOR SHARE`,
+            [reportId, context.actor, circle],
+          )
+        ).rows[0];
+        if (!report) return denied;
+        const history = (
+          await client.query<
+            CircleReportDisposition["history"][number] & { revision: number }
+          >(
+            `SELECT action,reason,occurred_at::text AS "occurredAt",revision FROM preview_circle_report_dispositions WHERE report_id=$1 ORDER BY revision LIMIT 2`,
+            [reportId],
+          )
+        ).rows;
+        const last = history.at(-1);
+        return ready({
+          reportDispositionVersion: 1 as const,
+          circleId: circle,
+          reportId,
+          category: report.category,
+          reportedAt: report.reportedAt,
+          disposition: last?.action ?? ("open" as const),
+          revision: last?.revision ?? 1,
+          history: history.map(({ action, reason, occurredAt }) => ({
+            action,
+            reason,
+            occurredAt,
+          })),
+        });
+      });
+    },
+    async disposeReport(
+      token,
+      circle,
+      reportId,
+      key,
+      action,
+      reason,
+      reportRevision,
+      sourceRevision,
+      decisionRevision,
+    ) {
+      if (!input(token, circle) || !writes) return denied;
+      const reasons = (
+        REPORT_DISPOSITION_REASONS as Record<string, readonly string[]>
+      )[action];
+      if (
+        !uuid.test(reportId) ||
+        !uuid.test(key) ||
+        !reasons?.includes(reason) ||
+        ![reportRevision, sourceRevision].every(
+          (n) => Number.isSafeInteger(n) && n >= 1,
+        ) ||
+        (action === "close") !== (decisionRevision !== null) ||
+        (decisionRevision !== null &&
+          !(Number.isSafeInteger(decisionRevision) && decisionRevision >= 2))
+      )
+        return invalid;
+      return transaction(circle, true, async (client, finish) => {
+        const observed = (
+          await client.query<{
+            target_id: string;
+            member_id: string;
+            created_at: string;
+          }>(
+            "SELECT target_id,member_id,created_at::text AS created_at FROM preview_circle_reports WHERE id=$1 AND circle_id=$2",
+            [reportId, circle],
+          )
+        ).rows[0];
+        if (!observed) return denied;
+        const metadata = await target(client, circle, observed.target_id);
+        const context = await moderatorContext(
+          client,
+          token,
+          circle,
+          metadata,
+          [observed.member_id],
+        );
+        if (!context) return denied;
+        finish(context);
+        // RPTD-04/05: the reporter and the source must both still be current.
+        // A reporter who left or withdrew sharing is no longer current.
+        if (
+          !context.members.has(observed.member_id) ||
+          !context.choices.has(observed.member_id)
+        )
+          return denied;
+        const item = await moderatorItem(
+          client,
+          context,
+          circle,
+          observed.target_id,
+          metadata,
+        );
+        if (!item) return denied;
+        const recorded =
+          action === "escalate"
+            ? "escalated"
+            : action === "reject"
+              ? "rejected"
+              : "closed";
+        const digest = fingerprint({
+          circle,
+          reportId,
+          action,
+          reason,
+          reportRevision,
+          sourceRevision,
+          decisionRevision,
+        });
+        const prior = (
+          await client.query<{
+            report_id: string;
+            fingerprint: string;
+            revision: number;
+          }>(
+            "SELECT report_id,fingerprint,revision FROM preview_circle_report_dispositions WHERE actor_id=$1 AND idempotency_key=$2 FOR SHARE",
+            [context.actor, key],
+          )
+        ).rows[0];
+        if (prior)
+          return prior.report_id === reportId && prior.fingerprint === digest
+            ? ready({ id: reportId, revision: prior.revision })
+            : conflict;
+        // RPTD-06: serialize dispositions of this report after source locks.
+        await client.query(
+          "SELECT id FROM preview_circle_reports WHERE id=$1 FOR UPDATE",
+          [reportId],
+        );
+        const current = (
+          await client.query<{ action: string; revision: number }>(
+            "SELECT action,revision FROM preview_circle_report_dispositions WHERE report_id=$1 ORDER BY revision DESC LIMIT 1",
+            [reportId],
+          )
+        ).rows[0];
+        const state = current?.action ?? "open";
+        if (
+          (current?.revision ?? 1) !== reportRevision ||
+          item.revision !== sourceRevision ||
+          state === "rejected" ||
+          state === "closed" ||
+          (action === "escalate" && state !== "open")
+        )
+          return conflict;
+        if (action === "close") {
+          const decision = (
+            await client.query<{ revision: number }>(
+              `SELECT new_revision AS revision FROM preview_circle_moderation_audit
+               WHERE circle_id=$1 AND post_id=$2 AND occurred_at>=$3::timestamptz
+               ORDER BY new_revision DESC LIMIT 1`,
+              [circle, observed.target_id, observed.created_at],
+            )
+          ).rows[0];
+          if (decision?.revision !== decisionRevision) return conflict;
+        }
+        const revision = reportRevision + 1;
+        await client.query(
+          `INSERT INTO preview_circle_report_dispositions(report_id,circle_id,revision,action,reason,actor_id,actor_role,source_revision,decision_revision,idempotency_key,fingerprint)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [
+            reportId,
+            circle,
+            revision,
+            recorded,
+            reason,
+            context.actor,
+            context.moderator!.role,
+            sourceRevision,
+            decisionRevision,
+            key,
+            digest,
+          ],
+        );
+        return ready({ id: reportId, revision });
       });
     },
     reports: (token, circle, cursor) =>
@@ -1946,6 +2181,35 @@ export function circleDiscussionStore(
               metadata,
             ),
           });
+        }
+        if (items.length) {
+          // #196 RPTD: current disposition and the latest recorded decision
+          // since the report. No text, reporter or actor is read.
+          const states = new Map(
+            (
+              await client.query<{
+                id: string;
+                state: CircleReportDisposition["disposition"];
+                revision: number;
+                decision: number | null;
+              }>(
+                `SELECT r.id,
+                  COALESCE((SELECT d.action FROM preview_circle_report_dispositions d WHERE d.report_id=r.id ORDER BY d.revision DESC LIMIT 1),'open') AS state,
+                  COALESCE((SELECT max(d.revision) FROM preview_circle_report_dispositions d WHERE d.report_id=r.id),1) AS revision,
+                  (SELECT a.new_revision FROM preview_circle_moderation_audit a WHERE a.circle_id=r.circle_id AND a.post_id=r.target_id AND a.occurred_at>=r.created_at ORDER BY a.new_revision DESC LIMIT 1) AS decision
+                FROM preview_circle_reports r WHERE r.id=ANY($1::uuid[])`,
+                [items.map((i) => i.id)],
+              )
+            ).rows.map((row) => [row.id, row]),
+          );
+          for (const item of items) {
+            const state = states.get(item.id);
+            item.disposition = state?.state ?? "open";
+            item.dispositionRevision = state?.revision ?? 1;
+            item.decisionRevision = item.target
+              ? (state?.decision ?? null)
+              : null;
+          }
         }
         return ready({
           items,
