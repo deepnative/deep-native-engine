@@ -55,7 +55,16 @@ export function programProblemPage(message: string, key?: string) {
 export function myCoursesPage(
   receipt: ProgramReceipt | null,
   current: ProgramOverview | null,
+  csrf?: string,
 ) {
+  // #121: a dated withdrawal from this term, separate from deleting the account.
+  const withdrawal = !receipt
+    ? ""
+    : receipt.withdrawnAt
+      ? `<p role="status">You withdrew from this term on ${timeTag(receipt.withdrawnAt)}. Your enrollment receipt and earlier activity are kept, and you can't enroll in this term again. Deleting your account is separate.</p>`
+      : csrf
+        ? `<form method="post" action="/my-courses/${receipt.id}/withdraw">${hidden("csrf", csrf)}${confirm("Withdraw from this term. My receipt and earlier activity stay, the seat isn't reopened, and I can't enroll in this term again.")}<button type="submit" class="secondary">Withdraw from this term</button></form>`
+        : "";
   return page(
     "My courses",
     `<section class="reading">${disclosure()}<h1>My courses</h1>${
@@ -69,7 +78,7 @@ export function myCoursesPage(
             })
             .join(
               "",
-            )}</ol><p><a href="/my-courses/${receipt.id}">Inspect your receipt</a> · <a href="/my-courses/${receipt.id}/download">Download private enrollment JSON</a></p>`
+            )}</ol>${withdrawal}<p><a href="/my-courses/${receipt.id}">Inspect your receipt</a> · <a href="/my-courses/${receipt.id}/download">Download private enrollment JSON</a></p>`
         : `<p>${hostingText("No local enrollment", "No simulated enrollment")} is recorded for this account. Choosing a program or signing in does not enroll you.</p>`
     }<p><a href="${PROGRAM_PATH}">${hostingText("Explore local foundation program", "Explore the foundation program")}</a> · <a href="/progress">Existing saved work and activity</a> · <a href="/account">My account</a> · <a href="/member/export">${privateRecordsLabel()}</a> · <a href="/learn">Continue learning</a></p></section>`,
   );

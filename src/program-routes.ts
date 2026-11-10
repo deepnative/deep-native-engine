@@ -283,9 +283,35 @@ export function mountProgramRoutes(
       myCoursesPage(
         result.value,
         current.kind === "ready" ? current.value : null,
+        csrf(token(res), secret),
       ),
     );
   }
+  application.post("/my-courses/:id/withdraw", async (req, res) => {
+    if (!valid(req, res, ["confirm"]) || !(await currentMember(req, res)))
+      return;
+    if (req.body.confirm !== "yes" || !programKey(req.params.id))
+      return res
+        .status(422)
+        .send(programProblemPage("Confirm the withdrawal on My courses."));
+    const result = await programs.withdraw(token(res), req.params.id);
+    if (result.kind === "ready") return res.redirect(303, "/my-courses");
+    return res
+      .status(
+        result.kind === "unavailable"
+          ? 503
+          : result.kind === "denied"
+            ? 404
+            : 409,
+      )
+      .send(
+        programProblemPage(
+          result.kind === "unavailable"
+            ? "The withdrawal response is unconfirmed. Inspect My courses before acting again; repeating it keeps the first date."
+            : "This enrollment is unavailable for your current account.",
+        ),
+      );
+  });
   application.get("/my-courses", dashboard);
   application.get("/my-courses/:id", dashboard);
   application.get("/my-courses/:id/download", async (req, res) => {

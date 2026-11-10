@@ -118,6 +118,7 @@ resource "azurerm_container_app" "app" {
           DNE_WORKFLOW_REVIEW_REQUESTS         = "enabled"
           DNE_LOCAL_SUPPORT_ASSIGNMENT         = "enabled"
           DNE_MEMBER_CONTRIBUTIONS             = "enabled"
+          DNE_ASSIGNMENT_HANDOFF               = "enabled"
         }
         content {
           name  = env.key

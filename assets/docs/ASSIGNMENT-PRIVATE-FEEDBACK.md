@@ -17,7 +17,7 @@ Each copy retains its assignment, content version, submitted sequence, rubric ve
 
 If saving cannot be confirmed, the page retains the original request. **Inspect this copy request** opens its result in another tab. Repeating the original request deliberately recovers its receipt without making another copy or granting permission. A removed source stays removed when that request is repeated. Receipt exports omit replay keys and erased source details. If the application restarts, an old form can no longer be submitted. Keep the original request reference shown on the recovery page, open **Inspect an earlier copy request**, and enter the reference in that fresh form. It is sent only in the form body; the current account must own the result. This inspection remains available with new creation disabled.
 
-`DNE_ASSIGNMENT_HANDOFF` defaults to `disabled`. Enabling it exposes new-copy controls. Turning it off blocks new handoffs while preserving owned receipt inspection, existing feedback, export and erasure. Existing arbitrary uploads and prepared examples retain their separate controls. The migration adds immutable source bindings and receipts; it does not rewrite existing member assignments or enable an external provider.
+`DNE_ASSIGNMENT_HANDOFF` defaults to `disabled`. Every Azure release sets it to `enabled` for the hosted demo (`scripts/azure-release.py` and `infra/app.tf`). Enabling it exposes new-copy controls. Turning it off blocks new handoffs while preserving owned receipt inspection, existing feedback, export and erasure. Existing arbitrary uploads and prepared examples retain their separate controls. The migration adds immutable source bindings and receipts; it does not rewrite existing member assignments or enable an external provider.
 
 ## Acceptance mapping
 
@@ -31,6 +31,7 @@ If saving cannot be confirmed, the page retains the original request. **Inspect 
 | Ownership, expiry and cross-member denial                               | AHO-04; assignment-evidence route, HTTP and native PostgreSQL lifetime tests         |
 | Bounded export and damaged bindings                                     | AHO-09; assignment-evidence integration tests, member-export tests and L214–L217     |
 | Configured creation with retained inspection during rollback            | AHO-10; runtime/configuration, route and native-restart integration tests; L217–L218 |
+| Hosted release enables creation                                         | AHO-10; repository Azure release test                                                |
 | Later versions, goal changes and retirement never migrate a copy (#125) | AEV-01; assignment-evidence-versions integration test                                |
 | IT, non-IT professional and general-learning examples (#125)            | AEV-02; assignment-evidence-versions integration test                                |
 | Fresh copy after withdrawal; feedback stays not formal (#125)           | AEV-03; assignment-evidence-versions integration test                                |

@@ -30,6 +30,8 @@ const snapshot: PreviewMetrics = {
     crossContentReturned:
       "Of returnEligible, different content during days 7 to 14.",
     reportedOutcome: "Member-reported <outcome>, not verified.",
+    enrolledInProgram: "Enrolled in the program term.",
+    withdrewFromProgram: "Withdrew from the program term.",
     usefulness: "Self-report, with small groups suppressed.",
     segments: "Segments can overlap.",
     cohorts: "Cohort windows are fixed.",
@@ -48,6 +50,8 @@ const snapshot: PreviewMetrics = {
     returnEligible: 20,
     crossContentReturned: 6,
     reportedOutcome: 8,
+    enrolledInProgram: 8,
+    withdrewFromProgram: 8,
   }),
   segments: learningSegments(
     {
@@ -62,6 +66,8 @@ const snapshot: PreviewMetrics = {
           returnEligible: 5,
           crossContentReturned: 0,
           reportedOutcome: 0,
+          enrolledInProgram: 0,
+          withdrewFromProgram: 0,
         },
       },
     },
@@ -94,6 +100,8 @@ it("MR-01 renders every count with its meaning, denominator, timestamp and separ
     returnEligible: "20-49",
     crossContentReturned: "5-19",
     reportedOutcome: "5-19",
+    enrolledInProgram: "5-19",
+    withdrewFromProgram: "5-19",
   }))
     expect(html).toContain(`data-metric="${name}">${value}</strong>`);
   // #123 OUTCOME: labelled member-reported, never as verified.

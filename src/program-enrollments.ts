@@ -192,11 +192,13 @@ export function programEnrollmentStore(
       await ctx.tx.query<{
         id: string;
         enrolled: Date;
+        withdrawn: Date | null;
         snapshot: unknown;
         digest: string;
       }>(
-        `SELECT e.id,e.enrolled_at AS enrolled,t.snapshot,t.digest
+        `SELECT e.id,e.enrolled_at AS enrolled,w.withdrawn_at AS withdrawn,t.snapshot,t.digest
          FROM local_program_enrollments e JOIN local_program_terms t ON t.id=e.term_id
+         LEFT JOIN local_program_withdrawals w ON w.enrollment_id=e.id
          WHERE e.workspace_id=$1 AND ($2::uuid IS NULL OR e.idempotency_key=$2)`,
         [ctx.workspaceId, key ?? null],
       )
@@ -207,6 +209,7 @@ export function programEnrollmentStore(
     if (
       !(row.enrolled instanceof Date) ||
       !Number.isFinite(+row.enrolled) ||
+      (row.withdrawn != null && !(row.withdrawn instanceof Date)) ||
       !isDeepStrictEqual(row.snapshot, PROGRAM_MANIFEST) ||
       row.digest !== PROGRAM_DIGEST
     )
@@ -228,6 +231,7 @@ export function programEnrollmentStore(
     return {
       id: row.id,
       enrolledAt: row.enrolled.toISOString(),
+      withdrawnAt: row.withdrawn ? row.withdrawn.toISOString() : null,
       manifest: structuredClone(PROGRAM_MANIFEST),
       digest: row.digest,
       activity,
@@ -326,6 +330,29 @@ export function programEnrollmentStore(
         kind: "ready",
         value: await receipt(ctx),
       }));
+    },
+    withdraw(token, enrollmentId) {
+      if (!programKey(enrollmentId))
+        return Promise.resolve({ kind: "invalid" });
+      return run<ProgramReceipt>(token, false, async (ctx) => {
+        const own = (
+          await ctx.tx.query<{ id: string }>(
+            "SELECT id FROM local_program_enrollments WHERE id=$1 AND workspace_id=$2 FOR UPDATE",
+            [enrollmentId, ctx.workspaceId],
+          )
+        ).rows[0];
+        if (!own) return { kind: "denied" };
+        await ctx.tx.observe([ctx.expires]);
+        // Repeating a withdrawal keeps the first date.
+        await ctx.tx.query(
+          `INSERT INTO local_program_withdrawals(enrollment_id,workspace_id)
+           VALUES($1,$2) ON CONFLICT(enrollment_id) DO NOTHING`,
+          [enrollmentId, ctx.workspaceId],
+        );
+        const saved = await receipt(ctx);
+        if (!saved?.withdrawnAt) throw unavailable();
+        return { kind: "ready", value: saved };
+      });
     },
     inspect(token, key) {
       if (!programKey(key)) return Promise.resolve({ kind: "invalid" });

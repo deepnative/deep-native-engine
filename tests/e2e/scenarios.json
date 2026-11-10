@@ -2991,6 +2991,15 @@
       "expected": "Open at revision 1, then a local second look at revision 2 with no assignee or promise, then closed at revision 3 against the recorded decision; no further actions offered; the download has only category, disposition, revision and structured actions with no body or identities; the record survives leaving; account deletion removes it and a stale download has no attachment",
       "issues": [196],
       "critical": true
+    },
+    {
+      "id": "L336",
+      "actor": "Non-IT professional (professional/work) and platform administrator",
+      "preconditions": "Owned isolated invented-data database with the reviewed foundation published and the local term opened by a finite administrator; desktop/mobile Chromium",
+      "steps": "PROGWD-01..03: the member chooses the program, creates an account, confirms enrollment, then on My courses confirms Withdraw from this term, reloads and downloads the enrollment JSON",
+      "expected": "The withdrawal is dated and shown on My courses; no second withdrawal is offered; the receipt and its download remain and carry the withdrawal date; nothing about the account is deleted",
+      "issues": [121],
+      "critical": true
     }
   ],
   "fullMvp": [
