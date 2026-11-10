@@ -186,6 +186,7 @@ const sections = {
     `id,subject,body,received_at AS "receivedAt",
     acknowledged_at AS "acknowledgedAt",resolved_at AS "resolvedAt",
     withdrawn_at AS "withdrawnAt",coverage_state AS "coverageState",
+    coverage_reviewed_at AS "coverageReviewedAt",
     CASE WHEN withdrawn_at IS NOT NULL THEN 'withdrawn'
       WHEN resolved_at IS NOT NULL THEN 'resolved' ELSE 'open' END AS state`,
     "support_requests WHERE member_id=$1",

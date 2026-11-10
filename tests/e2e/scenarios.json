@@ -2955,6 +2955,15 @@
       "expected": "The invoice is from Deep Native Inc. with HST registration 713254472RT0001, CAD 1,200.00 plus CAD 156.00 HST, the e-Transfer/cheque instructions and the terms version and period; the student sees CAD 1356.00 due and then Paid; the coaching page shows the version invoiced with no second form",
       "issues": [318],
       "critical": false
+    },
+    {
+      "id": "L332",
+      "actor": "Member and platform administrator",
+      "preconditions": "Dedicated synthetic PostgreSQL database dropped afterwards, local staff entry and support assignment enabled, seeded administrator email verified through the owned loopback mail capture, invented request text; desktop/mobile Chromium",
+      "steps": "SUPCOV-01/02/03: a member sends a private support request; the administrator answers it themselves from the content-free inbox, opens it and deliberately marks it outside current support; the member reloads the receipt; the administrator reopens the inbox; the member withdraws the request text",
+      "expected": "The record is offered once and is neither an acknowledgement nor a resolution; the member sees it with no booking, price, entitlement or completion promise; the inbox shows it as metadata without request text; withdrawal removes the text and keeps the content-free record",
+      "issues": [195],
+      "critical": true
     }
   ],
   "fullMvp": [
