@@ -17,7 +17,7 @@ export const BACKUP_EXPIRY =
   "Copies in service backups are kept for up to 30 days, then they expire.";
 // A false total-erasure claim, in any of the ways it could be worded.
 export const TOTAL_ERASURE =
-  /all (of )?your (data|records|information)|everything (was|is|has been) (deleted|erased|removed)|permanently (deleted|erased)|nothing (is|was) kept/i;
+  /all (of )?your (data|records|information)|(?<!not )everything (was|is|has been) (deleted|erased|removed)|permanently (deleted|erased)|nothing (is|was) kept/i;
 // RETAIN-01: the only fields an issued invoice document may hold.
 const INVOICE_FIELDS = new Set([
   "number",
