@@ -50,6 +50,7 @@ type BillingChangeAction =
   | "rate_set"
   | "hours_returned"
   | "coaching_invoice_issued"
+  | "terms_invoice_issued"
   | "monthly_invoice_issued"
   | "payment_recorded"
   | "payment_refunded"
@@ -120,6 +121,18 @@ const decodeInvoice = (row: StoredInvoice): StoredInvoice => ({
     ...(row.voidReason ? { voidReason: row.voidReason } : {}),
   },
 });
+/** TERMSINV318: the student's current terms, saved recipient and live invoice. */
+export interface CoachingTermsInvoiceView {
+  terms: {
+    id: string;
+    version: number;
+    priceCents: number;
+    startsOn: string;
+    endsOn: string;
+  } | null;
+  recipient: { name: string; email: string; company: string | null } | null;
+  invoiceId: string | null;
+}
 export type CoachingStatus =
   "not_started" | "draft" | "returned" | "submitted" | "invoiced" | "voided";
 /** Calendar arithmetic on YYYY-MM strings. */
@@ -426,6 +439,20 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           ).rows[0]?.snapshot ?? null);
     return { ...row, snapshot };
   }
+  const currentTerms = async (tx: PracticeTransaction, ownerId: string) =>
+    (
+      await tx.query<CoachingTermsInvoiceView["terms"] & {}>(
+        `SELECT id,version,price_cents AS "priceCents",to_char(starts_on,'YYYY-MM-DD') AS "startsOn",to_char(ends_on,'YYYY-MM-DD') AS "endsOn" FROM coaching_terms WHERE owner_id=$1 ORDER BY version DESC LIMIT 1`,
+        [ownerId],
+      )
+    ).rows[0] ?? null;
+  const recipient = async (tx: PracticeTransaction, ownerId: string) =>
+    (
+      await tx.query<{ name: string; email: string; company: string | null }>(
+        "SELECT name,email,company FROM billing_profiles WHERE owner_id=$1",
+        [ownerId],
+      )
+    ).rows[0] ?? null;
   return {
     async coachingOverview(token: string, month?: string, ownerId?: string) {
       if (
@@ -869,6 +896,141 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         await logChange(tx, actor, "coaching_invoice_issued", {
           memberId: input.ownerId,
           month: input.month,
+          amountCents: total,
+        });
+        return remember(tx, actor, input.operationId, digest, { invoiceId });
+      });
+    },
+    /** TERMSINV318-01/03: what the terms-invoice form needs for one student. */
+    async coachingTermsInvoice(
+      token: string,
+      ownerId: string,
+    ): Promise<InvoiceResult<CoachingTermsInvoiceView>> {
+      if (!invoiceUuid(ownerId)) return fail("invalid");
+      return run(token, true, async (tx) => {
+        await owner(tx, ownerId, true);
+        const terms = await currentTerms(tx, ownerId);
+        return {
+          kind: "ready",
+          value: {
+            terms,
+            recipient: await recipient(tx, ownerId),
+            invoiceId: terms
+              ? ((
+                  await tx.query<{ id: string }>(
+                    "SELECT id FROM simple_invoices WHERE coaching_terms_id=$1 AND void_reason IS NULL",
+                    [terms.id],
+                  )
+                ).rows[0]?.id ?? null)
+              : null,
+          },
+        };
+      });
+    },
+    /**
+     * TERMSINV318-01..06: one invoice for the student's current coaching-terms
+     * version, to their saved billing recipient. Configured invoices compute
+     * HST; sample mode takes an invented tax. Payment is recorded offline with
+     * the existing `pay`.
+     */
+    async issueCoachingTerms(
+      token: string,
+      input: {
+        ownerId: string;
+        version: number;
+        /** Sample mode only: configured invoices compute HST. */
+        taxCents?: number;
+        operationId: string;
+      },
+    ): Promise<InvoiceResult<{ invoiceId: string }>> {
+      if (
+        !input ||
+        !invoiceUuid(input.ownerId) ||
+        !Number.isSafeInteger(input.version) ||
+        input.version < 1 ||
+        (settings.tax
+          ? input.taxCents !== undefined
+          : !invoiceCents(input.taxCents)) ||
+        !invoiceUuid(input.operationId)
+      )
+        return fail("invalid");
+      return run(token, true, async (tx, actor) => {
+        await owner(tx, input.ownerId, true);
+        const digest = invoiceDigest({ action: "terms-invoice", input }),
+          previous = await replay<{ invoiceId: string }>(
+            tx,
+            actor,
+            input.operationId,
+            digest,
+          );
+        if (previous) return previous;
+        await tx.query(
+          "SELECT pg_advisory_xact_lock(hashtext('coaching_terms:' || $1))",
+          [input.ownerId],
+        );
+        const terms = await currentTerms(tx, input.ownerId);
+        if (!terms) return fail("not-found");
+        const to = await recipient(tx, input.ownerId);
+        if (terms.version !== input.version || !to) return fail("conflict");
+        const taxCents = settings.tax
+            ? salesTaxCents(terms.priceCents, settings.tax)
+            : input.taxCents!,
+          total = terms.priceCents + taxCents;
+        if (
+          !invoiceCents(total) ||
+          !invoiceText(settings.issuer, 500) ||
+          !invoiceText(settings.instructions, 2000)
+        )
+          return fail("invalid");
+        if (
+          (
+            await tx.query(
+              "SELECT id FROM simple_invoices WHERE coaching_terms_id=$1 AND void_reason IS NULL FOR UPDATE",
+              [terms.id],
+            )
+          ).rowCount
+        )
+          return fail("conflict");
+        const invoiceId = randomUUID();
+        const document: SimpleInvoiceDocument & { recipientEmail: string } = {
+          number: `DN-${invoiceId}`,
+          issuedOn: await utcToday(tx),
+          issuer: settings.issuer,
+          billedTo: to.name,
+          ...(to.company ? { billedToCompany: to.company } : {}),
+          recipientEmail: to.email,
+          lines: [
+            {
+              description: `Coaching · ${terms.startsOn} to ${terms.endsOn} · terms version ${terms.version}`,
+              amountCents: terms.priceCents,
+            },
+          ],
+          billing: { kind: "one_time" },
+          currency: "CAD",
+          taxCents,
+          paidCents: 0,
+          instructions: settings.instructions,
+          sample: settings.sample,
+          ...(settings.tax ? { tax: settings.tax } : {}),
+          coachingTerms: {
+            version: terms.version,
+            startsOn: terms.startsOn,
+            endsOn: terms.endsOn,
+          },
+        };
+        await tx.query(
+          "INSERT INTO simple_invoices(id,owner_id,cycle,document,sample,total_cents,coaching_terms_id) VALUES($1,$2,0,$3,$4,$5,$6)",
+          [
+            invoiceId,
+            input.ownerId,
+            JSON.stringify(document),
+            settings.sample,
+            total,
+            terms.id,
+          ],
+        );
+        await logChange(tx, actor, "terms_invoice_issued", {
+          memberId: input.ownerId,
           amountCents: total,
         });
         return remember(tx, actor, input.operationId, digest, { invoiceId });

@@ -3,6 +3,7 @@ import request from "supertest";
 import type { Pool } from "pg";
 import { beforeEach, expect, it, vi } from "vitest";
 import {
+  adminTermsInvoiceSection,
   adminTermsSection,
   coachingTermsStore,
   memberTermsSection,
@@ -309,6 +310,11 @@ function routes(terms?: Partial<CoachingTermsStore>) {
     coachingOverview: vi
       .fn()
       .mockResolvedValue({ kind: "ready", value: overview }),
+    // #318: the terms-invoice section reads the current version and recipient.
+    coachingTermsInvoice: vi.fn().mockResolvedValue({
+      kind: "ready",
+      value: { terms: null, recipient: null, invoiceId: null },
+    }),
   };
   mountCoachingRoutes(app, invoices as unknown as SimpleInvoiceStore, {
     origin,
@@ -383,4 +389,76 @@ it("TERMS316-01/05/06 routes show the sections, save through the store and map e
   expect((await off.get("/account/coaching")).text).not.toContain(
     "Your coaching terms",
   );
+});
+
+it("TERMSINV318-07 the terms-invoice section explains each state and only offers the form when it can be issued", () => {
+  const terms = {
+      id: "22222222-2222-4222-8222-222222222222",
+      version: 2,
+      priceCents: 120000,
+      startsOn: "2026-12-01",
+      endsOn: "2027-05-31",
+    },
+    recipient = {
+      name: "Invented <Student>",
+      email: "s@example.test",
+      company: null,
+    },
+    hst = {
+      label: "HST" as const,
+      registration: "713254472RT0001",
+      rateBasisPoints: 1300,
+    };
+  const none = adminTermsInvoiceSection(
+    { terms: null, recipient, invoiceId: null },
+    "/a",
+    "",
+    hst,
+    false,
+  );
+  expect(text(none)).toContain("Set coaching terms first.");
+  expect(none).not.toContain("<form");
+  const noRecipient = adminTermsInvoiceSection(
+    { terms, recipient: null, invoiceId: null },
+    "/a",
+    "",
+    hst,
+    false,
+  );
+  expect(text(noRecipient)).toContain("hasn't saved a billing recipient yet");
+  expect(noRecipient).not.toContain("<form");
+  const done = adminTermsInvoiceSection(
+    { terms, recipient, invoiceId: "33333333-3333-4333-8333-333333333333" },
+    "/a",
+    "",
+    hst,
+    false,
+  );
+  expect(done).toContain(
+    'href="/operator/invoices/33333333-3333-4333-8333-333333333333"',
+  );
+  expect(done).not.toContain("<form");
+  const ready = adminTermsInvoiceSection(
+    { terms, recipient, invoiceId: null },
+    "/a",
+    "<x>",
+    hst,
+    false,
+  );
+  expect(text(ready)).toContain(
+    "Issue an invoice for terms version 2: CAD 1,200.00 plus HST (13%) CAD 156.00, total CAD 1,356.00, to Invented &lt;Student&gt; · s@example.test.",
+  );
+  expect(ready).toContain('<form method="post" action="/a"><x>');
+  expect(ready).not.toContain('name="tax"');
+  const sample = adminTermsInvoiceSection(
+    { terms, recipient, invoiceId: null },
+    "/a",
+    "",
+    undefined,
+    true,
+  );
+  expect(sample).toContain(
+    'name="tax" inputmode="decimal" value="0.00" required',
+  );
+  expect(text(sample)).toContain("SAMPLE · NOT PAYABLE.");
 });

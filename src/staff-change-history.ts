@@ -132,6 +132,7 @@ export function changeText(entry: ChangeEntry) {
     "billing:rate_set": `set the coaching rate for ${person} to${money(entry.amountCents).replace(" of", "")} per hour from ${month}`,
     "billing:hours_returned": `returned the coaching hours for ${person} for ${month}`,
     "billing:coaching_invoice_issued": `issued ${person} a coaching invoice${money(entry.amountCents)} for ${month}`,
+    "billing:terms_invoice_issued": `issued ${person} an invoice for their coaching terms${money(entry.amountCents)}`,
     "billing:monthly_invoice_issued": `issued ${person} a monthly invoice${money(entry.amountCents)}`,
     "billing:payment_recorded": `recorded a payment${money(entry.amountCents)} from ${person}`,
     "billing:payment_refunded": `recorded a refund${money(entry.amountCents)} to ${person}`,
