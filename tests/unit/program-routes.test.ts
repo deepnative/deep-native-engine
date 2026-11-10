@@ -41,6 +41,7 @@ async function fixture(coachingTerms?: Pick<CoachingTermsStore, "own">) {
   const receipt: ProgramReceipt = {
     id,
     enrolledAt: "2026-10-29T09:00:00.000Z",
+    withdrawnAt: null,
     manifest: structuredClone(PROGRAM_MANIFEST),
     digest: PROGRAM_DIGEST,
     activity: [],
@@ -64,6 +65,12 @@ async function fixture(coachingTerms?: Pick<CoachingTermsStore, "own">) {
     change: vi
       .fn<() => Promise<ProgramResult<ProgramOverview>>>()
       .mockResolvedValue({ kind: "ready", value: overview }),
+    withdraw: vi
+      .fn<() => Promise<ProgramResult<ProgramReceipt>>>()
+      .mockResolvedValue({
+        kind: "ready",
+        value: { ...receipt, withdrawnAt: "2026-11-10T12:00:00.000Z" },
+      }),
   };
   const session = vi.fn().mockResolvedValue({ kind: "active" });
   const app = express();
@@ -445,6 +452,76 @@ it("PROGRAM-03/15 refuses missing bodies, unrelated admin queries and expired wr
   });
 });
 
+it("#121 PROGWD-01 offers a confirmed withdrawal on My courses and shows its date afterwards", async () => {
+  const f = await fixture();
+  f.reads.mine.mockResolvedValue({ kind: "ready", value: f.receipt });
+  await withLoopback(f.app, async (server) => {
+    const page = await request(server).get("/my-courses").expect(200);
+    expect(page.text).toContain(
+      `action="/my-courses/${f.receipt.id}/withdraw"`,
+    );
+    expect(page.text).toContain("Withdraw from this term");
+    expect(page.text).toContain('name="csrf"');
+    const done = await request(server)
+      .post(`/my-courses/${f.receipt.id}/withdraw`)
+      .type("form")
+      .send({ confirm: "yes" })
+      .expect(303);
+    expect(done.headers.location).toBe("/my-courses");
+    f.reads.mine.mockResolvedValue({
+      kind: "ready",
+      value: { ...f.receipt, withdrawnAt: "2026-11-10T12:00:00.000Z" },
+    });
+    const after = await request(server).get("/my-courses").expect(200);
+    expect(after.text).toContain("You withdrew from this term on");
+    expect(after.text).not.toContain("Withdraw from this term</button>");
+    const download = await request(server)
+      .get(`/my-courses/${f.receipt.id}/download`)
+      .expect(200);
+    expect(download.body.enrollment.withdrawnAt).toBe(
+      "2026-11-10T12:00:00.000Z",
+    );
+  });
+  expect(f.reads.withdraw).toHaveBeenCalledWith(bearer, f.receipt.id);
+});
+it("#121 PROGWD-02 refuses unconfirmed or malformed withdrawals and maps store results", async () => {
+  const f = await fixture();
+  await withLoopback(f.app, async (server) => {
+    const url = `/my-courses/${f.receipt.id}/withdraw`;
+    await request(server).post(url).type("form").send({}).expect(422);
+    await request(server)
+      .post("/my-courses/bad/withdraw")
+      .type("form")
+      .send({ confirm: "yes" })
+      .expect(422);
+    await request(server)
+      .post(url)
+      .type("form")
+      .send({ confirm: "yes", extra: "x" })
+      .expect(400);
+    expect(f.reads.withdraw).not.toHaveBeenCalled();
+    for (const [kind, status] of [
+      ["denied", 404],
+      ["unavailable", 503],
+      ["invalid", 409],
+    ] as const) {
+      f.reads.withdraw.mockResolvedValue({ kind });
+      const r = await request(server)
+        .post(url)
+        .type("form")
+        .send({ confirm: "yes" })
+        .expect(status);
+      if (kind === "unavailable")
+        expect(r.text).toContain("keeps the first date");
+    }
+    f.session.mockResolvedValue({ kind: "expired" });
+    await request(server)
+      .post(url)
+      .type("form")
+      .send({ confirm: "yes" })
+      .expect(401);
+  });
+});
 const terms: CoachingTerms = {
   version: 2,
   savedAt: new Date("2026-11-01T12:00:00Z"),

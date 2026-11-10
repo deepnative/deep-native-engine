@@ -25,6 +25,8 @@ it("returns only defined synthetic aggregates to an authorized operator", async 
         returnEligible: 30,
         crossContentReturned: 10,
         reportedOutcome: 5,
+        enrolledInProgram: 5,
+        withdrewFromProgram: 5,
         segments: {
           background: {
             explorer: {
@@ -37,6 +39,8 @@ it("returns only defined synthetic aggregates to an authorized operator", async 
               returnEligible: 5,
               crossContentReturned: 0,
               reportedOutcome: 0,
+              enrolledInProgram: 0,
+              withdrewFromProgram: 0,
             },
           },
         },

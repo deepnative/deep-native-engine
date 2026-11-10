@@ -8,6 +8,7 @@ import {
   supportTextValid,
 } from "../../src/support-requests.ts";
 import { testPool } from "../support/database.ts";
+import { memberExportStore } from "../../src/member-export.ts";
 const pool = testPool(),
   db = store(pool),
   auth = authorizationStore(pool);
@@ -170,6 +171,7 @@ it("receives exact invented text across all backgrounds with stable owner-only r
         acknowledgedAt: null,
         resolvedAt: null,
         coverageState: "unverified",
+        coverageReviewedAt: null,
         replies: { items: [], nextCursor: null },
       },
     });
@@ -322,6 +324,117 @@ it("acknowledges independently, resolves without implied satisfaction and enforc
         ])
       ).rows,
     ).toEqual([]);
+});
+it("#195 AC3 records outside current support once, with no entitlement, and keeps it after resolution", async () => {
+  const f = await fixture(),
+    key = randomUUID();
+  const grantsBefore = (
+    await pool.query("SELECT id FROM support_request_grants ORDER BY id")
+  ).rows;
+  const reviewed = await support.reviewCoverage(f.operator, f.scope, key);
+  expect(reviewed.kind).toBe("applied");
+  expect(await support.reviewCoverage(f.operator, f.scope, key)).toMatchObject({
+    ...reviewed,
+    kind: "replayed",
+  });
+  expect(
+    await support.reviewCoverage(f.operator, f.scope, randomUUID()),
+  ).toEqual({ kind: "conflict" });
+  // A different staff member without an exact grant is denied.
+  expect(await support.reviewCoverage(f.admin, f.scope, randomUUID())).toEqual({
+    kind: "denied",
+  });
+  const row = (
+    await pool.query(
+      `SELECT coverage_state,coverage_reviewed_by,coverage_reviewed_at,acknowledged_at,resolved_at FROM support_requests WHERE id=$1`,
+      [f.requestId],
+    )
+  ).rows[0];
+  expect(row).toMatchObject({
+    coverage_state: "outside-current-support",
+    coverage_reviewed_by: f.operatorId,
+    coverage_reviewed_at: expect.any(Date),
+    acknowledged_at: null,
+    resolved_at: null,
+  });
+  expect(
+    (
+      await pool.query(
+        `SELECT actor_id,grant_id,message_id FROM support_request_events WHERE request_id=$1 AND action='coverage-reviewed'`,
+        [f.requestId],
+      )
+    ).rows,
+  ).toEqual([
+    { actor_id: f.operatorId, grant_id: f.scope.grantId, message_id: null },
+  ]);
+  // No grant, allocation or other entitlement follows from the record.
+  expect(
+    (await pool.query("SELECT id FROM support_request_grants ORDER BY id"))
+      .rows,
+  ).toEqual(grantsBefore);
+  expect(
+    (
+      await pool.query(
+        "SELECT count(*)::int AS n FROM support_time_allocations WHERE request_id=$1",
+        [f.requestId],
+      )
+    ).rows[0].n,
+  ).toBe(0);
+  const detail = await support.memberDetail(f.owner.token, f.requestId);
+  expect(detail).toMatchObject({
+    kind: "ready",
+    value: {
+      coverageState: "outside-current-support",
+      coverageReviewedAt: row.coverage_reviewed_at,
+      acknowledgedAt: null,
+      resolvedAt: null,
+    },
+  });
+  expect(await support.operatorDetail(f.operator, f.scope)).toMatchObject({
+    kind: "ready",
+    value: {
+      operatorContext: {
+        allowedActions: ["acknowledge", "note", "reply", "resolve"],
+      },
+    },
+  });
+  const exported = await memberExportStore(pool, secret).exportOwned(
+    f.owner.token,
+  );
+  expect(exported).toMatchObject({
+    kind: "ready",
+    payload: {
+      records: {
+        supportRequests: [
+          {
+            coverageState: "outside-current-support",
+            coverageReviewedAt: row.coverage_reviewed_at,
+            state: "open",
+          },
+        ],
+      },
+    },
+  });
+  expect(JSON.stringify(exported)).not.toContain(f.operatorId);
+  // Set once: the reviewer and time can't be rewritten while still open.
+  await expect(
+    pool.query(
+      `UPDATE support_requests SET coverage_reviewed_at=clock_timestamp() WHERE id=$1`,
+      [f.requestId],
+    ),
+  ).rejects.toThrow("Support request history is immutable");
+  expect((await support.resolve(f.operator, f.scope, randomUUID())).kind).toBe(
+    "applied",
+  );
+  expect(
+    await support.reviewCoverage(f.operator, f.scope, randomUUID()),
+  ).toEqual({ kind: "conflict" });
+  await expect(
+    pool.query(
+      `UPDATE support_requests SET coverage_state='unverified',coverage_reviewed_by=NULL,coverage_reviewed_at=NULL WHERE id=$1`,
+      [f.requestId],
+    ),
+  ).rejects.toThrow("Support request history is immutable");
 });
 it("denies resolved intake retries but retains the owner-only receipt for uncertain outcomes", async () => {
   const f = await fixture();
@@ -607,13 +720,23 @@ it("guards immutable request/grant/message/audit history while permitting privac
     "received_at=clock_timestamp()",
     "intake_key=gen_random_uuid()",
     "acknowledged_at=NULL,acknowledged_by=NULL",
-    "coverage_state='verified'",
   ])
     await expect(
       pool.query(`UPDATE support_requests SET ${assignment} WHERE id=$1`, [
         f.requestId,
       ]),
     ).rejects.toThrow("immutable");
+  // #195: coverage may move only to a reviewed state with its reviewer and time.
+  for (const assignment of [
+    "coverage_state='verified'",
+    "coverage_state='outside-current-support'",
+    "coverage_reviewed_at=clock_timestamp()",
+  ])
+    await expect(
+      pool.query(`UPDATE support_requests SET ${assignment} WHERE id=$1`, [
+        f.requestId,
+      ]),
+    ).rejects.toThrow(/support_requests_coverage_(state|review)_check/);
   for (const assignment of [
     "purpose='other'",
     "starts_at=clock_timestamp()",

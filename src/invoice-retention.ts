@@ -4,7 +4,7 @@ import type { Pool } from "pg";
 // advice). After an account is deleted, its issued invoices and their payment
 // records are kept until 31 December six years after the invoice's tax year
 // (Deep Native Inc.'s tax year ends on 31 December), then removed
-// automatically. Migration 133 enforces the date; this module finds what is due.
+// automatically. Migration 136 enforces the date; this module finds what is due.
 
 /** How often the running service looks for kept invoices past their date. */
 export const RETENTION_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;

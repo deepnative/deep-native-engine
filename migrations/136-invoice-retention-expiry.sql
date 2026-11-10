@@ -65,5 +65,5 @@ CREATE TRIGGER invoice_retention_removal_immutable BEFORE UPDATE OR DELETE ON si
 CREATE INDEX IF NOT EXISTS simple_invoices_retained_unlinked ON simple_invoices(created_at)
  WHERE owner_id IS NULL AND NOT sample;
 
-INSERT INTO schema_migrations(version) VALUES(133) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(136) ON CONFLICT DO NOTHING;
 COMMIT;

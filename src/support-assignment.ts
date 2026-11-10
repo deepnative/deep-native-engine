@@ -66,6 +66,7 @@ export interface SupportIntakeSummary {
   acknowledgedAt: Date | null;
   resolvedAt: Date | null;
   withdrawnAt: Date | null;
+  coverageReviewedAt: Date | null;
 }
 export interface SupportIntakeInbox {
   items: SupportIntakeSummary[];
@@ -416,7 +417,8 @@ export function supportAssignmentStore(
         const locked = (
           await ctx.tx.query<RequestMeta & SupportIntakeSummary>(
             `SELECT id AS "requestId",member_id AS "memberId",workspace_id AS "workspaceId",received_at AS "receivedAt",
-             acknowledged_at AS "acknowledgedAt",resolved_at AS "resolvedAt",withdrawn_at AS "withdrawnAt"
+             acknowledged_at AS "acknowledgedAt",resolved_at AS "resolvedAt",withdrawn_at AS "withdrawnAt",
+             coverage_reviewed_at AS "coverageReviewedAt"
            FROM support_requests WHERE id=ANY($1::uuid[]) ORDER BY id FOR SHARE`,
             [candidates.map((r) => r.requestId).sort()],
           )
@@ -440,6 +442,7 @@ export function supportAssignmentStore(
             acknowledgedAt: row.acknowledgedAt,
             resolvedAt: row.resolvedAt,
             withdrawnAt: row.withdrawnAt,
+            coverageReviewedAt: row.coverageReviewedAt,
           };
         });
         const last = candidates[19];
