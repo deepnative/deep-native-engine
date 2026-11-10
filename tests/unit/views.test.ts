@@ -157,6 +157,8 @@ it("keeps older completed exercise versions withdrawable after a source change",
     ],
   );
   expect(html).toContain("Earlier starter exercise · version 2");
+  // #543: a fragment link to the record moves focus there, not to <body>.
+  expect(html).toContain('<li id="starter-version-2-work" tabindex="-1">');
   expect(html).toContain('action="/exercise/clear-instructions/2/withdraw"');
   expect(html).toContain("Older invented instruction");
   const withdrawn = lesson(
@@ -2252,6 +2254,9 @@ it("labels legacy and withdrawn exact history without editable forms or inferred
     goalAtStart: null,
   };
   const draft = starterRecordPage(row, "csrf");
+  expect(draft).toContain(
+    '<section class="reading" id="starter-version-1-unattributed" tabindex="-1">',
+  );
   expect(draft).toContain("Unattributed historical goal");
   expect(draft).toContain("Draft saved; not completed");
   expect(draft).not.toContain('action="/exercise"');
