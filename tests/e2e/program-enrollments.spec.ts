@@ -221,7 +221,10 @@ for (const [index, [background, goal]] of audiences.entries()) {
         "enrolledAt",
         "id",
         "manifest",
+        "withdrawnAt",
       ]);
+      // #121: no withdrawal was made in this journey.
+      expect(payload.enrollment.withdrawnAt).toBeNull();
       await expect(returning.locator("body")).toBeVisible();
       expect(
         await returning.evaluate(

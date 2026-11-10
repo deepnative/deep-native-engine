@@ -2955,6 +2955,15 @@
       "expected": "The invoice is from Deep Native Inc. with HST registration 713254472RT0001, CAD 1,200.00 plus CAD 156.00 HST, the e-Transfer/cheque instructions and the terms version and period; the student sees CAD 1356.00 due and then Paid; the coaching page shows the version invoiced with no second form",
       "issues": [318],
       "critical": false
+    },
+    {
+      "id": "L336",
+      "actor": "Non-IT professional (professional/work) and platform administrator",
+      "preconditions": "Owned isolated invented-data database with the reviewed foundation published and the local term opened by a finite administrator; desktop/mobile Chromium",
+      "steps": "PROGWD-01..03: the member chooses the program, creates an account, confirms enrollment, then on My courses confirms Withdraw from this term, reloads and downloads the enrollment JSON",
+      "expected": "The withdrawal is dated and shown on My courses; no second withdrawal is offered; the receipt and its download remain and carry the withdrawal date; nothing about the account is deleted",
+      "issues": [121],
+      "critical": true
     }
   ],
   "fullMvp": [

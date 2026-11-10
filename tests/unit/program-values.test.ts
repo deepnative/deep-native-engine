@@ -47,6 +47,7 @@ it("PROGRAM-05 whitelists enrollment exports even if a future store adds interna
   const receipt = {
     id: "10aba371-5534-468f-9a8b-e6fa1ea406b1",
     enrolledAt: "2026-10-29T09:00:00.000Z",
+    withdrawnAt: null,
     digest: PROGRAM_DIGEST,
     manifest: { ...PROGRAM_MANIFEST, privateStaff: "not-public" },
     activity: [
