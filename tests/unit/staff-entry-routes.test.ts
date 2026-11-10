@@ -16,7 +16,10 @@ let server: Server;
 afterEach(async () => {
   if (server) await closeLoopback(server);
 });
-function fixture(invoices = false) {
+function fixture(
+  invoices = false,
+  extra: Partial<Parameters<typeof app>[1]> = {},
+) {
   const create = vi.fn(),
     session = vi.fn().mockResolvedValue({ kind: "missing" });
   const staffList = vi.fn().mockResolvedValue([]);
@@ -41,6 +44,7 @@ function fixture(invoices = false) {
       read: vi.fn().mockResolvedValue({ paused: false }),
       set,
     },
+    ...extra,
   };
   return {
     application: app({ create, session } as unknown as Store, options),
@@ -153,4 +157,43 @@ it("ADMIN-LAYOUT-01 staff tools render as a titled button list with grouped sess
     ["/staff/sign-in", "Open staff sign-in"],
     ["/learn", "Your learning space"],
   ]);
+});
+
+it("HOLDCANCEL-NAV-01/02 links Staff sample holds for operators and administrators only", async () => {
+  const holds = { list: vi.fn(), cancel: vi.fn() };
+  const link = 'href="/operator/sample-holds"';
+  let opened: Server | undefined;
+  const open = async (
+    role: string,
+    extra: Partial<Parameters<typeof app>[1]>,
+  ) => {
+    const f = fixture(false, extra);
+    f.admit.mockResolvedValue({
+      kind: "ready",
+      role,
+      deadline: performance.now() + 60000,
+      expiresAt: new Date(Date.now() + 60000),
+    });
+    // One server at a time; afterEach closes the last one.
+    if (opened) await closeLoopback(opened);
+    opened = server = await listenLoopback(f.application);
+    return (
+      await request(server)
+        .get("/staff")
+        .set("Host", host)
+        .set("Cookie", `dne_staff=${staff}`)
+        .expect(200)
+    ).text;
+  };
+  for (const role of ["operator", "platform_admin"]) {
+    const html = await open(role, { sampleHoldCancellations: holds });
+    expect(html).toContain(link);
+    expect(html).toContain(">Staff sample holds</a>");
+    // Not configured here: no link to a page that can only refuse.
+    expect(await open(role, {})).not.toContain(link);
+  }
+  for (const role of ["coach", "reviewer", "moderator", "editor"])
+    expect(await open(role, { sampleHoldCancellations: holds })).not.toContain(
+      link,
+    );
 });

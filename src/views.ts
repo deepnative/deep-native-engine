@@ -532,7 +532,17 @@ export function proposalEditRecoveryPage(
   attempted: ProposalEditFields,
   revision?: number,
   outcomeUnknown = false,
+  // WFB-LABEL (#115): the proposal's own origin when the caller could read
+  // it, so the wording matches its preview page. Otherwise the site's.
+  origin?: "sample" | "member",
 ) {
+  const ordinary = origin ? origin === "member" : memberContributionsOn();
+  const kind =
+    origin === "member"
+      ? "PRIVATE CONTRIBUTION"
+      : ordinary
+        ? "PRIVATE PROPOSAL"
+        : "PRIVATE SAMPLE";
   const bounded = {
     title: attempted.title.slice(0, 160),
     body: attempted.body.slice(0, 4000),
@@ -546,7 +556,7 @@ export function proposalEditRecoveryPage(
     : "CORRECTIONS NOT SAVED";
   return page(
     title,
-    `<section class="error-page"><p class="eyebrow">${memberContributionsOn() ? "PRIVATE PROPOSAL" : "PRIVATE SAMPLE"} · ${status}</p><h1>${title}</h1><div class="notice" role="alert"><p>${escape(message)}</p></div>${revision !== undefined ? `<p>You were changing saved revision ${revision}. Check these fields and try again. A changed draft will require you to review the current preview first.</p>${proposalEditForm(id, csrf, revision, bounded, memberContributionsOn())}` : `<p>Copy your attempted text before opening the current preview. This page does not retry the write.</p><label for="unsaved-proposal-title">Attempted title</label><input id="unsaved-proposal-title" readonly value="${escape(bounded.title)}"><label for="unsaved-proposal-body">${memberContributionsOn() ? "Attempted text" : "Attempted sample"}</label><textarea id="unsaved-proposal-body" readonly>${escape(bounded.body)}</textarea><label for="unsaved-proposal-sources">Attempted sources and rights notes</label><textarea id="unsaved-proposal-sources" readonly>${escape(bounded.sources)}</textarea>`}<p><a href="/contribute/${escape(id)}">Open the current private preview</a> to check the saved revision and submission state.</p></section>`,
+    `<section class="error-page"><p class="eyebrow">${kind} · ${status}</p><h1>${title}</h1><div class="notice" role="alert"><p>${escape(message)}</p></div>${revision !== undefined ? `<p>You were changing saved revision ${revision}. Check these fields and try again. A changed draft will require you to review the current preview first.</p>${proposalEditForm(id, csrf, revision, bounded, ordinary)}` : `<p>Copy your attempted text before opening the current preview. This page does not retry the write.</p><label for="unsaved-proposal-title">Attempted title</label><input id="unsaved-proposal-title" readonly value="${escape(bounded.title)}"><label for="unsaved-proposal-body">${ordinary ? "Attempted text" : "Attempted sample"}</label><textarea id="unsaved-proposal-body" readonly>${escape(bounded.body)}</textarea><label for="unsaved-proposal-sources">Attempted sources and rights notes</label><textarea id="unsaved-proposal-sources" readonly>${escape(bounded.sources)}</textarea>`}<p><a href="/contribute/${escape(id)}">Open the current private preview</a> to check the saved revision and submission state.</p></section>`,
   );
 }
 export function proposalOperationRecoveryPage(

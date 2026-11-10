@@ -4,6 +4,7 @@ import type { Pool, PoolClient } from "pg";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { availabilityStore } from "../../src/availability.ts";
+import { evidenceStore, type ObjectStorage } from "../../src/evidence.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { memberExportStore } from "../../src/member-export.ts";
 import { memberSlotHolds } from "../../src/slot-holds.ts";
@@ -212,7 +213,7 @@ it("EXPCOV-03 a member's held and withdrawn sample sessions are in Download my r
   await holds.withdraw(owner.token, withdrawn.requestId);
   const theirs = await heldBy(other, (await slot()).id);
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v46");
+  expect(version).toBe("local-member-records-v47");
   const rows = all.sampleHolds!;
   expect(rows.map((row) => row.id).sort()).toEqual(
     [kept.requestId, withdrawn.requestId].sort(),
@@ -309,7 +310,7 @@ it("EXPCOV-05 how many coaches the member has, and since when, is in Download my
   ).rows[0]!.n;
   expect(coaches).toBeGreaterThanOrEqual(1);
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v46");
+  expect(version).toBe("local-member-records-v47");
   expect(all.coachAssignments).toEqual([
     {
       coaches,
@@ -349,4 +350,69 @@ it("EXPCOV-06 hand-recorded test payment observations about the member are in Do
   const text = JSON.stringify(all);
   for (const hidden of [actor, "SYN-EXPCOV-OTHER", rows[1][0]])
     expect(text).not.toContain(hidden);
+});
+
+it("EXPCOV-07/08 files derived from a member's upload are listed in Download my records without the storage key, and go when the upload is removed", async () => {
+  const stored = new Map<string, Buffer>();
+  const objects: ObjectStorage = {
+    put: async (key, data) => void stored.set(key, data),
+    get: async (key) => stored.get(key)!,
+    remove: async (key) => void stored.delete(key),
+  };
+  const evidence = evidenceStore(pool, objects, "invented-expcov-secret");
+  const [owner, other] = [await member(), await member()];
+  const upload = async (token: string, words: string) => {
+    const uploaded = await evidence.upload(token, {
+      name: "expcov.txt",
+      mediaType: "text/plain",
+      data: Buffer.from(words),
+      consent: {
+        rightsConfirmed: true,
+        privateReview: true,
+        communityPublication: false,
+      },
+    });
+    if (uploaded.kind !== "created") throw Error(`Upload ${uploaded.kind}`);
+    expect(await evidence.transitionQuarantine(uploaded.id, "clean")).toBe(
+      true,
+    );
+    return uploaded.id;
+  };
+  const mine = await upload(owner.token, "invented owner evidence");
+  const theirs = await upload(other.token, "invented other evidence");
+  const extract = Buffer.from("invented extracted text");
+  const derivativeId = await evidence.addDerivative(
+    mine,
+    "text-extract",
+    extract,
+  );
+  const otherDerivative = await evidence.addDerivative(
+    theirs,
+    "thumbnail",
+    Buffer.from("invented thumbnail"),
+  );
+  const keys = (
+    await pool.query<{ storage_key: string }>(
+      "SELECT storage_key FROM evidence_derivatives",
+    )
+  ).rows.map((row) => row.storage_key);
+  expect(keys).toHaveLength(2);
+
+  const { all } = await records(owner.token);
+  expect(all.evidenceDerivatives).toEqual([
+    {
+      id: derivativeId,
+      evidenceId: mine,
+      kind: "text-extract",
+      byteSize: extract.length,
+      sha256: sha(extract.toString()),
+      createdAt: expect.any(Date),
+    },
+  ]);
+  const text = JSON.stringify(all);
+  for (const hidden of [otherDerivative, theirs, ...keys])
+    expect(text).not.toContain(hidden);
+
+  expect(await evidence.remove(owner.token, mine)).toBe(true);
+  expect((await records(owner.token)).all.evidenceDerivatives).toEqual([]);
 });

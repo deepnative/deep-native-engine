@@ -869,6 +869,104 @@ async function atStage<T>(stage: string, request: PromiseLike<T>): Promise<T> {
     );
   }
 }
+it("WFB-LABEL-01/02/03 a failed correction or submission is worded for the proposal it concerns, and discloses nothing when it can't be read", async () => {
+  const sample: OwnerProposal = {
+    feedback: null,
+    rightsAttestedRevision: null,
+    rightsAttestedAt: null,
+    id: "sample-id",
+    revision: 1,
+    title: "Older sample",
+    body: "Invented details",
+    sources: "Original",
+    state: "draft",
+    createdAt: new Date("2026-09-23"),
+    submittedAt: null,
+  };
+  const proposals = {
+    ...disabledProposalStore(),
+    preview: vi.fn<ProposalStore["preview"]>().mockResolvedValue(sample),
+    editDraft: vi.fn<ProposalStore["editDraft"]>().mockResolvedValue("invalid"),
+    submit: vi.fn<ProposalStore["submit"]>().mockResolvedValue("conflict"),
+  };
+  // Member contributions are on for the whole site.
+  const agent = await managedAgent(
+    app(db, { origin, secret: "secret", proposals, memberContributions: true }),
+  );
+  const entry = await agent.get("/").set("Host", host).expect(200);
+  const csrf = entry.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
+  const post = (path: string, fields: Record<string, string>) =>
+    agent
+      .post(path)
+      .set("Host", host)
+      .set("Origin", origin)
+      .type("form")
+      .send({ csrf, ...fields });
+  const fields = {
+    revision: "1",
+    title: "Changed",
+    body: "Invented details",
+    sources: "Original",
+  };
+  const edit = () => post("/contribute/sample-id/edit", fields);
+
+  // WFB-LABEL-01: created as a sample, so it stays a sample here too.
+  const rejected = await edit().expect(422);
+  expect(rejected.text).toContain("PRIVATE SAMPLE · CORRECTIONS NOT SAVED");
+  expect(rejected.text).not.toContain("Original contribution");
+  expect(proposals.preview).toHaveBeenLastCalledWith(
+    expect.any(String),
+    "sample-id",
+  );
+  const incomplete = await post("/contribute/sample-id/edit", {
+    ...fields,
+    title: "",
+  }).expect(422);
+  expect(incomplete.text).toContain(">Original sample</label>");
+  expect(incomplete.text).toContain("original sample and sources notes");
+  proposals.editDraft.mockRejectedValueOnce(new Error("private detail"));
+  // An unconfirmed save is not followed by another read of a failing store.
+  const reads = proposals.preview.mock.calls.length;
+  const uncertain = await edit().expect(503);
+  expect(uncertain.text).toContain("PRIVATE PROPOSAL · OUTCOME UNCONFIRMED");
+  expect(proposals.preview.mock.calls.length).toBe(reads);
+  const stale = await post("/contribute/sample-id/submit", {
+    revision: "1",
+    rights_confirmed: "yes",
+  }).expect(409);
+  expect(stale.text).toContain("PRIVATE SAMPLE · CORRECTIONS NOT SAVED");
+  const unconfirmed = await post("/contribute/sample-id/submit", {}).expect(
+    409,
+  );
+  expect(unconfirmed.text).toContain("PRIVATE SAMPLE · ");
+
+  // WFB-LABEL-02: created as a member contribution.
+  proposals.preview.mockResolvedValue({ ...sample, origin: "member" });
+  const contribution = await post("/contribute/sample-id/edit", {
+    ...fields,
+    title: "",
+  }).expect(422);
+  expect(contribution.text).toContain(
+    "PRIVATE CONTRIBUTION · CORRECTIONS NOT SAVED",
+  );
+  expect(contribution.text).toContain(">Original contribution</label>");
+  expect(contribution.text).toContain(
+    "original contribution and sources notes",
+  );
+
+  // WFB-LABEL-03: unreadable proposals keep the site-wide wording.
+  proposals.preview.mockResolvedValue(null);
+  expect((await edit().expect(422)).text).toContain("PRIVATE PROPOSAL · ");
+  proposals.preview.mockRejectedValue(new Error("private detail"));
+  const unreadable = await edit().expect(422);
+  expect(unreadable.text).toContain("PRIVATE PROPOSAL · ");
+  expect(unreadable.text).not.toContain("private detail");
+});
 it("keeps member proposals private and moderation unable to publish", async () => {
   const sample: OwnerProposal = {
     feedback: null,
@@ -2452,7 +2550,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
         kind: "ready",
         payload: {
           kind: "ready",
-          version: "local-member-records-v46",
+          version: "local-member-records-v47",
           testUnitHistory: {
             scope: "private-local-test-units" as const,
             snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
@@ -2492,7 +2590,7 @@ it("serves only a bounded owner structured export and explains safe failures", a
     .set("Host", host)
     .expect(200);
   expect(ready.body).toMatchObject({
-    version: "local-member-records-v46",
+    version: "local-member-records-v47",
     profile: { id: "owned" },
   });
   expect(ready.headers["cache-control"]).toBe("no-store");
@@ -6176,7 +6274,7 @@ it("downloads only the selected simulated portfolio snapshot with safe attachmen
 it("renders live export page navigation and rechecks download cursors without leaking cursor referrers", async () => {
   const payload = {
     kind: "ready" as const,
-    version: "local-member-records-v46" as const,
+    version: "local-member-records-v47" as const,
     testUnitHistory: {
       scope: "private-local-test-units" as const,
       snapshotStartedAt: new Date("2026-10-03T00:00:00Z"),
