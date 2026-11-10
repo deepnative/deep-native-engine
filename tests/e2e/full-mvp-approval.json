@@ -1,8 +1,8 @@
 {
   "status": "approved",
   "version": "full-mvp-v1",
-  "sha256": "1e8f27789ee9a5ef6843205c20ac3de28a1527763ddcb3e65e86cc6d319bb8c6",
+  "sha256": "7b96c321d0bb84615c792d9bbae6a8f9fdb4260aa865801e1cc77a1c33204b27",
   "reviewer": "Claude Code independent reviewer session (Claude Opus 5.5), owner-chosen 9 Nov 2026",
-  "decisionUrl": "https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6768169270",
-  "decidedAt": "2026-11-10T13:09:09Z"
+  "decisionUrl": "https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6770911430",
+  "decidedAt": "2026-11-10T15:07:33Z"
 }

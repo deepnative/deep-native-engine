@@ -692,7 +692,7 @@ it("CONSENT125-03/04 a copy from before wording versions is never back-filled, a
     "An invented earlier response.",
   );
   const earlier = await copy(owner.token, input);
-  // Stand-in for a copy made before migration 133: no version was agreed to.
+  // Stand-in for a copy made before migration 137: no version was agreed to.
   await pool.query(
     `BEGIN;
      ALTER TABLE assignment_evidence_origins DISABLE TRIGGER assignment_evidence_origin_guard;

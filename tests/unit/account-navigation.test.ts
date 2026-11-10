@@ -193,7 +193,7 @@ const KEPT_AFTER_DELETION = [
   "Deleting removes your profile, learning records, saved work, files and sharing choices, and signs you out on every browser.",
   "Some records stay after deletion:",
   // #12 RETAIN-01: the owner set six-year billing retention on 10 Nov 2026.
-  "Issued invoices and the payments and refunds recorded against them are kept for 6 years after the account is deleted, following Canada Revenue Agency record-keeping rules (records are kept 6 years from the end of the last tax year they relate to).",
+  "Issued invoices and the payments and refunds recorded against them are kept after the account is deleted, following Canada Revenue Agency record-keeping rules: until December 31, 6 years after the tax year of the invoice (Deep Native Inc.'s tax year ends on December 31). An invoice from 2026 is kept until December 31, 2032. Then the invoice and its payment records are removed automatically.",
   "They hold only what the invoice needs: its number and date, the issuer, the billing name, company and email, the items, amounts and tax, whether it was voided, and the payments and refunds recorded. Sample invoices are deleted with the account.",
   "Change history entries for staff changes to your coaches or billing, with your student reference and any amount, but no name or email.",
   "A note that an administrator looked up your email address, which keeps a fingerprint of the address, not the address.",

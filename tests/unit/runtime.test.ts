@@ -21,6 +21,15 @@ const doubles = vi.hoisted(() => ({
   generateInvoices: vi.fn(),
   memberEmail: vi.fn(),
   signOut: vi.fn(),
+  removeExpired: vi.fn(),
+}));
+vi.mock("../../src/invoice-retention.ts", () => ({
+  invoiceRetention: () => ({
+    removeExpired: doubles.removeExpired,
+    retainedUntil: vi.fn(),
+  }),
+  RETENTION_FIRST_SWEEP_MS: 0,
+  RETENTION_SWEEP_INTERVAL_MS: 60 * 60 * 1000,
 }));
 vi.mock("../../src/azure-email-sender.ts", () => ({
   azureEmailSender: doubles.emailSender,
@@ -122,6 +131,7 @@ beforeEach(() => {
   });
   doubles.invoiceSender.mockReturnValue({ send: vi.fn() });
   doubles.migrate.mockResolvedValue(undefined);
+  doubles.removeExpired.mockResolvedValue(0);
   doubles.seed.mockResolvedValue(12);
   doubles.azureStorage.mockReturnValue({
     requiresWriteRecovery: true,
@@ -204,6 +214,25 @@ it("HOSTED-06 advances private-object cleanup independently and reports unconfir
     expect(doubles.recover.mock.calls[1]?.[4]).toBe(next);
     expect(log).toHaveBeenCalledExactlyOnceWith(
       "Private object cleanup remains unconfirmed.",
+    );
+    await running.close();
+  } finally {
+    log.mockRestore();
+    vi.useRealTimers();
+  }
+});
+it("RETEXP-01 looks for expired kept invoices once per interval and reports a failed sweep without detail", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    server();
+    doubles.removeExpired.mockReset().mockResolvedValueOnce(null);
+    const running = await start(hostedEnv);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(doubles.removeExpired).toHaveBeenCalledOnce();
+    expect(doubles.app.mock.calls.at(-1)![1].invoiceRetention).toBeDefined();
+    expect(log).toHaveBeenCalledExactlyOnceWith(
+      "Expired invoice removal will be retried.",
     );
     await running.close();
   } finally {

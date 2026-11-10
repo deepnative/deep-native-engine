@@ -21,6 +21,7 @@ const receipt = {
   resolvedAt: null,
   withdrawnAt: null,
   coverageState: "unverified" as const,
+  coverageReviewedAt: null,
 };
 const member: SupportMemberDetail = {
   ...receipt,
@@ -66,6 +67,7 @@ const actions = [
   ["replies", "reply"],
   ["notes", "note"],
   ["resolve", "resolve"],
+  ["coverage-review", "reviewCoverage"],
 ] as const;
 function fixture(privateIntake = false) {
   const store = {
@@ -105,6 +107,9 @@ function fixture(privateIntake = false) {
       .mockResolvedValue({ kind: "applied", receipt: mutation }),
     resolve: vi
       .fn<SupportRequestStore["resolve"]>()
+      .mockResolvedValue({ kind: "applied", receipt: mutation }),
+    reviewCoverage: vi
+      .fn<SupportRequestStore["reviewCoverage"]>()
       .mockResolvedValue({ kind: "applied", receipt: mutation }),
     withdraw: vi
       .fn<SupportRequestStore["withdraw"]>()

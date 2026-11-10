@@ -13,6 +13,9 @@ export const LEARNING_KEYS = [
   "crossContentReturned",
   // #123 OUTCOME: member-reported, never verified.
   "reportedOutcome",
+  // #121: dated program-term enrollment and a withdrawal distinct from deletion.
+  "enrolledInProgram",
+  "withdrewFromProgram",
 ] as const;
 export const COHORT_KEYS = [
   "activated",

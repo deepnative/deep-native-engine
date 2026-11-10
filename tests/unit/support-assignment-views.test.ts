@@ -26,20 +26,23 @@ it("SI-01 inbox renders receipt lifecycle only with deliberate assignment for op
     acknowledgedAt: null,
     resolvedAt: null,
     withdrawnAt: null,
+    coverageReviewedAt: null,
   };
   const html = supportIntakeInboxPage('csrf"<', {
     items: [
       item,
       { ...item, acknowledgedAt: at, resolvedAt: at },
       { ...item, withdrawnAt: at },
+      { ...item, coverageReviewedAt: at },
     ],
     nextCursor: "opaque&cursor",
   });
+  expect(html.match(/Outside current support · /g)).toHaveLength(1);
   expect(html).toContain("receipt&lt;&quot;");
   expect(html).toContain('value="csrf&quot;&lt;"');
   expect(html).toContain("No separate acknowledgement recorded");
   expect(html).toContain("Open; no resolution recorded");
-  expect(html.match(/Check operator for this request/g)).toHaveLength(1);
+  expect(html.match(/Check operator for this request/g)).toHaveLength(2);
   expect(html).toContain("after=opaque%26cursor");
   expect(html).toContain("No new assignment offered for this closed request");
   expect(html).not.toContain('name="subject"');
@@ -251,6 +254,7 @@ it("ADMSUP-01 offers one confirmed 'answer myself' form per open request, each w
     acknowledgedAt: null,
     resolvedAt: null,
     withdrawnAt: null,
+    coverageReviewedAt: null,
   };
   let n = 0;
   const html = supportIntakeInboxPage(
