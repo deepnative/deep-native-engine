@@ -695,6 +695,7 @@ it("BILLPROFILE02 persists only own recipient, validates fields, serializes conc
   expect(saved).toEqual({
     ...input,
     email: "billing@example.invalid",
+    company: null,
     revision: 1,
   });
   expect(await profiles.read(other.token)).toEqual({
@@ -855,6 +856,7 @@ it("BILLPROFILE02/04 an acknowledged profile commit with a lost response stays i
   });
   expect(ready(await profiles.read(m.token))).toEqual({
     ...input,
+    company: null,
     revision: 1,
   });
   expect(await profiles.save(m.token, input)).toEqual({ kind: "conflict" });
@@ -876,7 +878,7 @@ it("BILLPROFILE05 records applied migration versions and preserves the profile w
   expect(await versions()).toEqual([
     84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101,
     102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
-    117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 128, 130,
+    117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 128, 129, 130,
   ]);
   const owner = await member();
   const profile = ready(
@@ -890,8 +892,60 @@ it("BILLPROFILE05 records applied migration versions and preserves the profile w
   expect(await versions()).toEqual([
     84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101,
     102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
-    117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 128, 130,
+    117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 128, 129, 130,
   ]);
   expect(ready(await profiles.read(owner.token))).toEqual(profile);
   expect((await members.session(owner.token, "account")).kind).toBe("active");
+});
+
+it("RECIPIENT-04/05 an accepted course keeps the optional company on the agreement, invoice and export", async () => {
+  const m = await member(),
+    p = ready(await invoices.propose(admin, proposal(m.id, "monthly")));
+  const result = ready(
+    await invoices.accept(m.token, {
+      planId: p.planId,
+      expectedRevision: 1,
+      operationId: randomUUID(),
+      name: "陳 · Invented student",
+      email: "invented-student@example.invalid",
+      company: " Invented Co ",
+    }),
+  );
+  expect(
+    ready(await invoices.invoice(m.token, result.invoiceId)).document,
+  ).toMatchObject({
+    billedTo: "陳 · Invented student",
+    billedToCompany: "Invented Co",
+  });
+  expect(
+    (
+      await pool.query(
+        "SELECT recipient_company FROM simple_invoice_plans WHERE id=$1",
+        [p.planId],
+      )
+    ).rows[0],
+  ).toEqual({ recipient_company: "Invented Co" });
+  ready(
+    await profiles.save(m.token, {
+      name: "Invented",
+      email: "billing@example.invalid",
+      company: "Invented Co",
+      revision: 0,
+    }),
+  );
+  const records: Record<string, unknown[]> = {};
+  let cursor: string | undefined;
+  do {
+    const r = await memberExportStore(pool).exportOwned(m.token, cursor);
+    if (r.kind !== "ready") throw Error("Export unavailable");
+    for (const [key, rows] of Object.entries(r.payload.records))
+      records[key] = [...(records[key] ?? []), ...rows];
+    cursor = r.payload.page.nextCursor ?? undefined;
+  } while (cursor);
+  expect(records.invoicePlans).toEqual([
+    expect.objectContaining({ recipientCompany: "Invented Co" }),
+  ]);
+  expect(records.billingProfile).toEqual([
+    expect.objectContaining({ company: "Invented Co" }),
+  ]);
 });

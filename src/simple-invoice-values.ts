@@ -58,6 +58,19 @@ export function invoiceText(value: unknown, limit: number): value is string {
     )
   );
 }
+/**
+ * RECIPIENT-04: an optional one-line company name. Missing or blank is none
+ * (null); anything else that is not valid text is undefined.
+ */
+export function invoiceCompany(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") return undefined;
+  const company = value.trim();
+  if (!company) return null;
+  return invoiceText(company, 200) && !/[\n\r\t]/.test(company)
+    ? company
+    : undefined;
+}
 /** MANPAY-02: one line of non-secret proof; long digit runs may be card numbers. */
 export const invoiceEvidence = (value: unknown): value is string =>
   invoiceText(value, 200) &&

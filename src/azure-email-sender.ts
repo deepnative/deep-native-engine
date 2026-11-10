@@ -79,7 +79,7 @@ export function azureInvoiceSender(
           senderAddress,
           content: {
             subject: `Deep Native invoice ${invoice.number}`,
-            plainText: `Invoice ${invoice.number}\nFrom: ${invoice.issuer}\n${invoice.tax ? `${invoice.tax.label} registration number ${invoice.tax.registration}\n` : ""}Bill to: ${invoice.billedTo}\n${invoice.lines.map((line) => `${line.description}: CAD ${(line.amountCents / 100).toFixed(2)}`).join("\n")}\n${invoice.tax ? `${invoice.tax.label} (${taxRate(invoice.tax)}): CAD ${(invoice.taxCents / 100).toFixed(2)}\n` : ""}Total: CAD ${(total / 100).toFixed(2)}\n\n${invoice.instructions}\n\nOpen your own signed-in account to inspect and print/save this invoice as PDF:\n${link}\n\n${invoice.sample ? "SAMPLE ONLY — NOT PAYABLE." : "Pay offline using the instructions above. No automatic payment is taken."}`,
+            plainText: `Invoice ${invoice.number}\nFrom: ${invoice.issuer}\n${invoice.tax ? `${invoice.tax.label} registration number ${invoice.tax.registration}\n` : ""}Bill to: ${invoice.billedTo}${invoice.billedToCompany ? ` · ${invoice.billedToCompany}` : ""}\n${invoice.lines.map((line) => `${line.description}: CAD ${(line.amountCents / 100).toFixed(2)}`).join("\n")}\n${invoice.tax ? `${invoice.tax.label} (${taxRate(invoice.tax)}): CAD ${(invoice.taxCents / 100).toFixed(2)}\n` : ""}Total: CAD ${(total / 100).toFixed(2)}\n\n${invoice.instructions}\n\nOpen your own signed-in account to inspect and print/save this invoice as PDF:\n${link}\n\n${invoice.sample ? "SAMPLE ONLY — NOT PAYABLE." : "Pay offline using the instructions above. No automatic payment is taken."}`,
           },
           recipients: { to: [{ address }] },
         },

@@ -15,6 +15,7 @@ import {
   emailHash,
 } from "../../src/member-email-access.ts";
 import { hash, migrate, store } from "../../src/store.ts";
+import { memberExportStore } from "../../src/member-export.ts";
 
 const root = new URL(
   process.env.DNE_DATABASE_URL ??
@@ -1038,4 +1039,148 @@ describe("no-account notice (#665)", () => {
       (await pool.query("SELECT 1 FROM member_email_notices")).rowCount,
     ).toBe(0);
   });
+});
+
+const addresses = async (
+  table: "member_email_links" | "member_email_identities",
+  id: string,
+) =>
+  (
+    await pool.query<{ address: string | null }>(
+      table === "member_email_links"
+        ? "SELECT address FROM member_email_links WHERE principal_id=$1 ORDER BY created_at"
+        : "SELECT address FROM member_email_identities WHERE principal_id=$1",
+      [id],
+    )
+  ).rows.map((row) => row.address);
+
+it("SIGNEMAIL-01 keeps a verified address readable on the member's own identity and drops it from the used link", async () => {
+  const m = await member();
+  expect(await access.requestAttach(m.token, " Member@Example.COM ")).toBe(
+    "sent",
+  );
+  // The waiting link holds the address only until it is used.
+  expect(await addresses("member_email_links", m.id)).toEqual([
+    "member@example.com",
+  ]);
+  expect((await access.consume(code(), m.token)).kind).toBe("attached");
+  expect(await addresses("member_email_identities", m.id)).toEqual([
+    "member@example.com",
+  ]);
+  expect(await addresses("member_email_links", m.id)).toEqual([null]);
+  // The fingerprint is unchanged, and the next sign-in still works.
+  expect(
+    (
+      await pool.query(
+        "SELECT email_hash FROM member_email_identities WHERE principal_id=$1",
+        [m.id],
+      )
+    ).rows,
+  ).toEqual([{ email_hash: emailHash("member@example.com") }]);
+  // The member's own records include the address.
+  const records: Record<string, unknown[]> = {};
+  let cursor: string | undefined;
+  do {
+    const r = await memberExportStore(pool).exportOwned(m.token, cursor);
+    if (r.kind !== "ready") throw Error("Export unavailable");
+    for (const [key, rows] of Object.entries(r.payload.records))
+      records[key] = [...(records[key] ?? []), ...rows];
+    cursor = r.payload.page.nextCursor ?? undefined;
+  } while (cursor);
+  expect(records.signInEmail).toEqual([
+    { address: "member@example.com", verifiedAt: expect.any(Date) },
+  ]);
+  await access.requestSignIn("member@example.com");
+  expect((await access.consume(code())).kind).toBe("signed_in");
+});
+
+it("SIGNEMAIL-02 fills an existing member's address at their next email sign-in, including a verified sign-up claim", async () => {
+  const m = await member();
+  await pool.query(
+    "INSERT INTO member_email_identities(email_hash,principal_id) VALUES($1,$2)",
+    [emailHash("old@example.com"), m.id],
+  );
+  expect(await addresses("member_email_identities", m.id)).toEqual([null]);
+  await access.requestSignIn("OLD@example.com");
+  const signedIn = await access.consume(code());
+  expect(signedIn.kind).toBe("signed_in");
+  expect((await members.session(signedIn.token!)).kind).toBe("active");
+  expect(await addresses("member_email_identities", m.id)).toEqual([
+    "old@example.com",
+  ]);
+  expect(await addresses("member_email_links", m.id)).toEqual([null]);
+  const claimed = await member();
+  await pool.query(
+    "INSERT INTO member_login_emails(email_hash,principal_id) VALUES($1,$2)",
+    [emailHash("claim@example.com"), claimed.id],
+  );
+  await access.requestSignIn("claim@example.com");
+  expect((await access.consume(code())).kind).toBe("signed_in");
+  expect(await addresses("member_email_identities", claimed.id)).toEqual([
+    "claim@example.com",
+  ]);
+});
+
+it("SIGNEMAIL-03 clears an expired unused link's address at later email activity, and removes the address with the account", async () => {
+  const m = await member();
+  await access.requestAttach(m.token, "late@example.com");
+  await pool.query(
+    "UPDATE member_email_links SET expires_at=created_at+INTERVAL '1 microsecond' WHERE principal_id=$1",
+    [m.id],
+  );
+  // Another member's later email request clears it.
+  const kept = await member();
+  await access.requestAttach(kept.token, "kept@example.com");
+  expect(await addresses("member_email_links", m.id)).toEqual([null]);
+  await access.consume(code(), kept.token);
+  await members.remove(kept.id);
+  expect(
+    (
+      await pool.query(
+        "SELECT 1 FROM member_email_identities WHERE address='kept@example.com'",
+      )
+    ).rowCount,
+  ).toBe(0);
+});
+
+it("SIGNEMAIL-04 never writes the readable address to logs", async () => {
+  const lines: unknown[] = [];
+  const spies = (["info", "log", "warn", "error"] as const).map((level) =>
+    vi.spyOn(console, level).mockImplementation((...args) => {
+      lines.push(args);
+    }),
+  );
+  try {
+    const m = await member();
+    await access.requestAttach(m.token, "quiet@example.com");
+    await access.consume(code(), m.token);
+    await access.requestSignIn("quiet@example.com");
+    await access.consume(code());
+  } finally {
+    for (const spy of spies) spy.mockRestore();
+  }
+  expect(JSON.stringify(lines)).not.toContain("quiet@example.com");
+});
+
+it("SIGNEMAIL-02 a link sent before #796 still signs in and leaves the address as it was", async () => {
+  const m = await member();
+  await pool.query(
+    "INSERT INTO member_email_identities(email_hash,principal_id) VALUES($1,$2)",
+    [emailHash("before@example.com"), m.id],
+  );
+  await access.requestSignIn("before@example.com");
+  await pool.query(
+    "UPDATE member_email_links SET address=NULL WHERE principal_id=$1",
+    [m.id],
+  );
+  expect((await access.consume(code())).kind).toBe("signed_in");
+  expect(await addresses("member_email_identities", m.id)).toEqual([null]);
+  // A held address that does not match the proven fingerprint is never kept.
+  await access.requestSignIn("before@example.com");
+  await pool.query(
+    "UPDATE member_email_links SET address='other@example.com' WHERE principal_id=$1 AND consumed_at IS NULL",
+    [m.id],
+  );
+  expect((await access.consume(code())).kind).toBe("signed_in");
+  expect(await addresses("member_email_identities", m.id)).toEqual([null]);
 });

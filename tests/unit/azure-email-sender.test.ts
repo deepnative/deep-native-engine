@@ -129,7 +129,7 @@ it("OFFPUR-02 sends individual course invoices using a separate message from sig
   expect(message.content.subject).toBe("Deep Native invoice DN-invented");
   expect(message.content.plainText).toContain("Total: CAD 33.91");
   expect(message.content.plainText).toContain("Course A version 2: CAD 10.00");
-  expect(message.content.plainText).toContain("陳");
+  expect(message.content.plainText).toContain("Bill to: 陳\n");
   expect(message.content.plainText).not.toContain("15 minutes");
   expect(message.content.plainText).toContain("No automatic payment");
   await sender.send(
@@ -207,4 +207,33 @@ it("ISSUER-06 names the issuer, HST registration and HST amount in a configured 
   expect(text).toContain("HST registration number 713254472RT0001");
   expect(text).toContain("HST (13%): CAD 13.00");
   expect(text).toContain("Total: CAD 113.00");
+});
+
+it("RECIPIENT-05 adds an optional company to the invoice email's Bill to line", async () => {
+  const sender = azureInvoiceSender(
+    "https://synthetic.communication.azure.com",
+    "noreply@example.com",
+    "invented-identity",
+  );
+  await sender.send(
+    "invented@example.invalid",
+    {
+      number: "DN-invented",
+      issuedOn: "2026-10-31",
+      issuer: "Invented issuer",
+      billedTo: "陳",
+      billedToCompany: "Invented Co",
+      lines: [{ description: "Coaching", amountCents: 1000 }],
+      billing: { kind: "one_time" },
+      currency: "CAD",
+      taxCents: 0,
+      paidCents: 0,
+      instructions: "Invented instructions",
+      sample: true,
+    },
+    "private-invoice",
+  );
+  expect(sdk.beginSend.mock.calls.at(-1)![0].content.plainText).toContain(
+    "Bill to: 陳 · Invented Co\n",
+  );
 });

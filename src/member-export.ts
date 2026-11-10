@@ -483,7 +483,7 @@ const sections = {
     true,
   ),
   coachingMonths: section(
-    'month,minutes,name,email,state,revision,submitted_revision AS "submittedRevision",invoice_id AS "invoiceId",previous_invoice_id AS "previousInvoiceId",return_reason AS "returnReason"',
+    'month,minutes,name,email,company,state,revision,submitted_revision AS "submittedRevision",invoice_id AS "invoiceId",previous_invoice_id AS "previousInvoiceId",return_reason AS "returnReason"',
     "coaching_months WHERE owner_id=$1",
     "month",
     true,
@@ -501,7 +501,7 @@ const sections = {
     true,
   ),
   billingProfile: section(
-    "name,email,revision",
+    "name,email,company,revision",
     "billing_profiles WHERE owner_id=$1",
     "owner_id",
     true,
@@ -590,7 +590,7 @@ const sections = {
   invoicePlans: section(
     `id,terms,state,revision,next_cycle AS "nextCycle",created_at AS "offeredAt",
     accepted_at AS "acceptedAt",recipient_name AS "recipientName",
-    recipient_email AS "recipientEmail"`,
+    recipient_email AS "recipientEmail",recipient_company AS "recipientCompany"`,
     "simple_invoice_plans WHERE owner_id=$1",
     "id",
     true,
@@ -666,6 +666,13 @@ const sections = {
     "coaching_terms WHERE owner_id=$1",
     "version",
   ),
+  // v46 appends #796 SIGNEMAIL: the member's own verified sign-in email, as
+  // kept readable for their default invoice email. Never its fingerprint.
+  signInEmail: section(
+    'address,verified_at AS "verifiedAt"',
+    "member_email_identities WHERE principal_id=$1",
+    "principal_id",
+  ),
 } as const;
 /** Section SQL, shared with the member-authorized operator download (#40). */
 export const MEMBER_EXPORT_SECTIONS = sections;
@@ -681,7 +688,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v45";
+  version: "local-member-records-v46";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -815,7 +822,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v45",
+          version: "local-member-records-v46",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

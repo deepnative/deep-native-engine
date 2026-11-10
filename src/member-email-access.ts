@@ -333,10 +333,19 @@ export function memberEmailAccess(
           "UPDATE member_email_links SET consumed_at=clock_timestamp() WHERE principal_id=$1 AND consumed_at IS NULL",
           [principalId],
         );
+        // SIGNEMAIL-03: an unused link keeps its address only until it
+        // expires. Clear expired ones after the member lock, skipping rows
+        // another request holds, so this never waits across members.
         await client.query(
-          `INSERT INTO member_email_links(token_hash,email_hash,principal_id,purpose,expires_at)
-         VALUES($1,$2,$3,$4,clock_timestamp()+INTERVAL '15 minutes')`,
-          [hash(code), digest, principalId, purpose],
+          `UPDATE member_email_links SET address=NULL WHERE token_hash IN (
+             SELECT token_hash FROM member_email_links
+             WHERE address IS NOT NULL AND expires_at<=clock_timestamp()
+             FOR UPDATE SKIP LOCKED)`,
+        );
+        await client.query(
+          `INSERT INTO member_email_links(token_hash,email_hash,principal_id,purpose,expires_at,address)
+         VALUES($1,$2,$3,$4,clock_timestamp()+INTERVAL '15 minutes',$5)`,
+          [hash(code), digest, principalId, purpose, normalized],
         );
         return "queued";
       },
@@ -491,19 +500,26 @@ export function memberEmailAccess(
           await client.query<{
             email_hash: string;
             purpose: EmailPurpose;
+            address: string | null;
           }>(
-            `SELECT email_hash,purpose FROM member_email_links
+            `SELECT email_hash,purpose,address FROM member_email_links
              WHERE token_hash=$1 AND principal_id=$2 AND consumed_at IS NULL
                AND expires_at>clock_timestamp() FOR UPDATE`,
             [hash(code), principal.id],
           )
         ).rows[0];
         if (!link) return { kind: "unavailable" as const };
+        // SIGNEMAIL-01/02: keep the proven address readable with its
+        // fingerprint. Using the link clears it from the link row.
+        const address =
+          link.address && emailHash(link.address) === link.email_hash
+            ? link.address
+            : null;
         if (link.purpose === "attach") {
           const inserted = await client.query(
-            `INSERT INTO member_email_identities(email_hash,principal_id)
-             VALUES($1,$2) ON CONFLICT DO NOTHING RETURNING principal_id`,
-            [link.email_hash, principal.id],
+            `INSERT INTO member_email_identities(email_hash,principal_id,address)
+             VALUES($1,$2,$3) ON CONFLICT DO NOTHING RETURNING principal_id`,
+            [link.email_hash, principal.id, address],
           );
           await client.query(
             "UPDATE member_email_links SET consumed_at=clock_timestamp() WHERE token_hash=$1",
@@ -534,10 +550,14 @@ export function memberEmailAccess(
           );
           if (!claimed.rowCount) return { kind: "unavailable" as const };
           await client.query(
-            "INSERT INTO member_email_identities(email_hash,principal_id) VALUES($1,$2)",
-            [link.email_hash, principal.id],
+            "INSERT INTO member_email_identities(email_hash,principal_id,address) VALUES($1,$2,$3)",
+            [link.email_hash, principal.id, address],
           );
-        }
+        } else if (address)
+          await client.query(
+            "UPDATE member_email_identities SET address=$3 WHERE email_hash=$1 AND principal_id=$2",
+            [link.email_hash, principal.id, address],
+          );
         // MULTISESSION-01: this browser joins any already signed in.
         const added = await addBrowserSession(client, principal.id);
         opened = added.opened;

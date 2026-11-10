@@ -55,7 +55,7 @@ function error(
 function billingPage(profile: BillingProfile, anti: string, message = "") {
   return page(
     "Billing recipient",
-    `<section class="invoice-workspace"><h1>Billing recipient</h1>${message ? `<p role="alert">${escape(message)}</p>` : ""}<p>Save the name and email to suggest on future course proposals. This does not change your sign-in email, authorize a charge, enroll you, or edit an issued invoice. Review the recipient and exact terms each time.</p><form method="post" action="/account/billing">${hidden("csrf", anti)}${hidden("revision", profile.revision)}<label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="${escape(profile.name)}" required></label><label>Invoice email<input name="email" type="email" autocomplete="email" maxlength="254" value="${escape(profile.email)}" required></label><button>Save billing recipient</button></form><p>Do not enter card numbers, CVV, bank credentials or payment secrets. This private profile is included in your account export and removed with your learning account; issued financial records follow their separate retention policy.</p><p><a href="${memberPath}">Review courses and invoices</a> · <a href="/account">My account</a></p></section>`,
+    `<section class="invoice-workspace"><h1>Billing recipient</h1>${message ? `<p role="alert">${escape(message)}</p>` : ""}<p>Save the name, email and optional company to suggest on future course proposals and coaching months. The company is shown on invoices when set. This does not change your sign-in email, authorize a charge, enroll you, or edit an issued invoice. Review the recipient and exact terms each time.</p><form method="post" action="/account/billing">${hidden("csrf", anti)}${hidden("revision", profile.revision)}<label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="${escape(profile.name)}" required></label><label>Invoice email<input name="email" type="email" autocomplete="email" maxlength="254" value="${escape(profile.email)}" required></label><label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value="${escape(profile.company ?? "")}"></label><button>Save billing recipient</button></form><p>Do not enter card numbers, CVV, bank credentials or payment secrets. This private profile is included in your account export and removed with your learning account; issued financial records follow their separate retention policy.</p><p><a href="${memberPath}">Review courses and invoices</a> · <a href="/account">My account</a></p></section>`,
   );
 }
 // Delivery states as administrators read them.
@@ -128,21 +128,19 @@ export function mountSimpleInvoiceRoutes(
   app.get("/account/billing", async (req, res) => {
     if (!valid(req, res)) return;
     if (!options.billingProfiles) return error(res, "unavailable");
-    const result = await options.billingProfiles.read(token(res));
+    const result = await options.billingProfiles.suggest(token(res));
     if (result.kind !== "ready") return error(res, result.kind);
     return res.send(
-      billingPage(
-        result.value ?? { name: "", email: "", revision: 0 },
-        csrf(token(res), options.secret),
-      ),
+      billingPage(result.value, csrf(token(res), options.secret)),
     );
   });
   app.post("/account/billing", async (req, res) => {
-    if (!valid(req, res, ["name", "email"])) return;
+    if (!valid(req, res, ["name", "email", "company"])) return;
     if (!options.billingProfiles) return error(res, "unavailable");
     const result = await options.billingProfiles.save(token(res), {
       name: req.body.name,
       email: req.body.email,
+      company: req.body.company,
       revision: Number(req.body.revision),
     });
     if (result.kind === "ready") return res.redirect(303, "/account/billing");
@@ -152,11 +150,12 @@ export function mountSimpleInvoiceRoutes(
           {
             name: req.body.name ?? "",
             email: req.body.email ?? "",
+            company: req.body.company ?? "",
             revision: Number(req.body.revision),
           },
           csrf(token(res), options.secret),
           result.kind === "invalid"
-            ? "Recipient not saved. Enter a name and valid email address."
+            ? "Recipient not saved. Enter a name and valid email address. Company name must be 200 characters or fewer on one line."
             : "Recipient not saved: another edit changed the profile. Copy your details and reopen Billing recipient before saving.",
         ),
       );
@@ -174,14 +173,14 @@ export function mountSimpleInvoiceRoutes(
     const result = await store.overview(token(res));
     if (result.kind !== "ready") return error(res, result.kind);
     const profile = options.billingProfiles
-      ? await options.billingProfiles.read(token(res))
+      ? await options.billingProfiles.suggest(token(res))
       : { kind: "ready" as const, value: null };
     if (profile.kind !== "ready") return error(res, profile.kind);
     const anti = csrf(token(res), options.secret);
     return res.send(
       page(
         "Courses and invoices",
-        `<section class="invoice-workspace"><h1>Courses and invoices</h1><p class="account-links"><a class="button secondary" href="/account/billing">Billing recipient</a> <a class="button secondary" href="/account/coaching">Monthly coaching hours</a></p><p>Registration does not create a charge. Review your consolidated courses and billing terms before accepting. Recurring invoices never take payment automatically. Cancel an existing monthly agreement before accepting a replacement.</p>${result.value.plans.map((plan) => `<article id="plan-${plan.id}"><h2>Course bundle</h2><p><a href="/courses/proposals/${plan.id}">Reopen this proposal after sign-in</a></p><p>${plan.terms.sample ? "SAMPLE · NOT PAYABLE" : "Prepared course offer"} · ${escape(plan.state)}</p><ul>${plan.terms.courses.map((c) => `<li>${escape(c.description)} · ${escape(c.id)} version ${c.version} · CAD ${(c.amountCents / 100).toFixed(2)}</li>`).join("")}</ul><p>${plan.terms.cadence === "one_time" ? "One-time invoice" : "Monthly invoices until cancelled"} · starts ${escape(plan.terms.startsOn)} · ${plan.terms.tax ? `${escape(plan.terms.tax.label)} ${taxRate(plan.terms.tax)}` : "tax"} CAD ${(plan.terms.taxCents / 100).toFixed(2)}</p><p><strong>${plan.terms.cadence === "monthly" ? "Total each month" : "Total"}: CAD ${(invoiceTotal(plan.terms) / 100).toFixed(2)}</strong></p><p>Invoice issuer: ${escape(plan.terms.issuer)}${plan.terms.tax ? ` · ${escape(plan.terms.tax.label)} registration number ${escape(plan.terms.tax.registration)}` : ""}</p><p class="invoice-instructions">${escape(plan.terms.instructions)}</p>${plan.state === "offered" && plan.terms.startsOn < result.value.today ? `<p role="status">Acceptance closed on ${escape(plan.terms.startsOn)}. A proposal can be accepted only until its start date, so this one can no longer be accepted and will not bill any past month. Ask your administrator for a new proposal if you still want these courses.</p>` : plan.state === "offered" && result.value.unavailable[plan.id] ? `<p role="status">This proposal can no longer be accepted: ${escape(result.value.unavailable[plan.id]!.join(", "))} ${result.value.unavailable[plan.id]!.length === 1 ? "is" : "are"} not currently offered. No invoice was created. Ask your administrator for a new proposal if you still want these courses.</p>` : plan.state === "offered" ? `<form method="post" action="${memberPath}/plans/${plan.id}/accept">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label>Invoice recipient name<input name="name" maxlength="200" value="${escape(profile.value?.name ?? "")}" required></label><label>Invoice email<input type="email" name="email" maxlength="254" value="${escape(profile.value?.email ?? "")}" required></label><label class="check"><input type="checkbox" name="confirm" value="accept" required><span>I accept these exact courses and ${plan.terms.cadence === "monthly" ? "monthly recurring invoices until I cancel" : "one-time billing terms"}. Issued financial invoices can be retained for accounting after learning-account deletion.</span></label><button>Accept courses and create invoice</button></form>` : plan.state === "active" ? `<form method="post" action="${memberPath}/plans/${plan.id}/cancel">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label class="check"><input type="checkbox" name="confirm" value="cancel" required><span>Stop future invoices; retain already issued invoices.</span></label><button class="secondary">Cancel future billing</button></form>` : ""}</article>`).join("") || "<p>No course bundle has been prepared for this account.</p>"}<h2>Your invoices</h2>${result.value.invoices.length ? `<ul>${result.value.invoices.map((i) => `<li><a href="${memberPath}/invoices/${i.id}">${escape(i.document.number)}</a> · CAD ${(i.totalCents / 100).toFixed(2)} · ${invoicePaymentStatus(i)} · ${i.document.sample ? "Sample, not payable" : "Invoice"}</li>`).join("")}</ul>` : "<p>No invoices have been issued to this account yet.</p>"}<p><a href="/learn">Return to learning</a> · <a href="/account">My account</a></p></section>`,
+        `<section class="invoice-workspace"><h1>Courses and invoices</h1><p class="account-links"><a class="button secondary" href="/account/billing">Billing recipient</a> <a class="button secondary" href="/account/coaching">Monthly coaching hours</a></p><p>Registration does not create a charge. Review your consolidated courses and billing terms before accepting. Recurring invoices never take payment automatically. Cancel an existing monthly agreement before accepting a replacement.</p>${result.value.plans.map((plan) => `<article id="plan-${plan.id}"><h2>Course bundle</h2><p><a href="/courses/proposals/${plan.id}">Reopen this proposal after sign-in</a></p><p>${plan.terms.sample ? "SAMPLE · NOT PAYABLE" : "Prepared course offer"} · ${escape(plan.state)}</p><ul>${plan.terms.courses.map((c) => `<li>${escape(c.description)} · ${escape(c.id)} version ${c.version} · CAD ${(c.amountCents / 100).toFixed(2)}</li>`).join("")}</ul><p>${plan.terms.cadence === "one_time" ? "One-time invoice" : "Monthly invoices until cancelled"} · starts ${escape(plan.terms.startsOn)} · ${plan.terms.tax ? `${escape(plan.terms.tax.label)} ${taxRate(plan.terms.tax)}` : "tax"} CAD ${(plan.terms.taxCents / 100).toFixed(2)}</p><p><strong>${plan.terms.cadence === "monthly" ? "Total each month" : "Total"}: CAD ${(invoiceTotal(plan.terms) / 100).toFixed(2)}</strong></p><p>Invoice issuer: ${escape(plan.terms.issuer)}${plan.terms.tax ? ` · ${escape(plan.terms.tax.label)} registration number ${escape(plan.terms.tax.registration)}` : ""}</p><p class="invoice-instructions">${escape(plan.terms.instructions)}</p>${plan.state === "offered" && plan.terms.startsOn < result.value.today ? `<p role="status">Acceptance closed on ${escape(plan.terms.startsOn)}. A proposal can be accepted only until its start date, so this one can no longer be accepted and will not bill any past month. Ask your administrator for a new proposal if you still want these courses.</p>` : plan.state === "offered" && result.value.unavailable[plan.id] ? `<p role="status">This proposal can no longer be accepted: ${escape(result.value.unavailable[plan.id]!.join(", "))} ${result.value.unavailable[plan.id]!.length === 1 ? "is" : "are"} not currently offered. No invoice was created. Ask your administrator for a new proposal if you still want these courses.</p>` : plan.state === "offered" ? `<form method="post" action="${memberPath}/plans/${plan.id}/accept">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label>Invoice recipient name<input name="name" maxlength="200" value="${escape(profile.value?.name ?? "")}" required></label><label>Invoice email<input type="email" name="email" maxlength="254" value="${escape(profile.value?.email ?? "")}" required></label><label>Company name (optional)<input name="company" maxlength="200" value="${escape(profile.value?.company ?? "")}"></label><label class="check"><input type="checkbox" name="confirm" value="accept" required><span>I accept these exact courses and ${plan.terms.cadence === "monthly" ? "monthly recurring invoices until I cancel" : "one-time billing terms"}. Issued financial invoices can be retained for accounting after learning-account deletion.</span></label><button>Accept courses and create invoice</button></form>` : plan.state === "active" ? `<form method="post" action="${memberPath}/plans/${plan.id}/cancel">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", plan.revision)}<label class="check"><input type="checkbox" name="confirm" value="cancel" required><span>Stop future invoices; retain already issued invoices.</span></label><button class="secondary">Cancel future billing</button></form>` : ""}</article>`).join("") || "<p>No course bundle has been prepared for this account.</p>"}<h2>Your invoices</h2>${result.value.invoices.length ? `<ul>${result.value.invoices.map((i) => `<li><a href="${memberPath}/invoices/${i.id}">${escape(i.document.number)}</a> · CAD ${(i.totalCents / 100).toFixed(2)} · ${invoicePaymentStatus(i)} · ${i.document.sample ? "Sample, not payable" : "Invoice"}</li>`).join("")}</ul>` : "<p>No invoices have been issued to this account yet.</p>"}<p><a href="/learn">Return to learning</a> · <a href="/account">My account</a></p></section>`,
       ),
     );
   });
@@ -258,7 +257,7 @@ export function mountSimpleInvoiceRoutes(
     });
   }
   app.post(`${memberPath}/plans/:id/accept`, async (req, res) => {
-    if (!valid(req, res, ["confirm", "name", "email"])) return;
+    if (!valid(req, res, ["confirm", "name", "email", "company"])) return;
     if (!store) return error(res, "unavailable");
     if (req.body.confirm !== "accept") return error(res, "invalid");
     const r = await store.accept(token(res), {
@@ -267,6 +266,7 @@ export function mountSimpleInvoiceRoutes(
       operationId: req.body.operationId,
       name: req.body.name,
       email: req.body.email,
+      company: req.body.company,
     });
     return r.kind === "ready"
       ? res.redirect(303, `${memberPath}/invoices/${r.value.invoiceId}`)

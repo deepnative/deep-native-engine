@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v45",
+      version: "local-member-records-v46",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -226,8 +226,8 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [],
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
-    // Original indices0..59 remain; appended sections 60..69 are valid.
-    [2, 70, ...valid.slice(2)],
+    // Original indices0..59 remain; appended sections 60..70 are valid.
+    [2, 71, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -281,7 +281,7 @@ it.each([
     expect(result).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v45",
+        version: "local-member-records-v46",
         records: { [name]: [{ record: "Invented owned metadata" }] },
       },
     });
@@ -518,7 +518,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v45",
+        version: "local-member-records-v46",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -726,7 +726,7 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
     expect(value).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v45",
+        version: "local-member-records-v46",
         records: { [name]: [{ id: "owned-accounting" }] },
       },
     });
@@ -759,7 +759,7 @@ it("appends safe source-deleted assignment receipts at index36 without moving an
   expect(value).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v45",
+      version: "local-member-records-v46",
       records: { sampleAssignmentOperations: [record] },
     },
   });
@@ -896,7 +896,7 @@ it("CONPUB-04 appends owner-only publication permissions at cursor index46 with 
   expect(result).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v45",
+      version: "local-member-records-v46",
       records: {
         proposalPublications: [{ state: "withdrawn", attribution: null }],
       },
@@ -1102,7 +1102,7 @@ it("EXPCOV-03/04 appends sample holds at index 63 and simulated assessment resul
   const names = Object.keys(result.payload.records);
   expect(names.indexOf("sampleHolds")).toBe(63);
   expect(names.indexOf("contentAssessments")).toBe(64);
-  expect(names).toHaveLength(70);
+  expect(names).toHaveLength(71);
   expect(result.payload.records.sampleHolds).toEqual([
     { id: "hold-b", state: "released" },
   ]);

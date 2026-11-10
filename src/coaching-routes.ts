@@ -226,7 +226,7 @@ export function mountCoachingRoutes(
         hst = store?.tax;
       const recipient =
         !admin && !e && options.billingProfiles
-          ? await options.billingProfiles.read(token(res))
+          ? await options.billingProfiles.suggest(token(res))
           : { kind: "ready" as const, value: null };
       if (recipient.kind !== "ready")
         return failure(res, recipient.kind, admin);
@@ -255,11 +255,11 @@ export function mountCoachingRoutes(
       if (admin)
         body += `<h2>Set member rate</h2><form method="post" action="${base}/rate">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.rateVersion)}<label>Effective month<input type="month" name="effectiveMonth" value="${v.month}" required></label><label>Hourly rate (CAD)<input name="rate" inputmode="decimal" required></label><button>Save hourly rate</button></form>`;
       if (e)
-        body += `<p>Saved duration: ${coachingDuration(e.minutes)}</p><p>Invoice recipient: ${escape(e.name)} · ${escape(e.email)}</p>`;
+        body += `<p>Saved duration: ${coachingDuration(e.minutes)}</p><p>Invoice recipient: ${escape(e.name)}${e.company ? ` · ${escape(e.company)}` : ""} · ${escape(e.email)}</p>`;
       if (snapshot)
-        body += `<h2>Submitted snapshot</h2><p>${monthLabel(snapshot.month)} · ${coachingDuration(snapshot.minutes)} · ${money(snapshot.rate.cents)} per hour · rate version ${snapshot.rate.version} · subtotal ${money(snapshot.subtotalCents)}</p><p>Recipient: ${escape(snapshot.name)} · ${escape(snapshot.email)} · ${snapshot.sample ? "Sample, not payable" : "Configured offline invoice"}</p><p>Submitted revision ${e!.submittedRevision}. This snapshot stays retained after correction.</p>`;
+        body += `<h2>Submitted snapshot</h2><p>${monthLabel(snapshot.month)} · ${coachingDuration(snapshot.minutes)} · ${money(snapshot.rate.cents)} per hour · rate version ${snapshot.rate.version} · subtotal ${money(snapshot.subtotalCents)}</p><p>Recipient: ${escape(snapshot.name)}${snapshot.company ? ` · ${escape(snapshot.company)}` : ""} · ${escape(snapshot.email)} · ${snapshot.sample ? "Sample, not payable" : "Configured offline invoice"}</p><p>Submitted revision ${e!.submittedRevision}. This snapshot stays retained after correction.</p>`;
       if (!admin && (!e || e.state === "draft")) {
-        body += `<h2>Save your draft</h2><form method="post" action="${base}/save">${form("save", e?.revision ?? 0)}<label>Whole hours<input name="hours" type="number" min="0" max="744" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label><label>Invoice recipient name<input name="name" maxlength="200" value="${escape(e?.name ?? recipient.value?.name ?? "")}" required></label><label>Invoice email<input name="email" type="email" maxlength="254" value="${escape(e?.email ?? recipient.value?.email ?? "")}" required></label><p><a href="/account/billing">Edit reusable billing recipient</a>. This email is only the billing recipient; it does not change your sign-in identity.</p><button>Save coaching draft</button></form>`;
+        body += `<h2>Save your draft</h2><form method="post" action="${base}/save">${form("save", e?.revision ?? 0)}<label>Whole hours<input name="hours" type="number" min="0" max="744" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label><label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="${escape(e?.name ?? recipient.value?.name ?? "")}" required></label><label>Invoice email<input name="email" type="email" autocomplete="email" maxlength="254" value="${escape(e?.email ?? recipient.value?.email ?? "")}" required></label><label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value="${escape((e ? e.company : recipient.value?.company) ?? "")}"></label><p>Changes here are saved as your reusable billing recipient for later months. <a href="/account/billing">Edit reusable billing recipient</a>. This email is only the billing recipient; it does not change your sign-in identity.</p><button>Save coaching draft</button></form>`;
         if (e && v.rate && amount !== null)
           body += `<h2>Confirm this saved draft</h2><p>Subtotal before ${hst ? escape(hst.label) : "separately supplied tax"}: <strong>${money(amount)}</strong>. ${amount === 0 ? "A zero-total submission creates no invoice." : hst ? `${escape(hst.label)} at ${taxRate(hst)} is added when the invoice is issued.` : "The administrator supplies tax when reviewing the invoice."}</p><form method="post" action="${base}/submit">${form("submit", e.revision)}${hidden("rateId", v.rate.id)}${hidden("sample", String(v.sample))}<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm this saved duration, recipient and exact rate version for ${v.month}. ${v.sample ? "This is a sample, not payable." : "I submit for configured offline invoicing; issued financial records may be retained after account deletion."}</span></label><button>Request coaching invoice</button></form>`;
         if (e && v.rate && amount === null)
@@ -343,7 +343,7 @@ export function mountCoachingRoutes(
       base = admin ? `${adminPath}/:ownerId` : memberPath;
     app.post(`${base}/${action}`, async (req, res) => {
       const fields = {
-        save: ["hours", "minutes", "name", "email"],
+        save: ["hours", "minutes", "name", "email", "company"],
         submit: ["rateId", "sample", "confirm"],
         return: ["reason"],
         // ISSUER-03: a typed tax is refused when the server computes HST.
@@ -377,6 +377,7 @@ export function mountCoachingRoutes(
               minutes: minutes!,
               name: req.body.name,
               email: req.body.email,
+              company: req.body.company,
             })
           : action === "submit"
             ? await store.submitCoaching(token(res), {

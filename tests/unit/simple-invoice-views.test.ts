@@ -172,3 +172,16 @@ it("SVC-07 shows the simulated service state only when one is given, saying noth
     expect(html).toContain("No payment provider checked it and no money moved");
   }
 });
+
+it("RECIPIENT-05 shows an optional company under Bill to only when it is set", () => {
+  const html = simpleInvoiceDocument({
+    ...invoice,
+    billedToCompany: "<i>Invented</i> Co",
+  });
+  expect(html).toContain(
+    `<h2>Bill to</h2><p>${invoice.billedTo}</p><p>&lt;i&gt;Invented&lt;/i&gt; Co</p>`,
+  );
+  expect(simpleInvoiceDocument(invoice)).toContain(
+    `<h2>Bill to</h2><p>${invoice.billedTo}</p>${invoice.billing.kind === "one_time" ? "<p>One-time" : "<p>Recurring"}`,
+  );
+});

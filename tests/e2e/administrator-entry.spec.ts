@@ -75,10 +75,15 @@ async function fixture(
   address = "shi@deepnative.io",
   background: "explorer" | "professional" | "technical" = "explorer",
   lostCommit = false,
+  displayName?: string,
 ) {
   const members = store(pool),
     token = randomBytes(32).toString("hex");
-  await members.create(token, { background, goal: "everyday" });
+  await members.create(token, {
+    background,
+    goal: "everyday",
+    ...(displayName ? { displayName } : {}),
+  });
   const session = await members.session(token);
   if (session.kind !== "active") throw Error("No invented member");
   await members.save(token, {
@@ -518,20 +523,41 @@ test("[L277] ADMINCON01–04 selects an exact learner, composes existing terms a
 test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the same proposal after email recovery and preserves invoice history", async ({
   page,
 }) => {
-  const f = await fixture(page, "tom@deepnative.io", "professional");
+  const f = await fixture(
+    page,
+    "tom@deepnative.io",
+    "professional",
+    false,
+    "陳 Registered learner",
+  );
   try {
     await f.verify();
     await f.publishCourse();
+    // RECIPIENT-01/SIGNEMAIL-01: a new month suggests the registered name and
+    // the verified sign-in email.
+    await page.goto(f.origin + "/account/coaching");
+    await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
+      "陳 Registered learner",
+    );
+    await expect(page.getByLabel("Invoice email", { exact: true })).toHaveValue(
+      "tom@deepnative.io",
+    );
+    await expect(page.getByLabel("Company name (optional)")).toHaveValue("");
     await page.goto(f.origin + "/account");
     await page
       .getByRole("link", { name: "Billing recipient", exact: true })
       .click();
+    await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
+      "陳 Registered learner",
+    );
     await page
       .getByLabel("Invoice recipient name")
       .fill("Invented original recipient");
     await page
       .getByLabel("Invoice email", { exact: true })
       .fill("billing@example.invalid");
+    // RECIPIENT-04: the optional company is saved with the recipient.
+    await page.getByLabel("Company name (optional)").fill("Invented Co Ltd");
     await page.getByRole("button", { name: "Save billing recipient" }).click();
     await expect(page.locator('input[name="revision"]')).toHaveValue("1");
     await page.waitForLoadState("load");
@@ -539,10 +565,44 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
     await expect(page.getByLabel("Invoice email", { exact: true })).toHaveValue(
       "billing@example.invalid",
     );
+    await expect(page.getByLabel("Company name (optional)")).toHaveValue(
+      "Invented Co Ltd",
+    );
+    // RECIPIENT-02: the saved recipient wins over the registered name.
     await page.goto(f.origin + "/account/coaching");
     await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
       "Invented original recipient",
     );
+    await expect(page.getByLabel("Company name (optional)")).toHaveValue(
+      "Invented Co Ltd",
+    );
+    // RECIPIENT-03: edits saved with a draft become the reusable recipient.
+    await page.getByLabel("Whole hours").fill("2");
+    await page
+      .getByLabel("Invoice recipient name")
+      .fill("Invented coaching recipient");
+    await page
+      .getByLabel("Company name (optional)")
+      .fill("Invented Coaching Co");
+    await page.getByRole("button", { name: "Save coaching draft" }).click();
+    await expect(
+      page.getByText(
+        "Invoice recipient: Invented coaching recipient · Invented Coaching Co · billing@example.invalid",
+      ),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+    ).toBe(false);
+    await page.goto(f.origin + "/account/billing");
+    await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
+      "Invented coaching recipient",
+    );
+    await expect(page.getByLabel("Company name (optional)")).toHaveValue(
+      "Invented Coaching Co",
+    );
+    await expect(page.locator('input[name="revision"]')).toHaveValue("2");
     await page.goto(f.origin + "/admin");
     await page
       .getByRole("button", { name: "Enter administration", exact: true })
@@ -583,7 +643,10 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
       f.origin + "/account/purchases#plan-" + p.value.planId,
     );
     await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
-      "Invented original recipient",
+      "Invented coaching recipient",
+    );
+    await expect(page.getByLabel("Company name (optional)")).toHaveValue(
+      "Invented Coaching Co",
     );
     await page
       .getByRole("checkbox", { name: /I accept these exact courses/ })
@@ -601,8 +664,12 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
       .fill("Invented changed recipient");
     await page.getByRole("button", { name: "Save billing recipient" }).click();
     await page.goto(invoiceUrl);
+    // RECIPIENT-05: the invoice bills the accepted recipient and company.
     await expect(
-      page.getByText("Invented original recipient", { exact: true }),
+      page.getByText("Invented coaching recipient", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Invented Coaching Co", { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByText("Invented changed recipient", { exact: true }),

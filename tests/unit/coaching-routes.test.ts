@@ -129,7 +129,10 @@ function fixture(disabled = false) {
     next();
   });
   const profiles = {
-    read: vi.fn().mockResolvedValue(ready(null)),
+    read: vi.fn(),
+    suggest: vi
+      .fn()
+      .mockResolvedValue(ready({ name: "", email: "", revision: 0 })),
     save: vi.fn(),
   };
   mountCoachingRoutes(
@@ -661,7 +664,7 @@ it("HOUR05 stale draft saves and correction decisions recover from the current s
 
 it("BILLPROFILE03 suggests the saved recipient only on a new member coaching month, never overwriting a retained draft", async () => {
   const f = fixture();
-  f.profiles.read.mockResolvedValue(
+  f.profiles.suggest.mockResolvedValue(
     ready({
       name: "Reusable <recipient>",
       email: "billing@example.invalid",
@@ -674,7 +677,7 @@ it("BILLPROFILE03 suggests the saved recipient only on a new member coaching mon
   expect((await f.get("/account/coaching")).text).toContain(
     'value="Reusable &lt;recipient&gt;"',
   );
-  f.profiles.read.mockResolvedValueOnce({ kind: "unavailable" });
+  f.profiles.suggest.mockResolvedValueOnce({ kind: "unavailable" });
   expect((await f.get("/account/coaching")).status).toBe(503);
   f.service.coachingOverview.mockResolvedValue(ready(value));
   expect((await f.get("/account/coaching")).text).not.toContain(
@@ -899,5 +902,113 @@ it("ISSUER-03 issues a configured coaching invoice with computed 13% HST and no 
   );
   expect((await f.get("/account/coaching")).text).toContain(
     "HST at 13% is added when the invoice is issued",
+  );
+});
+
+it("RECIPIENT-01/02/03 a new month suggests the member or saved recipient, and saving passes edits and an optional company", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: null }),
+  );
+  f.profiles.suggest.mockResolvedValue(
+    ready({ name: "陳 Registered", email: "", revision: 0 }),
+  );
+  let text = (await f.get("/account/coaching")).text;
+  expect(text).toContain(
+    '<label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="陳 Registered" required></label>',
+  );
+  expect(text).toContain(
+    '<label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value=""></label>',
+  );
+  expect(text).toContain(
+    "Changes here are saved as your reusable billing recipient for later months.",
+  );
+  f.profiles.suggest.mockResolvedValue(
+    ready({
+      name: "Saved",
+      email: "saved@example.invalid",
+      company: "Invented <Co>",
+      revision: 2,
+    }),
+  );
+  text = (await f.get("/account/coaching")).text;
+  expect(text).toContain('value="saved@example.invalid"');
+  expect(text).toContain('value="Invented &lt;Co&gt;"');
+  // A retained draft keeps its own company, even a blank one.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: { ...entry, company: "Draft Co" } }),
+  );
+  expect((await f.get("/account/coaching")).text).toContain(
+    'name="company" autocomplete="organization" maxlength="200" value="Draft Co"',
+  );
+  f.service.coachingOverview.mockResolvedValue(ready(value));
+  expect((await f.get("/account/coaching")).text).toContain(
+    'name="company" autocomplete="organization" maxlength="200" value=""',
+  );
+  await f.post("/account/coaching/save", {
+    action: "save",
+    month,
+    hours: "1",
+    minutes: "30",
+    name: "Edited",
+    email: "edited@example.invalid",
+    company: "Edited Co",
+  });
+  expect(f.service.saveCoaching).toHaveBeenLastCalledWith(token, {
+    month,
+    expectedRevision: 1,
+    operationId: id,
+    minutes: 90,
+    name: "Edited",
+    email: "edited@example.invalid",
+    company: "Edited Co",
+  });
+});
+
+it("RECIPIENT-01/05 shows a submitted company and starts empty without a billing profile store", async () => {
+  const f = fixture();
+  const withCompany = { ...snapshot, company: "Invented <Co>" };
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      entry: {
+        ...entry,
+        company: "Invented <Co>",
+        state: "submitted",
+        revision: 2,
+        submittedRevision: 2,
+        snapshot: withCompany,
+      },
+    }),
+  );
+  const review = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(review).toContain(
+    "Recipient: Invented &lt;member&gt; · Invented &lt;Co&gt; · recipient@example.invalid",
+  );
+  expect(review).toContain(
+    "Invoice recipient: Invented &lt;member&gt; · Invented &lt;Co&gt; · recipient@example.invalid",
+  );
+  const app = express();
+  app.use((_req, res, next) => {
+    res.locals.token = token;
+    next();
+  });
+  mountCoachingRoutes(
+    app,
+    {
+      coachingOverview: vi
+        .fn()
+        .mockResolvedValue(ready({ ...value, entry: null })),
+    } as unknown as SimpleInvoiceStore,
+    { origin, secret },
+  );
+  const text = (
+    await withLoopback(app, (s) => request(s).get("/account/coaching"))
+  ).text;
+  expect(text).toContain(
+    'name="name" autocomplete="name" maxlength="200" value="" required',
+  );
+  expect(text).toContain(
+    'name="email" type="email" autocomplete="email" maxlength="254" value="" required',
   );
 });

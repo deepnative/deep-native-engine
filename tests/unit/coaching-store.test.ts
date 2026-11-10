@@ -651,3 +651,88 @@ it("ISSUER-03 computes HST on a configured coaching invoice and refuses a typed 
   });
   expect(write[1]![4]).toBe(18000 + 2340);
 });
+
+it("RECIPIENT-03/05 a saved draft keeps an optional company, updates the reusable recipient and carries the company to the invoice", async () => {
+  const sql = (f: ReturnType<typeof fixture>, start: string) =>
+    f.query.mock.calls.find(([text]) => text.startsWith(start));
+  const f = fixture({ entry: null });
+  expect(
+    (
+      await f.service.saveCoaching(token, {
+        ...save,
+        expectedRevision: 0,
+        company: "  Invented Co  ",
+      })
+    ).kind,
+  ).toBe("ready");
+  expect(sql(f, "INSERT INTO coaching_months")?.[1]).toEqual([
+    id,
+    month,
+    90,
+    snapshot.name,
+    snapshot.email,
+    1,
+    "Invented Co",
+  ]);
+  // The reusable recipient follows the saved draft; the sign-in email is untouched.
+  expect(sql(f, "INSERT INTO billing_profiles")?.[1]).toEqual([
+    id,
+    snapshot.name,
+    snapshot.email,
+    "Invented Co",
+  ]);
+  expect(
+    f.query.mock.calls.some(([text]) =>
+      /member_email|principals SET/.test(text),
+    ),
+  ).toBe(false);
+  for (const company of [undefined, " "]) {
+    const g = fixture({ entry: null });
+    await g.service.saveCoaching(token, {
+      ...save,
+      expectedRevision: 0,
+      company,
+    });
+    expect(sql(g, "INSERT INTO billing_profiles")?.[1]).toEqual([
+      id,
+      snapshot.name,
+      snapshot.email,
+      null,
+    ]);
+  }
+  for (const company of ["a".repeat(201), "Bad\u0000Co", 3])
+    expect(
+      (
+        await fixture().service.saveCoaching(token, {
+          ...save,
+          company,
+        } as never)
+      ).kind,
+    ).toBe("invalid");
+  const s = fixture({ entry: { ...draft, company: "Invented Co" } });
+  expect((await s.service.submitCoaching(token, submit)).kind).toBe("ready");
+  expect(
+    JSON.parse(sql(s, "INSERT INTO coaching_submissions")![1]![3] as string),
+  ).toMatchObject({ company: "Invented Co" });
+  const plain = fixture();
+  await plain.service.submitCoaching(token, submit);
+  expect(
+    JSON.parse(
+      sql(plain, "INSERT INTO coaching_submissions")![1]![3] as string,
+    ),
+  ).not.toHaveProperty("company");
+  const i = fixture({
+    admin: true,
+    entry: submitted,
+    snapshot: { ...snapshot, company: "Invented Co" },
+  });
+  expect((await i.service.issueCoaching(token, action)).kind).toBe("ready");
+  expect(
+    JSON.parse(sql(i, "INSERT INTO simple_invoices")![1]![2] as string),
+  ).toMatchObject({ billedTo: snapshot.name, billedToCompany: "Invented Co" });
+  const j = fixture({ admin: true, entry: submitted });
+  await j.service.issueCoaching(token, action);
+  expect(
+    JSON.parse(sql(j, "INSERT INTO simple_invoices")![1]![2] as string),
+  ).not.toHaveProperty("billedToCompany");
+});
