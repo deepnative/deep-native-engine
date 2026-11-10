@@ -2967,7 +2967,7 @@
       "actor": "Coached student and assigned reviewer",
       "preconditions": "Administrator-set coaching terms for the student (invoices only, no payment processing), reviewed foundation and qualified reviewer grant",
       "steps": "Onboard, choose eligible assignment, submit clean private evidence, review one pinned version, revise and export simulated-work statement",
-      "expected": "Only an assigned human publishes versioned feedback; one 30-minute review including preparation consumes 30 minutes of the student's administrator-set review allowance; export remains labelled (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator replace the requirement's pilot entitlement and four pilot units)",
+      "expected": "Only an assigned human publishes versioned feedback; one 30-minute review including preparation consumes 30 minutes of the student's administrator-set review allowance; export remains labelled (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator, replace the requirement's pilot entitlement and four pilot units)",
       "risk": "member-review; entitlement; privacy",
       "issues": [19, 20, 26, 27, 28, 33, 38],
       "critical": true,
@@ -3214,8 +3214,8 @@
       "status": "outstanding",
       "actor": "Coached student and billing administrator",
       "preconditions": "Versioned per-student coaching terms set by an administrator, with invoices only and no payment processing",
-      "steps": "Save a student's first terms, save their next terms before the renewal date, let a renewal date pass and renew with new terms; disorder payment events, fail installment, cancel and reconcile",
-      "expected": "Each terms version's CAD price, dates, allowances and invoice agree; nothing renews or charges automatically and no grant or invoice is duplicated (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator replace the requirement's CAD 3,000 pilot, CAD 9,000 conversion and twelve-month Professional offers)",
+      "steps": "Save a student's first terms, save their next terms before the renewal date, let a renewal date pass and renew with new terms; disorder payment events, leave an invoice unpaid, handle cancellation and refund requests and reconcile",
+      "expected": "Each terms version's CAD price, dates, allowances and invoice agree; nothing renews or charges automatically and no grant or invoice is duplicated; each invoice is paid offline in full, and cancellations and refunds are only what staff record as agreed (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator, replace the requirement's CAD 3,000 pilot, CAD 9,000 conversion and twelve-month Professional offers, and the owner's 10 November 2026 billing decision replaces its instalments and refund decisions)",
       "risk": "money; dates; event order",
       "issues": [19, 27, 32, 35],
       "critical": true,
@@ -3270,8 +3270,8 @@
         },
         {
           "id": "F-ROADMAP-04-D",
-          "steps": "Deliver duplicate/delayed payment events, fail an installment, cancel and request refund",
-          "expected": "State and invoices reconcile without an unaccepted charge or automatic manual refund",
+          "steps": "Deliver duplicate/delayed payment events, leave an invoice unpaid, then ask to cancel and for a refund",
+          "expected": "State and invoices reconcile with each invoice paid in full offline; cancellation and refund follow no automatic rule and are only what staff record as agreed",
           "critical": true,
           "requiredChecks": [
             {
@@ -3287,20 +3287,20 @@
               "expected": "The stale event cannot overwrite newer paid state"
             },
             {
-              "action": "Fail an installment",
-              "expected": "Entitlement and invoice state reflect the unpaid period without an unaccepted charge"
+              "action": "Leave an issued invoice unpaid",
+              "expected": "The invoice shows its full amount as unpaid, with no instalment schedule and no unaccepted charge"
             },
             {
-              "action": "Recover the failed installment",
-              "expected": "The dated entitlement and invoice ledger reconcile once after recovery"
+              "action": "Record the full offline payment of that invoice",
+              "expected": "The invoice is paid in full and the invoice ledger reconciles once"
             },
             {
-              "action": "Cancel the accepted service",
-              "expected": "Cancellation applies only the disclosed dated terms"
+              "action": "Ask to cancel the coaching",
+              "expected": "No automatic cancellation rule applies: the student is told to contact info@deepnative.io, and only a change staff record as agreed takes effect"
             },
             {
-              "action": "Request a manual refund decision",
-              "expected": "No automatic refund is invented; the operator decision and audit trail remain visible"
+              "action": "Ask for a refund",
+              "expected": "No automatic refund is invented: the student is told to contact info@deepnative.io, and the refund staff record as agreed and its audit trail remain visible"
             }
           ]
         }
@@ -3487,7 +3487,7 @@
       "actor": "Student whose coaching terms continue",
       "preconditions": "Next coaching terms saved by an administrator, with available group clinic and funded support",
       "steps": "Advance one period, book covered support, attend clinic and update goal/renewal",
-      "expected": "Only the next period's administrator-set allowance issues; group clinic creates no private hours; no invented rate or contract outcome (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator replace the requirement's explicit continuation and monthly Professional allowance)",
+      "expected": "Only the next period's administrator-set allowance issues; group clinic creates no private hours; no invented rate or contract outcome (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator, replace the requirement's explicit continuation and monthly Professional allowance)",
       "risk": "entitlement; service truth",
       "issues": [27, 35, 36, 37, 39],
       "critical": true,
@@ -3646,7 +3646,7 @@
       "status": "outstanding",
       "actor": "Authorized operator and requesting member",
       "preconditions": "Booking, invoice, private evidence and explicit retention policy",
-      "steps": "Resolve exception/refund, reconcile ledger/provider, export member data, delete active and derived data",
+      "steps": "Resolve exception, record an agreed refund, reconcile ledger/provider, export member data, delete active and derived data",
       "expected": "Exception history and retained-record notice are accurate; preparation counted once and demo events excluded from live metrics",
       "risk": "reconciliation; privacy lifecycle",
       "issues": [25, 27, 32, 35, 40, 41],
@@ -3666,17 +3666,17 @@
         },
         {
           "id": "F-ROADMAP-09-B",
-          "steps": "Review early release and refund requests",
-          "expected": "No automatic refund is invented; decision and reason remain visible",
+          "steps": "Record what was agreed for early-release and refund requests",
+          "expected": "No automatic release or refund is invented; what staff recorded as agreed and the reason remain visible (the owner's 10 November 2026 decision that the student contacts info@deepnative.io replaces automatic rules)",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Review an early-release request",
-              "expected": "An operator decision and reason are recorded without automatic release"
+              "action": "Record the outcome of an early-release request",
+              "expected": "Staff record what was agreed and the reason, without automatic release"
             },
             {
-              "action": "Review a refund request",
-              "expected": "An operator decision and reason are recorded without an invented automatic refund"
+              "action": "Record the outcome of a refund request",
+              "expected": "Staff record what was agreed and the reason, without an invented automatic refund"
             }
           ]
         },
@@ -3963,7 +3963,7 @@
       "actor": "Continuing, lapsed and renewing coached students",
       "preconditions": "Versioned per-student coaching terms and offers set by an administrator, with invoices only",
       "steps": "Continue terms on time, let terms lapse, accept an offer late, save terms of a different length and renew",
-      "expected": "Each terms version keeps its own administrator-set dates and allowances; lapsed terms bring no further charge or grant; a late offer needs a new accepted agreement with no retroactive bill/grant (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator replace the requirement's CAD 3,000 pilot, CAD 9,000 continuation and direct annual enrollment)",
+      "expected": "Each terms version keeps its own administrator-set dates and allowances; lapsed terms bring no further charge or grant; a late offer needs a new accepted agreement with no retroactive bill/grant (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator, replace the requirement's CAD 3,000 pilot, CAD 9,000 continuation and direct annual enrollment)",
       "risk": "money; month boundaries; consent",
       "issues": [19, 27, 32, 35],
       "critical": true,
@@ -4041,9 +4041,9 @@
       "source": "02-codex-build-prompt.md",
       "status": "outstanding",
       "actor": "Billing operator and event processor",
-      "preconditions": "Paid agreement and synthetic duplicate/out-of-order provider events",
-      "steps": "Deliver events in duplicate and reverse order, refund and inspect reconciliation exceptions",
-      "expected": "Idempotent immutable history; stale event cannot undo newer paid state; exception remains visible",
+      "preconditions": "Invoiced agreement paid offline in full, with synthetic duplicate/out-of-order signed test events",
+      "steps": "Deliver events in duplicate and reverse order, record an agreed refund and inspect reconciliation exceptions",
+      "expected": "Idempotent immutable history; stale event cannot undo newer paid state; refunds and early releases are staff records of what was agreed; exception remains visible (the owner's 10 November 2026 decision that there are no automatic cancellation or refund rules replaces the requirement's refund and early-release decisions)",
       "risk": "payment disorder; audit",
       "issues": [27, 32, 35],
       "critical": true,
@@ -4074,17 +4074,17 @@
         },
         {
           "id": "F-BUILD-05-C",
-          "steps": "Apply a refund and early-release decision",
-          "expected": "Both create auditable events without rewriting prior history",
+          "steps": "Record an agreed refund and an agreed early release",
+          "expected": "Both are staff records of what was agreed, appended as auditable events without rewriting prior history",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Apply a refund decision",
-              "expected": "An auditable refund event is appended without rewriting earlier history"
+              "action": "Record a refund that staff agreed with the student",
+              "expected": "An auditable refund record is appended without rewriting earlier history, and no automatic refund rule applies"
             },
             {
-              "action": "Apply an early-release decision",
-              "expected": "An auditable release decision is appended without rewriting earlier history"
+              "action": "Record an early release that staff agreed with the student",
+              "expected": "An auditable release record is appended without rewriting earlier history, and no automatic release rule applies"
             }
           ]
         },
@@ -4890,8 +4890,8 @@
       "status": "outstanding",
       "actor": "Member considering optional coaching",
       "preconditions": "Shared access independent of an approved versioned paid offer",
-      "steps": "Inspect scope and capacity, explicitly accept, then cancel/export; try background-only upgrade",
-      "expected": "Only accepted offer grants exact monthly units; background never mints paid minutes; cancellation rights remain visible",
+      "steps": "Inspect scope and capacity, explicitly accept, then look for cancellation and export; try background-only upgrade",
+      "expected": "Only accepted offer grants exact monthly units; background never mints paid minutes; the notice that there are no cancellation or refund rules and the info@deepnative.io contact remain visible (the owner's 10 November 2026 decision replaces disclosed cancellation rights)",
       "risk": "money; entitlement; access separation",
       "issues": [19, 27, 29, 32, 35],
       "critical": true,
@@ -4930,13 +4930,13 @@
         },
         {
           "id": "F-ECO-07-C",
-          "steps": "Cancel or export and change professional background",
-          "expected": "Cancellation rights remain visible; background change never mints paid service",
+          "steps": "Look for cancellation, export and change professional background",
+          "expected": "The no-cancellation-rules notice and info@deepnative.io contact remain visible; background change never mints paid service",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Cancel an accepted optional service",
-              "expected": "The disclosed cancellation rights and resulting entitlement state are enforced"
+              "action": "Look for how to cancel accepted optional coaching, then stop a monthly agreement",
+              "expected": "The student sees that there are no cancellation or refund rules and to contact info@deepnative.io; a stopped agreement issues no further invoices and keeps issued ones"
             },
             {
               "action": "Export the member records covered by the accepted offer",
