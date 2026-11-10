@@ -141,8 +141,8 @@ test("[L330] TERMSINV318-01/03/05 an administrator invoices a student's coaching
     await a.getByLabel("Coaching sessions").fill("6");
     await a.getByLabel("AI requests").fill("200");
     await a.getByRole("button", { name: "Save coaching terms" }).click();
-    const section = a.locator("section", {
-      has: a.getByRole("heading", { name: "Invoice these coaching terms" }),
+    const section = a.getByRole("region", {
+      name: "Invoice these coaching terms",
     });
     await expect(section).toContainText(
       "This student hasn't saved a billing recipient yet.",
@@ -202,7 +202,9 @@ test("[L330] TERMSINV318-01/03/05 an administrator invoices a student's coaching
 
     // 6. The administrator records the offline payment; the student sees it paid.
     await a.getByLabel("Amount received (CAD)").fill("1356.00");
-    await a.getByLabel("Received on", { exact: true }).fill("2026-12-02");
+    await a
+      .getByLabel("Received on", { exact: true })
+      .fill(new Date().toISOString().slice(0, 10));
     await a
       .getByLabel("Evidence reference")
       .first()

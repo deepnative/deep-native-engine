@@ -329,7 +329,7 @@ it("TERMSINV318-05 staff record the offline payment with the existing form; the 
       expectedRevision: 1,
       operationId: randomUUID(),
       amountCents: 135600,
-      receivedOn: "2026-12-02",
+      receivedOn: new Date().toISOString().slice(0, 10),
       evidence: "Invented e-Transfer reference",
     }),
   );
