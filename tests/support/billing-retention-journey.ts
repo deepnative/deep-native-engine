@@ -12,7 +12,7 @@ import {
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;
 
 export const BILLING_EXPIRY =
-  "Issued invoices and the payments and refunds recorded against them are kept for 6 years after the account is deleted, following Canada Revenue Agency record-keeping rules (records are kept 6 years from the end of the last tax year they relate to).";
+  "Issued invoices and the payments and refunds recorded against them are kept after the account is deleted, following Canada Revenue Agency record-keeping rules: until December 31, 6 years after the tax year of the invoice (Deep Native Inc.'s tax year ends on December 31). An invoice from 2026 is kept until December 31, 2032. Then the invoice and its payment records are removed automatically.";
 export const BACKUP_EXPIRY =
   "Copies in service backups are kept for up to 30 days, then they expire.";
 // A false total-erasure claim, in any of the ways it could be worded.

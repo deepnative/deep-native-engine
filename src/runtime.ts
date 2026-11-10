@@ -1,3 +1,8 @@
+import {
+  invoiceRetention,
+  RETENTION_FIRST_SWEEP_MS,
+  RETENTION_SWEEP_INTERVAL_MS,
+} from "./invoice-retention.ts";
 import { coachingTermsStore } from "./coaching-terms.ts";
 import { billingProfileStore } from "./billing-profile.ts";
 import { workflowTestRoot } from "./workflow-registry.ts";
@@ -153,7 +158,9 @@ export async function start(env: NodeJS.ProcessEnv) {
       Boolean(settings.hosted),
       invoiceSettings,
     );
+    const retention = invoiceRetention(pool);
     const options = {
+      invoiceRetention: retention,
       simpleInvoices: invoices,
       coachingTerms: coachingTermsStore(pool),
       testProviderEvents: testEventKey
@@ -404,6 +411,9 @@ export async function start(env: NodeJS.ProcessEnv) {
     let objectWriteCursor: string | null = null;
     let evidenceCursor: string | null = null;
     let activeRecovery: Promise<void> | undefined;
+    // The first sweep runs a minute after start, then every few hours.
+    let lastRetentionSweep =
+      Date.now() - RETENTION_SWEEP_INTERVAL_MS + RETENTION_FIRST_SWEEP_MS;
     const recover = () => {
       if (activeRecovery) return;
       activeRecovery = (async () => {
@@ -430,6 +440,12 @@ export async function start(env: NodeJS.ProcessEnv) {
           const billing = await invoices.generateScheduled();
           if (billing.kind !== "ready")
             console.error("Recurring invoice generation remains unconfirmed.");
+        }
+        // RETEXP-01 (#12 D08): kept invoices past their date, a few times a day.
+        if (Date.now() - lastRetentionSweep >= RETENTION_SWEEP_INTERVAL_MS) {
+          lastRetentionSweep = Date.now();
+          if ((await retention.removeExpired()) === null)
+            console.error("Expired invoice removal will be retried.");
         }
       })().finally(() => {
         activeRecovery = undefined;
