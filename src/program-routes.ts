@@ -1,3 +1,7 @@
+import {
+  courseTermsSection,
+  type CoachingTermsStore,
+} from "./coaching-terms.ts";
 import { hostingText } from "./hosting-presentation.ts";
 import type { Express, Request, Response } from "express";
 import type { Store } from "./store.ts";
@@ -31,6 +35,7 @@ export function mountProgramRoutes(
   programs: ProgramStore,
   origin: string,
   secret: string,
+  coachingTerms?: Pick<CoachingTermsStore, "own">,
 ) {
   const token = (res: Response) => res.locals.token as string;
   const protect = (res: Response) =>
@@ -279,10 +284,17 @@ export function mountProgramRoutes(
     const result = await owned(req, res);
     if (!result) return;
     const current = await programs.overview();
+    // #557: the student's per-student coaching terms beside the free enrollment.
+    const terms = await coachingTerms?.own(token(res));
     return res.send(
       myCoursesPage(
         result.value,
         current.kind === "ready" ? current.value : null,
+        terms
+          ? courseTermsSection(
+              terms.kind === "ready" ? terms.value : "unavailable",
+            )
+          : "",
         csrf(token(res), secret),
       ),
     );

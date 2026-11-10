@@ -17,13 +17,17 @@ import {
 } from "../../src/program-values.ts";
 import { issueProgramSelection } from "../../src/program-selection.ts";
 import { withLoopback } from "../support/loopback-server.ts";
+import type {
+  CoachingTerms,
+  CoachingTermsStore,
+} from "../../src/coaching-terms.ts";
 
 const bearer = "a".repeat(64),
   secret = "invented-program-routes-secret";
 const id = "10aba371-5534-468f-9a8b-e6fa1ea406b1";
 const key = "13a81b72-3651-4426-888b-c7c45a41d919";
 const selected = () => `dne_program_selection=${issueProgramSelection(secret)}`;
-async function fixture() {
+async function fixture(coachingTerms?: Pick<CoachingTermsStore, "own">) {
   const pack = await reviewedFoundation();
   const overview: ProgramOverview = {
     manifest: structuredClone(PROGRAM_MANIFEST),
@@ -85,6 +89,7 @@ async function fixture() {
     { ...disabledProgramStore(), ...reads },
     "https://127.0.0.1:3000",
     secret,
+    coachingTerms,
   );
   return { app, reads, session, overview, receipt };
 }
@@ -515,5 +520,71 @@ it("#121 PROGWD-02 refuses unconfirmed or malformed withdrawals and maps store r
       .type("form")
       .send({ confirm: "yes" })
       .expect(401);
+  });
+});
+const terms: CoachingTerms = {
+  version: 2,
+  savedAt: new Date("2026-11-01T12:00:00Z"),
+  priceCents: 125000,
+  startsOn: "2026-11-01",
+  endsOn: "2027-01-31",
+  renewsOn: "2027-02-01",
+  reviewMinutes: 120,
+  coachingSessions: 4,
+  aiRequests: 30,
+  balances: null,
+};
+it("COURSETERMS557-01 shows the student's own admin-set coaching terms beside a free enrollment", async () => {
+  const own = vi.fn().mockResolvedValue({ kind: "ready", value: terms });
+  const f = await fixture({ own } as Pick<CoachingTermsStore, "own">);
+  await withLoopback(f.app, async (server) => {
+    const page = (await request(server).get("/my-courses").expect(200)).text;
+    expect(own).toHaveBeenCalledWith(bearer);
+    expect(page).toContain("Your coaching");
+    expect(page).toContain("CAD 1,250.00");
+    expect(page).toContain("November 1, 2026 to January 31, 2027");
+    expect(page).toContain("Renewal date February 1, 2027");
+    expect(page).toContain('href="/account/coaching"');
+    expect(page).toContain("Enrolling in a program is free");
+    expect(page).toContain("Nothing renews or charges automatically.");
+    expect(page).toContain("mailto:info@deepnative.io");
+  });
+});
+it("COURSETERMS557-02 says when no terms are set and keeps My courses working when they can't be read", async () => {
+  const own = vi.fn().mockResolvedValue({ kind: "ready", value: null });
+  const f = await fixture({ own } as Pick<CoachingTermsStore, "own">);
+  await withLoopback(f.app, async (server) => {
+    const none = (await request(server).get("/my-courses").expect(200)).text;
+    expect(none).toContain("Your administrator hasn't set your coaching terms");
+    expect(none).toContain(
+      "Your learning and enrollment don't depend on them.",
+    );
+    expect(none).not.toContain("CAD ");
+    own.mockResolvedValue({ kind: "unavailable" });
+    const down = (await request(server).get("/my-courses").expect(200)).text;
+    expect(down).toContain("Your coaching terms can't be shown right now.");
+    expect(down).toContain("My courses");
+  });
+  const without = await fixture();
+  await withLoopback(without.app, async (server) => {
+    const page = (await request(server).get("/my-courses").expect(200)).text;
+    expect(page).not.toContain("Your coaching");
+  });
+});
+it("COURSETERMS557-03 the program page explains how paid coaching is arranged per student", async () => {
+  const f = await fixture();
+  await withLoopback(f.app, async (server) => {
+    const page = (await request(server).get(PROGRAM_PATH).expect(200)).text;
+    expect(page).not.toContain(
+      "No paid enrollment or service coverage is offered here.",
+    );
+    expect(page).toContain("Enrolling in a program is free.");
+    expect(page).toContain(
+      "Paid coaching is arranged for each student: an administrator sets your price, coaching period, renewal date and allowances.",
+    );
+    expect(page).toContain(
+      "Deep Native Inc. sends an invoice and you pay offline.",
+    );
+    expect(page).toContain("Nothing renews or charges automatically.");
   });
 });
