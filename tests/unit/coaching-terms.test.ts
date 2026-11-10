@@ -94,6 +94,9 @@ function fixture(
       rows = o.earlier ? [o.earlier] : [];
     else if (sql.includes("FROM coaching_terms WHERE owner_id"))
       rows = o.current ? [o.current] : [];
+    // #27: no open period here; tests/unit/coaching-allowances.test.ts covers units.
+    else if (sql.includes("AT TIME ZONE 'America/Toronto'"))
+      rows = [{ starts: new Date(), expires: new Date(), open: false }];
     return { rows, rowCount: rows.length };
   });
   vi.mocked(practiceTransaction).mockImplementation(async (_pool, use) => {
@@ -230,7 +233,7 @@ it("TERMS316-06 a student reads only their own terms; an administrator reads one
     await fixture({ kind: "member", current: saved }).terms.own(token),
   ).toEqual({
     kind: "ready",
-    value: saved,
+    value: { ...saved, balances: null },
   });
   expect(await fixture({ kind: "member" }).terms.own(token)).toEqual({
     kind: "ready",
@@ -240,7 +243,7 @@ it("TERMS316-06 a student reads only their own terms; an administrator reads one
   expect(await fixture({ current: saved }).terms.forStudent(token, id)).toEqual(
     {
       kind: "ready",
-      value: saved,
+      value: { ...saved, balances: null },
     },
   );
   expect(await fixture().terms.forStudent(token, "nope")).toEqual({

@@ -7,6 +7,7 @@ import {
   syntheticLedgerOnConnection,
   supportLedgerOnConnection,
   reviewLedgerOnConnection,
+  coachingAllowanceLedgerOnConnection,
 } from "../../src/ledger.ts";
 
 const member = "00000000-0000-4000-8000-000000000001";
@@ -117,6 +118,28 @@ function database(
   };
 }
 const allocation = "00000000-0000-4000-8000-000000000004";
+it("ALLOW27 grants coaching allowance units and writes off unused ones in the caller's transaction", async () => {
+  const db = database(),
+    boundary = coachingAllowanceLedgerOnConnection(
+      db.client as unknown as PoolClient,
+    );
+  await expect(
+    boundary.grant(member, "review_minutes", 120, "coaching-grant", window),
+  ).resolves.toMatch(/^[0-9a-f-]{36}$/);
+  await expect(
+    boundary.grant(member, "coach_minutes" as never, 1, "wrong", window),
+  ).rejects.toMatchObject({ code: "invalid_request" });
+  await expect(
+    boundary.adjust(member, grant, 3, "coaching-writeoff"),
+  ).resolves.toBe(grant);
+  expect(
+    db.query.mock.calls.some(([sql]) => sql.includes("adjusted=adjusted+$2")),
+  ).toBe(true);
+  expect(db.connect).not.toHaveBeenCalled();
+  expect(
+    db.query.mock.calls.some(([sql]) => /^(BEGIN|COMMIT|ROLLBACK)/.test(sql)),
+  ).toBe(false);
+});
 it("requires a valid allocation identity before constructing the internal support boundary", () => {
   expect(() =>
     supportLedgerOnConnection(
