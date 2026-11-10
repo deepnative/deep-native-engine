@@ -209,6 +209,20 @@ test("[F-ECO-07-C] cancelling a monthly bundle stops future invoices, the agreem
     ).rows[0]!.id;
 
     await requiredCheck(1, async () => {
+      // There are no cancellation or refund rules; the student is pointed to
+      // the service contact (owner decision, 10 Nov 2026).
+      await member.goto(f.origin + "/account/coaching");
+      const terms = member.locator('section[aria-labelledby="coaching-terms"]');
+      await expect(
+        terms.getByRole("heading", { name: "Your coaching terms" }),
+      ).toBeVisible();
+      await expect(terms).toContainText(
+        "There are no cancellation or refund rules.",
+      );
+      await expect(
+        terms.getByRole("link", { name: "info@deepnative.io" }),
+      ).toHaveAttribute("href", "mailto:info@deepnative.io");
+
       await member.goto(f.origin + "/account/purchases");
       const card = member.locator(`#plan-${plan!.id}`);
       await expect(card).toContainText("Monthly invoices until cancelled");

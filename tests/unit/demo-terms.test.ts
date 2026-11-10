@@ -95,7 +95,7 @@ it("RETAIN-01/02 /terms names the billing exception with its expiry and the back
   const html = withHosting(true, () => termsPage());
   const page = text(html);
   for (const sentence of [
-    "Issued invoices and the payments and refunds recorded against them are kept for 6 years after the account is deleted, following Canada Revenue Agency record-keeping rules (records are kept 6 years from the end of the last tax year they relate to).",
+    "Issued invoices and the payments and refunds recorded against them are kept after the account is deleted, following Canada Revenue Agency record-keeping rules: until December 31, 6 years after the tax year of the invoice (Deep Native Inc.'s tax year ends on December 31). An invoice from 2026 is kept until December 31, 2032. Then the invoice and its payment records are removed automatically.",
     "They hold only what the invoice needs: its number and date, the issuer, the billing name, company and email, the items, amounts and tax, whether it was voided, and the payments and refunds recorded. Sample invoices are deleted with the account.",
     "Copies in service backups are kept for up to 30 days, then they expire.",
   ])
