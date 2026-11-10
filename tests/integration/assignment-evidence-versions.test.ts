@@ -10,7 +10,10 @@ import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore } from "../../src/catalog.ts";
 import { assignmentEvidenceStore } from "../../src/assignment-evidence.ts";
 import { assignmentObjectStorage } from "../../src/assignment-evidence-storage.ts";
-import type { AssignmentEvidenceInstruction } from "../../src/assignment-evidence-values.ts";
+import {
+  ASSIGNMENT_CONSENT_VERSION,
+  type AssignmentEvidenceInstruction,
+} from "../../src/assignment-evidence-values.ts";
 import { evidenceStore } from "../../src/evidence.ts";
 import { memberExportStore } from "../../src/member-export.ts";
 import { sampleFeedbackStore } from "../../src/sample-feedback.ts";
@@ -136,6 +139,7 @@ async function submitted(
     rubricVersion: v.rubricVersion,
     sourceSha256: sha(response),
     privateReview: true,
+    consentVersion: ASSIGNMENT_CONSENT_VERSION,
   };
 }
 async function copy(token: string, input: AssignmentEvidenceInstruction) {
@@ -577,4 +581,171 @@ it("AEV-03 after withdrawal a member recovers with a fresh deliberate copy that 
     receipt: { state: "removed", evidenceId: null },
   });
   expect(await count("evidence_objects")).toBe(1);
+});
+
+// Owner decision of 10 November 2026: a copy is kept until the member deletes
+// it, the original attempt or their account, and there is no appeal path. The
+// member agrees to one versioned wording that says so.
+const consentVersions = async () =>
+  (
+    await pool.query<{ v: string | null }>(
+      "SELECT consent_version v FROM assignment_evidence_origins ORDER BY acknowledged_at",
+    )
+  ).rows.map((row) => row.v);
+const consentAssignment: Version = {
+  id: "CON-125",
+  version: 1,
+  title: "Invented consent example",
+  rubric: "Name one option and one risk.",
+  rubricVersion: 2,
+  goals: ["everyday"],
+  backgrounds: [],
+  domains: [],
+};
+
+it("CONSENT125-01/02/03 a copy records the consent wording version the member agreed to; another version copies nothing, and the receipt and download show it", async () => {
+  const s = await staff(),
+    owner = await member("explorer", "everyday");
+  await publish(s, consentAssignment);
+  const input = await submitted(
+    owner.token,
+    consentAssignment,
+    "An invented response naming one option and one risk.",
+  );
+  // A form carrying wording that isn't current is refused before any write.
+  expect(
+    await copies.create(owner.token, {
+      ...input,
+      consentVersion: "assignment-feedback-v2",
+    }),
+  ).toEqual({ kind: "conflict" });
+  expect(
+    await copies.create(owner.token, { ...input, consentVersion: "v1" }),
+  ).toEqual({ kind: "invalid" });
+  expect(await count("assignment_evidence_origins")).toBe(0);
+  expect(await count("assignment_evidence_operations")).toBe(0);
+  // The current wording creates the copy and is saved with it.
+  const receipt = await copy(owner.token, input);
+  expect(receipt.assignmentOrigin).toMatchObject({
+    consentVersion: ASSIGNMENT_CONSENT_VERSION,
+    contentId: "CON-125",
+  });
+  expect(await consentVersions()).toEqual(["assignment-feedback-v1"]);
+  // Repeating the original request under a later wording returns the same
+  // receipt with the version that was agreed to, and copies nothing more.
+  const replayed = await copies.create(owner.token, {
+    ...input,
+    consentVersion: "assignment-feedback-v2",
+  });
+  expect(replayed).toMatchObject({
+    kind: "replayed",
+    receipt: {
+      receiptId: receipt.receiptId,
+      assignmentOrigin: { consentVersion: "assignment-feedback-v1" },
+    },
+  });
+  expect(await count("assignment_evidence_origins")).toBe(1);
+  expect(await copies.inspect(owner.token, input.operationId)).toMatchObject({
+    kind: "ready",
+    receipt: {
+      assignmentOrigin: { consentVersion: "assignment-feedback-v1" },
+    },
+  });
+  // The member's own list and download carry it; the database refuses others.
+  expect(
+    (await evidence.owned(owner.token)).map(
+      (item) => item.assignmentOrigin?.consentVersion,
+    ),
+  ).toEqual(["assignment-feedback-v1"]);
+  const exported = await memberExportStore(pool).exportOwned(owner.token);
+  if (exported.kind !== "ready") throw Error("Member export unavailable");
+  const origins = exported.payload.records.assignmentEvidenceOrigins ?? [];
+  expect(origins).toHaveLength(1);
+  expect(origins[0]!.assignmentOrigin).toMatchObject({
+    consentVersion: "assignment-feedback-v1",
+    acknowledgedAt: expect.any(String),
+  });
+  await expect(
+    pool.query(
+      "UPDATE assignment_evidence_origins SET consent_version='assignment-feedback-v2'",
+    ),
+  ).rejects.toThrow("Assignment origin is immutable");
+  await expect(
+    pool.query(
+      `ALTER TABLE assignment_evidence_origins ADD CONSTRAINT probe CHECK(consent_version<>'x');
+       INSERT INTO assignment_evidence_origins(evidence_id,workspace_id,member_id,storage_key,attempt_id,sequence,content_id,content_version,rubric_version,submitted_at,source_sha256,consent_version)
+       SELECT gen_random_uuid(),workspace_id,member_id,gen_random_uuid(),attempt_id,sequence,content_id,content_version,rubric_version,submitted_at,source_sha256,'made-up' FROM assignment_evidence_origins`,
+    ),
+  ).rejects.toThrow();
+  await pool.query(
+    "ALTER TABLE assignment_evidence_origins DROP CONSTRAINT IF EXISTS probe",
+  );
+});
+
+it("CONSENT125-03/04 a copy from before wording versions is never back-filled, and deleting a copy, its attempt or the account removes the consent record", async () => {
+  const s = await staff(),
+    owner = await member("explorer", "everyday");
+  await publish(s, consentAssignment);
+  const input = await submitted(
+    owner.token,
+    consentAssignment,
+    "An invented earlier response.",
+  );
+  const earlier = await copy(owner.token, input);
+  // Stand-in for a copy made before migration 137: no version was agreed to.
+  await pool.query(
+    `BEGIN;
+     ALTER TABLE assignment_evidence_origins DISABLE TRIGGER assignment_evidence_origin_guard;
+     UPDATE assignment_evidence_origins SET consent_version=NULL WHERE evidence_id='${earlier.evidenceId}';
+     ALTER TABLE assignment_evidence_origins ENABLE TRIGGER assignment_evidence_origin_guard;
+     COMMIT;`,
+  );
+  // Migrating again leaves it alone, and it still reads as the member's copy.
+  await migrate(pool);
+  expect(await consentVersions()).toEqual([null]);
+  expect(await copies.inspect(owner.token, input.operationId)).toMatchObject({
+    kind: "ready",
+    receipt: {
+      state: "available",
+      assignmentOrigin: { consentVersion: null, contentId: "CON-125" },
+    },
+  });
+  // A fresh copy of the same submission is made under the current wording.
+  const fresh = await copy(owner.token, {
+    ...input,
+    operationId: randomUUID(),
+  });
+  expect(await consentVersions()).toEqual([null, "assignment-feedback-v1"]);
+  // Deleting only the fresh copy removes its consent record and nothing else.
+  expect(await evidence.remove(owner.token, fresh.evidenceId!)).toBe(true);
+  expect(await consentVersions()).toEqual([null]);
+  expect((await memberExportStore(pool).exportOwned(owner.token)).kind).toBe(
+    "ready",
+  );
+  // Deleting the original attempt removes the earlier copy too.
+  expect(await attempts.remove(owner.token, input.attemptId)).toBe(true);
+  expect(await count("assignment_evidence_origins")).toBe(0);
+  expect(await copies.inspect(owner.token, input.operationId)).toMatchObject({
+    kind: "ready",
+    receipt: { state: "removed", evidenceId: null, assignmentOrigin: null },
+  });
+  // Deleting the account removes a remaining copy, its consent and receipts.
+  const leaving = await member("explorer", "everyday");
+  const kept = await submitted(
+    leaving.token,
+    consentAssignment,
+    "An invented response from a member who leaves.",
+  );
+  await copy(leaving.token, kept);
+  expect(await consentVersions()).toEqual(["assignment-feedback-v1"]);
+  await db.remove(leaving.id);
+  expect(await count("assignment_evidence_origins")).toBe(0);
+  expect(
+    (
+      await pool.query(
+        "SELECT 1 FROM assignment_evidence_operations WHERE member_id=$1",
+        [leaving.id],
+      )
+    ).rowCount,
+  ).toBe(0);
 });

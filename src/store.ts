@@ -287,6 +287,7 @@ export async function migrate(pool: Pool) {
       "134-circle-report-dispositions.sql",
       "135-local-program-withdrawals.sql",
       "136-invoice-retention-expiry.sql",
+      "137-assignment-consent-versions.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

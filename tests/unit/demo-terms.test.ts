@@ -88,6 +88,15 @@ it("TERMS-08 the terms page says how long a shared member contribution stays rea
   );
 });
 
+// #125, owner decision 10 Nov 2026: an assignment feedback copy is kept until
+// the member deletes it or their account; no appeal path.
+it("TERMS-09 the terms page says how long a private assignment feedback copy is kept and that there is no appeal (#125)", () => {
+  const page = text(withHosting(true, () => termsPage()));
+  expect(page).toContain(
+    "A private feedback copy of a submitted assignment is kept until you delete the copy, delete the original attempt or delete your account. Feedback on it is not a formal assessment, and there is no appeal process.",
+  );
+});
+
 // #12 D08, owner decision 10 Nov 2026: invoices and payment records are kept
 // six years (CRA); backups 30 days. /terms lists the same kept records as the
 // account page, from the same source.

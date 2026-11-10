@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { assignmentAttemptPage, evidencePage } from "../../src/views.ts";
+import { assignmentReceiptPage } from "../../src/assignment-evidence-views.ts";
 import { sampleFeedbackPage } from "../../src/sample-feedback-views.ts";
 import type { OwnedEvidence } from "../../src/evidence.ts";
 import type { AssignmentAttempt } from "../../src/attempts.ts";
@@ -141,4 +142,51 @@ it("GAPS-05 offers no feedback copy for a version that kept no rubric", () => {
     true,
   );
   expect(html).not.toContain("/handoff?");
+});
+
+it("CONSENT125-03 the receipt and the private copies list show the consent wording version, or say the copy predates versions, with how long it is kept", () => {
+  const versioned = {
+    ...assignmentOrigin,
+    consentVersion: "assignment-feedback-v1",
+  };
+  const receipt = (origin: AssignmentEvidenceOrigin | null) =>
+    assignmentReceiptPage({
+      receiptId: id,
+      evidenceId: origin ? id : null,
+      createdAt: date,
+      state: origin ? "available" : "removed",
+      assignmentOrigin: origin,
+    });
+  const current = receipt(versioned);
+  expect(current).toMatch(
+    /<p>Consent wording assignment-feedback-v1, agreed <time [^>]*datetime="2026-10-27T12:00:00.000Z"/,
+  );
+  expect(current).toContain(
+    "A private feedback copy of a submitted assignment is kept until you delete the copy, delete the original attempt or delete your account. Feedback on it is not a formal assessment, and there is no appeal process. You can delete the copy from your private copies.",
+  );
+  // Never back-filled: an earlier copy doesn't claim a version.
+  for (const earlier of [
+    assignmentOrigin,
+    { ...assignmentOrigin, consentVersion: null },
+  ]) {
+    const old = receipt(earlier);
+    expect(old).toMatch(
+      /<p>Consent given <time [^>]*>.*?<\/time>, before wording versions were recorded\.<\/p>/,
+    );
+    expect(old).not.toContain("Consent wording");
+  }
+  const removed = receipt(null);
+  expect(removed).not.toContain("Consent");
+  expect(removed).toContain("has been removed");
+  const list = evidencePage(
+    [{ ...evidence, assignmentOrigin: versioned }],
+    "nonce",
+  );
+  expect(list).toContain("Consent wording assignment-feedback-v1, agreed ");
+  expect(list).toContain(
+    "A copy is kept until you delete it, delete the original attempt or delete your account.",
+  );
+  expect(evidencePage([evidence], "nonce")).toContain(
+    "before wording versions were recorded.",
+  );
 });

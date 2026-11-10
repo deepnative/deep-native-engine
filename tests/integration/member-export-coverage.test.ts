@@ -321,6 +321,11 @@ it("EXPCOV-05 how many coaches the member has, and since when, is in Download my
   const text = JSON.stringify(all);
   for (const hidden of [coach, assigner, other.id])
     expect(text).not.toContain(hidden);
+  // Lanes share one database: leave the seeded roles as ROLES-01/06 expects.
+  await pool.query("DELETE FROM coach_assignments WHERE coach_email_hash=$1", [
+    coach,
+  ]);
+  await pool.query("DELETE FROM account_roles WHERE email_hash=$1", [coach]);
 });
 
 it("EXPCOV-06 hand-recorded test payment observations about the member are in Download my records, labelled unverified, without staff", async () => {

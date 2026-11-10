@@ -131,6 +131,16 @@ export interface CoachingTermsInvoiceView {
   } | null;
   recipient: { name: string; email: string; company: string | null } | null;
   invoiceId: string | null;
+  /**
+   * TERMSINV318-08: live invoices for earlier versions whose coaching period
+   * overlaps the current one, listed while the current version is unbilled.
+   */
+  earlier: {
+    version: number;
+    startsOn: string;
+    endsOn: string;
+    invoiceId: string;
+  }[];
 }
 export type CoachingStatus =
   "not_started" | "draft" | "returned" | "submitted" | "invoiced" | "voided";
@@ -909,19 +919,31 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
       return run(token, true, async (tx) => {
         await owner(tx, ownerId, true);
         const terms = await currentTerms(tx, ownerId);
+        const invoiceId = terms
+          ? ((
+              await tx.query<{ id: string }>(
+                "SELECT id FROM simple_invoices WHERE coaching_terms_id=$1 AND void_reason IS NULL",
+                [terms.id],
+              )
+            ).rows[0]?.id ?? null)
+          : null;
         return {
           kind: "ready",
           value: {
             terms,
             recipient: await recipient(tx, ownerId),
-            invoiceId: terms
-              ? ((
-                  await tx.query<{ id: string }>(
-                    "SELECT id FROM simple_invoices WHERE coaching_terms_id=$1 AND void_reason IS NULL",
-                    [terms.id],
-                  )
-                ).rows[0]?.id ?? null)
-              : null,
+            invoiceId,
+            // A correction of the same period is a new version, so its
+            // earlier invoice is named before another can be issued.
+            earlier:
+              terms && !invoiceId
+                ? (
+                    await tx.query<CoachingTermsInvoiceView["earlier"][number]>(
+                      `SELECT t.version,to_char(t.starts_on,'YYYY-MM-DD') AS "startsOn",to_char(t.ends_on,'YYYY-MM-DD') AS "endsOn",i.id AS "invoiceId" FROM simple_invoices i JOIN coaching_terms t ON t.id=i.coaching_terms_id WHERE t.owner_id=$1 AND t.id<>$2 AND i.void_reason IS NULL AND t.starts_on<=$4::date AND t.ends_on>=$3::date ORDER BY t.version`,
+                      [ownerId, terms.id, terms.startsOn, terms.endsOn],
+                    )
+                  ).rows
+                : [],
           },
         };
       });

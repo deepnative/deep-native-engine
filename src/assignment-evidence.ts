@@ -13,6 +13,7 @@ import {
   assignmentPayloadDigest,
   assignmentSequence,
   assignmentEvidenceName,
+  ASSIGNMENT_CONSENT_VERSION,
   ASSIGNMENT_ORIGIN_JOIN,
   ASSIGNMENT_ORIGIN_SQL,
   type AssignmentEvidenceOrigin,
@@ -221,6 +222,9 @@ export function assignmentEvidenceStore(
           if (previous.digest !== payload) return fail("conflict");
           return { kind: "replayed" as const, receipt: previous.value };
         }
+        // CONSENT125-02: a new copy needs the wording that is current now.
+        if (input.consentVersion !== ASSIGNMENT_CONSENT_VERSION)
+          return fail("conflict");
         const selected = await source(context, input.attemptId, input.sequence);
         if (
           selected.contentId !== input.contentId ||
@@ -246,8 +250,8 @@ export function assignmentEvidenceStore(
           ],
         );
         await tx.query(
-          `INSERT INTO assignment_evidence_origins(evidence_id,workspace_id,member_id,storage_key,attempt_id,sequence,content_id,content_version,rubric_version,submitted_at,source_sha256)
-           SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,s.submitted_at,$10 FROM assignment_submission_snapshots s WHERE s.attempt_id=$5 AND s.sequence=$6`,
+          `INSERT INTO assignment_evidence_origins(evidence_id,workspace_id,member_id,storage_key,attempt_id,sequence,content_id,content_version,rubric_version,submitted_at,source_sha256,consent_version)
+           SELECT $1,$2,$3,$4,$5,$6,$7,$8,$9,s.submitted_at,$10,$11 FROM assignment_submission_snapshots s WHERE s.attempt_id=$5 AND s.sequence=$6`,
           [
             id,
             workspaceId,
@@ -259,6 +263,7 @@ export function assignmentEvidenceStore(
             selected.contentVersion,
             selected.rubricVersion,
             selected.sourceSha256,
+            input.consentVersion,
           ],
         );
         await tx.query(

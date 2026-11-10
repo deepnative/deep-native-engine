@@ -10,6 +10,7 @@ import { catalogStore } from "../../src/catalog.ts";
 import { assignmentEvidenceStore } from "../../src/assignment-evidence.ts";
 import { assignmentObjectStorage } from "../../src/assignment-evidence-storage.ts";
 import {
+  ASSIGNMENT_CONSENT_VERSION,
   assignmentPayloadDigest,
   type AssignmentEvidenceInstruction,
 } from "../../src/assignment-evidence-values.ts";
@@ -151,6 +152,7 @@ async function fixture() {
     rubricVersion: 4,
     sourceSha256: digest,
     privateReview: true,
+    consentVersion: ASSIGNMENT_CONSENT_VERSION,
   };
   return {
     owner,
