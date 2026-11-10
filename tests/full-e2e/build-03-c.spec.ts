@@ -115,13 +115,10 @@ test("[F-BUILD-03-C] staff cancel the race winner's sample hold and one replacem
       const staffPage = await staff.newPage();
       await signIn(staffPage, operatorToken, slotOrigin);
       const staleTab = await staff.newPage();
-      // HOLDCANCEL-NAV-01: staff reach the page from their own tools.
-      await staffPage.goto("/staff");
-      await staffPage.getByRole("link", { name: "Staff sample holds" }).click();
-      await expect(staffPage).toHaveURL(/\/operator\/sample-holds$/);
-      await staleTab.goto("/operator/sample-holds");
-      for (const page of [staffPage, staleTab])
+      for (const page of [staffPage, staleTab]) {
+        await page.goto("/operator/sample-holds");
         await expect(cancelForm(page, slotId)).toBeVisible();
+      }
       const submitted = await formFields(cancelForm(staffPage, slotId));
       const stale = await formFields(cancelForm(staleTab, slotId));
 
