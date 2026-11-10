@@ -686,6 +686,16 @@ const sections = {
     WHERE c.member_id=$1`,
     "r.request_id",
   ),
+  // v47 also appends #40 EXPCOV: what the platform derived from the member's
+  // uploaded files, such as extracted text: which upload, kind, size, checksum
+  // and when. Never the storage key, and nothing for an upload being removed.
+  evidenceDerivatives: section(
+    `d.id,d.evidence_id AS "evidenceId",d.kind,d.byte_size AS "byteSize",
+    d.sha256,d.created_at AS "createdAt"`,
+    `evidence_derivatives d JOIN evidence_objects e ON e.id=d.evidence_id
+    WHERE e.owner_principal_id=$1 AND e.quarantine_state<>'deleting'`,
+    "d.id",
+  ),
 } as const;
 /** Section SQL, shared with the member-authorized operator download (#40). */
 export const MEMBER_EXPORT_SECTIONS = sections;
