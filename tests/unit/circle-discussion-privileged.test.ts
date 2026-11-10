@@ -679,6 +679,9 @@ it("bounds report pages without exposing reporter identity and signs a usable co
       createdAt: question.createdAt,
       pseudonym: "Peer invented",
     },
+    disposition: "open",
+    dispositionRevision: 1,
+    decisionRevision: null,
   });
   expect(JSON.stringify(first.value.items)).not.toContain(member);
   const second = await f.db.moderationQueue(
@@ -701,7 +704,16 @@ it("retains a safe unavailable-target marker without disclosing withdrawn text",
   expect(await f.db.moderationQueue(token, circle)).toEqual({
     kind: "ready",
     value: {
-      items: [{ id: key, category: "privacy", target: null }],
+      items: [
+        {
+          id: key,
+          category: "privacy",
+          target: null,
+          disposition: "open",
+          dispositionRevision: 1,
+          decisionRevision: null,
+        },
+      ],
       nextCursor: null,
     },
   });

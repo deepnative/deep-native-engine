@@ -273,6 +273,7 @@ import {
 } from "./circle-discussion-routes.ts";
 import { disabledProgramStore, type ProgramStore } from "./program-values.ts";
 import { mountProgramRoutes } from "./program-routes.ts";
+import type { InvoiceRetention } from "./invoice-retention.ts";
 import { programResumeTarget } from "./program-selection.ts";
 import {
   disabledCircleDiscussionStore,
@@ -489,6 +490,7 @@ export function app(
     programs?: ProgramStore;
     simpleInvoices?: SimpleInvoiceStore;
     coachingTerms?: CoachingTermsStore;
+    invoiceRetention?: Pick<InvoiceRetention, "retainedUntil">;
     testProviderEvents?: TestProviderEvents;
     billingProfiles?: BillingProfileStore;
     invoiceSender?: InvoiceSender;
@@ -6158,6 +6160,10 @@ export function app(
         );
       return;
     }
+    // RETEXP-02 (#12 D08): read the kept invoices' date before they are unlinked.
+    const until = await options.invoiceRetention?.retainedUntil(
+      (res.locals.learner as Learner).id,
+    );
     await evidence.removeWorkspace(res.locals.token as string);
     await store.remove((res.locals.learner as Learner).id);
     res.clearCookie(COOKIE, {
@@ -6166,7 +6172,11 @@ export function app(
       path: "/",
       secure: cookieOptions(options.origin).secure,
     });
-    setLandingNotice(res, "deleted", options.origin);
+    setLandingNotice(
+      res,
+      until ? `deleted-until-${until}` : "deleted",
+      options.origin,
+    );
     res.redirect(303, "/");
   });
   app.use((_req, res) =>

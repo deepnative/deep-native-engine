@@ -47,7 +47,7 @@ A dirty working-tree run is useful during editing but is not evidence for a late
 
 ### L102 native submission evidence
 
-Before focusing the withdrawal checkbox, L102 waits for the locator's stable, in-view state with `scrollIntoViewIfNeeded()`. A captured mobile failure lost focus during Space, sending keyup to the body; a target-bound press alone also failed. The first stable-target desktop/mobile run passed with the original focus, Space, Tab, Enter, three audiences and privacy assertions. This is a condition-based interaction precondition, not a delay or retry; the origin of the blur and the historical missing-Enter cause remain unproved.
+Opening a retained record from Private activity follows a `#starter-version-…` fragment link. Chromium's fragment-anchor step runs after load and moves focus to the target, or clears it to `<body>` when the target cannot take focus. That is the captured mobile failure: focus left the checkbox for `<body>` during Space. A pinned-Chromium control confirmed it (#543): a checkbox focused before the first frame stayed focused without a fragment, moved to `<body>` with a non-focusable target, and moved to the target with `tabindex="-1"`. The record targets now use `tabindex="-1"`, so the fragment step lands focus on the opened record. L102 waits for that record to be focused before the original checkbox focus, Space, Tab and Enter, with all three audiences and privacy assertions unchanged. That focus is the condition the test waits on, not a delay or retry. It replaces the earlier `scrollIntoViewIfNeeded()` precondition, which passed because its frame waits usually let the fragment step run first. The historical missing-Enter failure (checkbox checked, button focused, no POST) is not explained by this and remains unproved.
 
 Ordinary browser journeys give each action 15 seconds and each navigation 20 seconds (#633), so a hung action fails with a call log naming it and leaves test time for cleanup. L182-L184 remove their members and staff in `test.afterEach`, which runs before `afterAll` closes the pool even after a test timeout, so a timed-out journey cannot leave a question that breaks later circle journeys. `tests/integration/hosted-proxy.test.ts` uses `tests/support/owned-proxy-request.ts` (#650): a request idle for 4 seconds is logged with its socket state and retried once on a new connection, and a second stall fails with that state. The underlying stalls in #633 and #650 were never reproduced, so this limits their damage and records evidence for the next occurrence. It does not prove their cause.
 
@@ -142,10 +142,10 @@ Keep the same exported selection for verification and push: the receipt binds th
 Auto mode considers available CPUs and the smaller of system memory and the process/container memory limit. It budgets about4GiB per group, capped at eight groups on>=12CPUs and four otherwise, with at least one group. Explicit selections override that heuristic; they do not allocate memory or guarantee that a smaller machine has enough capacity.
 
 | Example profile | Docker VM RAM | Test groups | Build-cache retention target |
-| --- | ---: | ---: | ---: |
-| Small | 8GiB | 2 | 5GB |
-| Standard | 16GiB | 4 | 10GB |
-| Large | 64GiB | 8 | 40GB |
+| --------------- | ------------: | ----------: | ---------------------------: |
+| Small           |          8GiB |           2 |                          5GB |
+| Standard        |         16GiB |           4 |                         10GB |
+| Large           |         64GiB |           8 |                         40GB |
 
 These are starting budgets, not benchmark guarantees or new minimum requirements. Configure actual RAM through Colima (for example, `colima start --memory 16` after an orderly maintenance stop). Set a smaller build-cache target by merging this into the existing `docker` section of `~/.colima/default/colima.yaml`, preserving other settings:
 

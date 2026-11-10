@@ -390,6 +390,7 @@ const program = {
 const programReceipt = {
   id: "44444444-4444-4444-8444-444444444444",
   enrolledAt: "2026-09-24T00:00:00Z",
+  withdrawnAt: null,
   manifest: PROGRAM_MANIFEST,
   digest: PROGRAM_DIGEST,
   activity: [],
