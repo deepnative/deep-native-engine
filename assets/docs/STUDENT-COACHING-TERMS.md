@@ -14,7 +14,7 @@ The student sees their current terms, read-only, on **Monthly coaching hours** (
 
 ## Invoicing the terms (#318)
 
-On the same page, **Invoice these coaching terms** issues one invoice for the current terms version ([#318](https://github.com/deepnative/deep-native-engine/issues/318), migration 131):
+On the same page, **Invoice these coaching terms** issues one invoice for the current terms version ([#318](https://github.com/deepnative/deep-native-engine/issues/318), migration 132):
 
 - one line, "Coaching · <start> to <end> · terms version N", at the terms price;
 - configured invoices are from Deep Native Inc. with 13% HST computed by the server and the e-Transfer/cheque wording (`src/invoice-issuer.ts`, #797); sample mode asks for an invented tax instead;
@@ -37,4 +37,4 @@ No migration and no export change. Tests: RENEW317-01..04 in `tests/unit/coachin
 - The renewal date is shown and listed for administrators, never acted on: no automatic renewal, acceptance, charge, grant or invoice. There is no cancellation flow (#319).
 - Nothing is invoiced automatically. An administrator issues a terms invoice on the student's page (#318). Monthly coaching hours and their invoices work as before ([MONTHLY-COACHING-INVOICES.md](MONTHLY-COACHING-INVOICES.md)).
 
-Tests: TERMS316-01..07 in `tests/integration/coaching-terms.test.ts`; TERMSINV318-01..06 in `tests/integration/coaching-terms-invoices.test.ts`, TERMSINV318-07 in `tests/unit/coaching-terms.test.ts` and browser journey L330 in `tests/e2e/coaching-terms-invoice.spec.ts`; export index in `tests/unit/member-export.test.ts`.
+Tests: TERMS316-01..07 in `tests/integration/coaching-terms.test.ts`; TERMSINV318-01..06 in `tests/integration/coaching-terms-invoices.test.ts`, TERMSINV318-07 in `tests/unit/coaching-terms.test.ts` and browser journey L331 in `tests/e2e/coaching-terms-invoice.spec.ts`; export index in `tests/unit/member-export.test.ts`.

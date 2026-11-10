@@ -19,5 +19,5 @@ CREATE TRIGGER coaching_terms_invoice_immutable BEFORE UPDATE OF coaching_terms_
 ALTER TABLE IF EXISTS billing_change_events DROP CONSTRAINT IF EXISTS billing_change_events_action_check;
 ALTER TABLE IF EXISTS billing_change_events ADD CONSTRAINT billing_change_events_action_check
  CHECK(action IN ('plan_offered','rate_set','hours_returned','coaching_invoice_issued','monthly_invoice_issued','payment_recorded','payment_refunded','invoice_voided','test_payment_received','test_payment_failed','test_refund_recorded','terms_invoice_issued'));
-INSERT INTO schema_migrations(version) VALUES(131) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(132) ON CONFLICT DO NOTHING;
 COMMIT;

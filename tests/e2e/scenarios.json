@@ -2939,7 +2939,7 @@
       "critical": true
     },
     {
-      "id": "L330",
+      "id": "L331",
       "actor": "Student and platform administrator",
       "preconditions": "Dedicated synthetic PostgreSQL database dropped afterwards, configured Deep Native Inc. invoicing with 13% HST, invented student and amounts, port0 server; desktop/mobile Chromium",
       "steps": "TERMSINV318-01/03/05: the student registers; the administrator sets coaching terms and sees that no invoice can be issued without a billing recipient; the student saves a billing recipient; the administrator reviews the amount and recipient and issues the terms invoice; the student opens it from Courses and invoices; the administrator records the full offline payment",

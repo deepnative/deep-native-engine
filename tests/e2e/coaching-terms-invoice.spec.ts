@@ -115,7 +115,7 @@ async function fixture(browser: Browser, info: TestInfo) {
   };
 }
 
-test("[L330] TERMSINV318-01/03/05 an administrator invoices a student's coaching terms with HST; the student sees it due, then paid", async ({
+test("[L331] TERMSINV318-01/03/05 an administrator invoices a student's coaching terms with HST; the student sees it due, then paid", async ({
   browser,
 }, info) => {
   const f = await fixture(browser, info);
