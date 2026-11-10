@@ -81,6 +81,13 @@ it("TERMS-01/04 /terms is public, and every page's footer links to it", async ()
   expect(footer).toContain('<a href="/terms">Terms and privacy</a>');
 });
 
+it("TERMS-08 the terms page says how long a shared member contribution stays readable (#97)", () => {
+  const page = text(withHosting(true, () => termsPage()));
+  expect(page).toContain(
+    "If you share a member contribution, other signed-in members can read it until you withdraw sharing or delete your account. Withdrawing or deleting removes it and its attribution straight away. Copies someone already saved can't be recalled.",
+  );
+});
+
 // #12 D08, owner decision 10 Nov 2026: invoices and payment records are kept
 // six years (CRA); backups 30 days. /terms lists the same kept records as the
 // account page, from the same source.
