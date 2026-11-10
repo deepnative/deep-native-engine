@@ -2955,6 +2955,33 @@
       "expected": "The invoice is from Deep Native Inc. with HST registration 713254472RT0001, CAD 1,200.00 plus CAD 156.00 HST, the e-Transfer/cheque instructions and the terms version and period; the student sees CAD 1356.00 due and then Paid; the coaching page shows the version invoiced with no second form",
       "issues": [318],
       "critical": false
+    },
+    {
+      "id": "L333",
+      "actor": "General learner (explorer/everyday), second member and finite circle moderator",
+      "preconditions": "Fresh isolated invented-data runtime with circle discussion and local staff entry enabled; both members joined with current sharing; finite exact-circle test-purpose moderator grant; desktop/mobile Chromium",
+      "steps": "RPTD-01..09: the owner shares an invented question; the second member reports it and opens what happened to the report; the owner is denied that record; the moderator asks for a local second look, then hides the question and closes the report against that exact decision revision; the reporter reloads, downloads the outcome, leaves the circle, reopens it and deletes their account",
+      "expected": "Open at revision 1, then a local second look at revision 2 with no assignee or promise, then closed at revision 3 against the recorded decision; no further actions offered; the download has only category, disposition, revision and structured actions with no body or identities; the record survives leaving; account deletion removes it and a stale download has no attachment",
+      "issues": [196],
+      "critical": true
+    },
+    {
+      "id": "L334",
+      "actor": "Non-IT professional (professional/work), second member and finite circle moderator",
+      "preconditions": "Fresh isolated invented-data runtime with circle discussion and local staff entry enabled; both members joined with current sharing; finite exact-circle test-purpose moderator grant; desktop/mobile Chromium",
+      "steps": "RPTD-01..09: the owner shares an invented question; the second member reports it and opens what happened to the report; the owner is denied that record; the moderator asks for a local second look, then hides the question and closes the report against that exact decision revision; the reporter reloads, downloads the outcome, leaves the circle, reopens it and deletes their account",
+      "expected": "Open at revision 1, then a local second look at revision 2 with no assignee or promise, then closed at revision 3 against the recorded decision; no further actions offered; the download has only category, disposition, revision and structured actions with no body or identities; the record survives leaving; account deletion removes it and a stale download has no attachment",
+      "issues": [196],
+      "critical": true
+    },
+    {
+      "id": "L335",
+      "actor": "IT practitioner (technical/build), second member and finite circle moderator",
+      "preconditions": "Fresh isolated invented-data runtime with circle discussion and local staff entry enabled; both members joined with current sharing; finite exact-circle test-purpose moderator grant; desktop/mobile Chromium",
+      "steps": "RPTD-01..09: the owner shares an invented question; the second member reports it and opens what happened to the report; the owner is denied that record; the moderator asks for a local second look, then hides the question and closes the report against that exact decision revision; the reporter reloads, downloads the outcome, leaves the circle, reopens it and deletes their account",
+      "expected": "Open at revision 1, then a local second look at revision 2 with no assignee or promise, then closed at revision 3 against the recorded decision; no further actions offered; the download has only category, disposition, revision and structured actions with no body or identities; the record survives leaving; account deletion removes it and a stale download has no attachment",
+      "issues": [196],
+      "critical": true
     }
   ],
   "fullMvp": [
