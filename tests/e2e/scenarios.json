@@ -2937,6 +2937,15 @@
       "expected": "Each sign-in leaves the earlier browsers signed in; the Sign out page and My account say other browsers stay signed in; signing out ends only that browser; signing back in keeps the remaining browser signed in",
       "issues": [695],
       "critical": true
+    },
+    {
+      "id": "L330",
+      "actor": "Platform administrator setting a student's coaching allowances, and the student",
+      "preconditions": "Dedicated synthetic PostgreSQL database dropped afterwards, port0 server, one invented student and one invented platform administrator, sample coaching invoicing; desktop/mobile Chromium; no provider",
+      "steps": "ALLOW27-01/03/07: the administrator saves the student's coaching terms with 90 expert review minutes and 25 AI requests for a period that has started; the student opens Monthly coaching hours; the administrator lowers AI requests to 10 and the student reloads",
+      "expected": "The administrator and the student both see Allowances left this period with 90 of 90 minutes and 25 of 25 AI requests left, none held or used, and that coaching sessions aren't counted; after lowering, the student sees 10 of 10 left; no sideways scrolling",
+      "issues": [27],
+      "critical": true
     }
   ],
   "fullMvp": [

@@ -508,6 +508,32 @@ export function studyAllowanceLedgerOnConnection(client: LedgerConnection) {
   };
 }
 
+// Internal coaching allowance boundary (#27). The coaching terms store owns the
+// platform administrator's authority, the per-student lock and the sole
+// transaction; only the two allowance categories it maps can be granted, and
+// unused units are written off with the ordinary adjust event.
+export function coachingAllowanceLedgerOnConnection(client: LedgerConnection) {
+  const ledger = ledgerOperations(
+    client,
+    (key, input, change) => applyEvent(client, key, input, change),
+    undefined,
+  );
+  return {
+    async grant(
+      memberId: string,
+      category: "review_minutes" | "study_requests",
+      quantity: number,
+      key: string,
+      window: ValidityWindow,
+    ) {
+      if (category !== "review_minutes" && category !== "study_requests")
+        throw new LedgerFailure("invalid_request");
+      return ledger.grant(memberId, category, quantity, key, window);
+    },
+    adjust: ledger.adjust,
+  };
+}
+
 // Internal practice session boundary. The practice store owns the member's
 // workspace lock and the sole transaction, so one session uses exactly one unit.
 export function practiceSessionLedgerOnConnection(client: LedgerConnection) {
