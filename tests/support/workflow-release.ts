@@ -17,7 +17,7 @@ export async function workflowRelease() {
   for (const id of Object.keys(workflowFiles) as WorkflowId[]) {
     const text = await readFile(
       new URL(
-        `../../assets/docs/content/reviewed-v2/workflows/${workflowFiles[id]}`,
+        `../../assets/docs/content/reviewed-v3/workflows/${workflowFiles[id]}`,
         import.meta.url,
       ),
       "utf8",
@@ -41,7 +41,7 @@ export async function workflowRelease() {
         path(id),
         line.test(text)
           ? text.replace(line, `${key}: ${value}`)
-          : text.replace(/^version: 2$/m, `version: 2\n${key}: ${value}`),
+          : text.replace(/^version: 3$/m, `version: 3\n${key}: ${value}`),
       );
     },
     async title(id: WorkflowId) {

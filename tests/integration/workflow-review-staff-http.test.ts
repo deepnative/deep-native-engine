@@ -95,7 +95,7 @@ it("WFREV-02/03/04 browser assignment reads only the exact requested note until 
   const feedback = workflowFeedbackStore(pool);
   await db.create(member, { background: "professional", goal: "work" });
   const note = "Invented workflow note <script>never execute</script>";
-  expect(await feedback.save(member, "WF-001", 2, note, 0)).toBe(true);
+  expect(await feedback.save(member, "WF-001", 3, note, 0)).toBe(true);
   const ownerCookie = `dne_preview=${member}`;
   const preview = await get(
     "/workflow-feedback/WF-001/review",
@@ -174,7 +174,7 @@ it("WFREV-02/03/04 browser assignment reads only the exact requested note until 
   expect(worklist.text).not.toContain("Invented workflow note");
   const read = await get(readPath, moderator.cookie).expect(200);
   expect(read.text).toContain("Invented workflow note &lt;script&gt;");
-  expect(read.text).toContain("WF-001 · version 2 · revision 1");
+  expect(read.text).toContain("WF-001 · version 3 · revision 1");
   expect(read.text).not.toContain(note);
   for (const selected of [sibling.cookie, admin.cookie, ownerCookie]) {
     const denied = await get(readPath, selected);
@@ -261,7 +261,7 @@ it("WFREV-02 administrator can revoke an exact grant without deleting the member
   const feedback = workflowFeedbackStore(pool);
   await db.create(member, { background: "technical", goal: "work" });
   const note = "Invented note retained after exact staff revocation";
-  expect(await feedback.save(member, "WF-001", 2, note, 0)).toBe(true);
+  expect(await feedback.save(member, "WF-001", 3, note, 0)).toBe(true);
   const owner = `dne_preview=${member}`;
   const preview = await get("/workflow-feedback/WF-001/review", owner).expect(
     200,

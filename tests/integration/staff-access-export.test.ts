@@ -68,7 +68,7 @@ async function proposalRead(workspace: string, proposal: string, i = ids()) {
 async function noteRead(workspace: string, i = ids()) {
   await pool.query(
     `INSERT INTO workflow_review_read_audit(id,workspace_id,actor_id,grant_id,request_id,workflow_id,workflow_version,revision)
-     VALUES($1,$2,$3,$4,$5,'WF-001',2,1)`,
+     VALUES($1,$2,$3,$4,$5,'WF-001',3,1)`,
     [randomUUID(), workspace, i.actor, i.grant, i.other],
   );
   return i;
@@ -124,7 +124,7 @@ it("STAFFEXPORT-01 the download lists each kind of staff access with what, who a
   expect(by("workflow", "note_read")).toMatchObject({
     via: "moderator",
     workflowId: "WF-001",
-    workflowVersion: 2,
+    workflowVersion: 3,
   });
   for (const row of rows) {
     expect(Object.keys(row).sort()).toEqual(

@@ -67,7 +67,7 @@ async function supportRequest(owner: string) {
 }
 async function workflowRequest(owner: string, note = "Invented note") {
   expect(
-    await workflowFeedbackStore(pool).save(owner, "WF-001", 2, note, 0),
+    await workflowFeedbackStore(pool).save(owner, "WF-001", 3, note, 0),
   ).toBe(true);
   const preview = await reviews.preview(owner, "WF-001");
   if (preview.kind !== "ready") throw Error("Owned preview required");

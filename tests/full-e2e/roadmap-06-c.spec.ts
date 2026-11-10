@@ -22,7 +22,7 @@ test("[F-ROADMAP-06-C] a stale or retired workflow template is not shown as curr
 
     await requiredCheck(1, async () => {
       // Before: within its review date, it is current support.
-      await page.goto(`${f.origin}/workflows/WF-001?version=2`);
+      await page.goto(`${f.origin}/workflows/WF-001?version=3`);
       await expect(supportStatus(page)).toHaveText(
         "Currently supported; next review by 2999-01-01.",
       );
@@ -56,15 +56,15 @@ test("[F-ROADMAP-06-C] a stale or retired workflow template is not shown as curr
       await list();
       await expect(page.getByRole("link", { name: title })).toHaveCount(0);
       const retired = page.getByRole("region", { name: "Retired versions" });
-      await expect(retired).toContainText(`WF-002 · ${title} · version 2`);
+      await expect(retired).toContainText(`WF-002 · ${title} · version 3`);
       await expect(retired.getByRole("link")).toHaveCount(0);
       // Neither the page nor the download is offered any more.
-      await page.goto(`${f.origin}/workflows/WF-002?version=2`);
+      await page.goto(`${f.origin}/workflows/WF-002?version=3`);
       await expect(
         page.getByRole("heading", { name: "Workflow unavailable" }),
       ).toBeVisible();
       const download = await page.request.get(
-        `${f.origin}/workflows/WF-002/download?version=2`,
+        `${f.origin}/workflows/WF-002/download?version=3`,
       );
       expect(download.status()).toBe(404);
       expect(download.headers()["content-disposition"]).toBeUndefined();
