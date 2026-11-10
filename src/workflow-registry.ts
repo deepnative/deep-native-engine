@@ -12,7 +12,7 @@ const files = {
 // Templates come from an explicit Git source release. Tests may point the
 // /workflows pages at a fixture release, only in test mode.
 const RELEASE = new URL(
-  "../assets/docs/content/reviewed-v2/workflows/",
+  "../assets/docs/content/reviewed-v3/workflows/",
   import.meta.url,
 );
 export function workflowTestRoot(

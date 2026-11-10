@@ -40,7 +40,7 @@ async function actors() {
     await workflowFeedbackStore(pool).save(
       member,
       "WF-001",
-      2,
+      3,
       "Invented export source note",
       0,
     ),

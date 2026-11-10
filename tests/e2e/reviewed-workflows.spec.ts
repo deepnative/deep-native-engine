@@ -21,9 +21,9 @@ for (const [index, [background, goal, workflow]] of [
     await chooseLearningGoal(page, goal!);
     await page.getByRole("button", { name: "Start my learning path" }).click();
     await expect(page).toHaveURL(/\/learn$/);
-    await page.goto(`/workflows/${workflow}?version=2`);
+    await page.goto(`/workflows/${workflow}?version=3`);
     await expect(
-      page.getByText("ORDINARY REVIEWED WORKFLOW · VERSION 2"),
+      page.getByText("ORDINARY REVIEWED WORKFLOW · VERSION 3"),
     ).toBeVisible();
     await expect(
       page.getByText(
@@ -32,12 +32,12 @@ for (const [index, [background, goal, workflow]] of [
     ).toBeVisible();
     await expect(
       page.getByText(
-        "2026-10-27 manual input/output comparison; no AI call or software test execution",
+        "2026-11-10 manual input/output comparison against current sources; no AI call or software test execution",
       ),
     ).toBeVisible();
     await expect(
       page.getByText(
-        "2026-11-27 or earlier when source requirements or supported environment change",
+        "2026-12-10 or earlier when source requirements or supported environment change",
       ),
     ).toBeVisible();
     await expect(
@@ -45,7 +45,7 @@ for (const [index, [background, goal, workflow]] of [
     ).toHaveAttribute("readonly", "");
     await expect(
       page.getByRole("link", { name: "Download Markdown text" }),
-    ).toHaveAttribute("href", `/workflows/${workflow}/download?version=2`);
+    ).toHaveAttribute("href", `/workflows/${workflow}/download?version=3`);
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -76,15 +76,15 @@ for (const [index, [background, goal, workflow]] of [
     ).toBeVisible();
     await expect(page.getByText(previous, { exact: true })).toBeVisible();
     await expect(
-      page.getByLabel("Your private feedback on version 2"),
+      page.getByLabel("Your private feedback on version 3"),
     ).toHaveValue("");
-    await page.getByLabel("Your private feedback on version 2").fill(current);
+    await page.getByLabel("Your private feedback on version 3").fill(current);
     await page.getByLabel("I choose to save this note privately.").check();
     await page.getByRole("button", { name: "Save private feedback" }).click();
     await expect(page.getByRole("status")).toContainText("saved privately");
     await page.reload();
     await expect(
-      page.getByLabel("Your private feedback on version 2"),
+      page.getByLabel("Your private feedback on version 3"),
     ).toHaveValue(current);
     await expect(page.getByText(previous, { exact: true })).toBeVisible();
     const exported = await context.request.get("/api/member/export");
@@ -99,7 +99,7 @@ for (const [index, [background, goal, workflow]] of [
         }),
         expect.objectContaining({
           workflowId: workflow,
-          workflowVersion: 2,
+          workflowVersion: 3,
           revision: 1,
           note: current,
         }),
@@ -129,7 +129,7 @@ for (const [index, [background, goal, workflow]] of [
         ).href,
       );
       await expect(
-        other.getByLabel("Your private feedback on version 2"),
+        other.getByLabel("Your private feedback on version 3"),
       ).toHaveValue("");
       await expect(other.locator("body")).not.toContainText(previous);
       await expect(other.locator("body")).not.toContainText(current);
@@ -142,7 +142,7 @@ for (const [index, [background, goal, workflow]] of [
       .click();
     await expect(page.getByText(previous, { exact: true })).toHaveCount(0);
     await expect(
-      page.getByLabel("Your private feedback on version 2"),
+      page.getByLabel("Your private feedback on version 3"),
     ).toHaveValue(current);
     await page.screenshot({
       path: info.outputPath("separate-private-history.png"),

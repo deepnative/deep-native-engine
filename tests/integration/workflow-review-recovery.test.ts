@@ -42,7 +42,7 @@ async function fixture() {
     await workflowFeedbackStore(pool).save(
       member,
       "WF-001",
-      2,
+      3,
       "Invented private source for recovery",
       0,
     ),

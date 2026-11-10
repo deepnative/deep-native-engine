@@ -23,8 +23,8 @@ test("[F-BUILD-07-B] a retired or unverified workflow template is not presented 
       await expect(page.getByRole("link", { name: title })).toHaveCount(0);
       await expect(
         page.getByRole("region", { name: "Retired versions" }),
-      ).toContainText(`WF-003 · ${title} · version 2`);
-      await page.goto(`${f.origin}/workflows/WF-003?version=2`);
+      ).toContainText(`WF-003 · ${title} · version 3`);
+      await page.goto(`${f.origin}/workflows/WF-003?version=3`);
       await expect(
         page.getByRole("heading", { name: "Workflow unavailable" }),
       ).toBeVisible();
@@ -33,7 +33,7 @@ test("[F-BUILD-07-B] a retired or unverified workflow template is not presented 
 
     await requiredCheck(2, async () => {
       const title = await release.title("WF-001");
-      await page.goto(`${f.origin}/workflows/WF-001?version=2`);
+      await page.goto(`${f.origin}/workflows/WF-001?version=3`);
       const status = page.locator('dt:text-is("Support status") + dd');
       await expect(status).toHaveText(
         "Currently supported; next review by 2999-01-01.",

@@ -160,7 +160,7 @@ test("[L306] NOTEREAD-01, 08 a member sees when a moderator read a workflow note
     owner = session.learner.id;
 
     await page.goto(`${origin}/workflow-feedback/WF-001`);
-    await page.getByLabel("Your private feedback on version 2").fill(note);
+    await page.getByLabel("Your private feedback on version 3").fill(note);
     await page.getByLabel("I choose to save this note privately.").check();
     await page
       .getByRole("button", { name: "Save private feedback", exact: true })
@@ -225,7 +225,7 @@ test("[L306] NOTEREAD-01, 08 a member sees when a moderator read a workflow note
       await moderator.goto(`${origin}/moderate/workflow-reviews`);
       await moderator
         .getByRole("link", {
-          name: "WF-001 · version 2 · revision 1",
+          name: "WF-001 · version 3 · revision 1",
           exact: true,
         })
         .click();
@@ -236,7 +236,7 @@ test("[L306] NOTEREAD-01, 08 a member sees when a moderator read a workflow note
 
     await page.reload();
     await expect(page.locator("main li").nth(0)).toContainText(
-      "A moderator read your workflow note for WF-001, version 2.",
+      "A moderator read your workflow note for WF-001, version 3.",
     );
     const body = page.locator("body");
     await expect(body).toContainText(

@@ -24,7 +24,7 @@ test("[F-BUILD-07-C] a declared workflow version downloads its exact bytes and a
       id,
       await readFile(
         new URL(
-          `../../assets/docs/content/reviewed-v2/workflows/${file}`,
+          `../../assets/docs/content/reviewed-v3/workflows/${file}`,
           import.meta.url,
         ),
       ),
@@ -32,14 +32,14 @@ test("[F-BUILD-07-C] a declared workflow version downloads its exact bytes and a
 
   await requiredCheck(1, async () => {
     for (const [id] of declared) {
-      await page.goto(`/workflows/${id}?version=2`);
+      await page.goto(`/workflows/${id}?version=3`);
       await expect(
-        page.getByText("ORDINARY REVIEWED WORKFLOW · VERSION 2"),
+        page.getByText("ORDINARY REVIEWED WORKFLOW · VERSION 3"),
       ).toBeVisible();
       const downloadPromise = page.waitForEvent("download");
       await page.getByRole("link", { name: "Download Markdown text" }).click();
       const download = await downloadPromise;
-      expect(download.suggestedFilename()).toBe(`${id}-v2.md`);
+      expect(download.suggestedFilename()).toBe(`${id}-v3.md`);
       const bytes = await readFile((await download.path())!);
       expect(bytes.equals(files.get(id)!)).toBe(true);
       expect(metadata(bytes.toString("utf8"), "version")).toBe("2");
@@ -59,7 +59,7 @@ test("[F-BUILD-07-C] a declared workflow version downloads its exact bytes and a
   await requiredCheck(2, async () => {
     for (const [id] of declared) {
       const source = files.get(id)!.toString("utf8");
-      await page.goto(`/workflows/${id}?version=2`);
+      await page.goto(`/workflows/${id}?version=3`);
       for (const [term, key] of [
         ["Supported environment", "supported_environment"],
         ["Last verification", "last_verification"],

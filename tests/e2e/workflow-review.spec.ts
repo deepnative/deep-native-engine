@@ -124,7 +124,7 @@ for (const [index, [background, goal]] of [
       ownerId = session.learner.id;
       const note = `Invented ${background} note about clearer workflow steps <script>`;
       await page.goto(origin + "/workflow-feedback/WF-001");
-      await page.getByLabel("Your private feedback on version 2").fill(note);
+      await page.getByLabel("Your private feedback on version 3").fill(note);
       await page.getByLabel("I choose to save this note privately.").check();
       await page
         .getByRole("button", { name: "Save private feedback", exact: true })
@@ -165,13 +165,13 @@ for (const [index, [background, goal]] of [
       await moderator.goto(origin + "/moderate/workflow-reviews");
       await moderator
         .getByRole("link", {
-          name: "WF-001 · version 2 · revision 1",
+          name: "WF-001 · version 3 · revision 1",
           exact: true,
         })
         .click();
       await expect(moderator.locator("pre")).toHaveText(note);
       await expect(moderator.locator("body")).toContainText(
-        "WF-001 · version 2 · revision 1",
+        "WF-001 · version 3 · revision 1",
       );
       await expect(moderator.locator("body")).toContainText(
         "does not establish qualified review",
@@ -211,7 +211,7 @@ for (const [index, [background, goal]] of [
       await expect(moderator.locator("body")).not.toContainText(note);
       await page.goto(origin + "/workflow-feedback/WF-001");
       await expect(
-        page.getByLabel("Your private feedback on version 2"),
+        page.getByLabel("Your private feedback on version 3"),
       ).toHaveValue(note);
       await page
         .getByRole("link", { name: "My private review request history" })
@@ -230,7 +230,7 @@ for (const [index, [background, goal]] of [
       const correctedNote = note + " corrected";
       await page.goto(origin + "/workflow-feedback/WF-001");
       await page
-        .getByLabel("Your private feedback on version 2")
+        .getByLabel("Your private feedback on version 3")
         .fill(correctedNote);
       await page.getByLabel("I choose to save this note privately.").check();
       await page
@@ -254,18 +254,18 @@ for (const [index, [background, goal]] of [
         correctedNote,
       );
       await page.goto(origin + "/workflow-feedback/WF-001");
-      const removal = page.getByLabel("Remove my private note for version 2");
+      const removal = page.getByLabel("Remove my private note for version 3");
       await expect(removal).not.toBeChecked();
       await removal.check();
       await page
         .getByRole("button", {
-          name: "Withdraw version 2 feedback",
+          name: "Withdraw version 3 feedback",
           exact: true,
         })
         .click();
       await page.goto(origin + "/workflow-feedback/WF-001");
       await page
-        .getByLabel("Your private feedback on version 2")
+        .getByLabel("Your private feedback on version 3")
         .fill(correctedNote);
       await page.getByLabel("I choose to save this note privately.").check();
       await page
@@ -344,7 +344,7 @@ for (const [index, [background, goal]] of [
       await expect(moderator.locator("body")).not.toContainText(correctedNote);
       await page.goto(origin + "/workflow-feedback/WF-001");
       await expect(
-        page.getByLabel("Your private feedback on version 2"),
+        page.getByLabel("Your private feedback on version 3"),
       ).toHaveValue(correctedNote);
       await page.goto(
         pausedOrigin + `/workflow-feedback/review/receipts/${recreatedRequest}`,
@@ -365,7 +365,7 @@ for (const [index, [background, goal]] of [
       );
       await page.goto(pausedOrigin + "/workflow-feedback/WF-001");
       await expect(
-        page.getByLabel("Your private feedback on version 2"),
+        page.getByLabel("Your private feedback on version 3"),
       ).toHaveValue(correctedNote);
       await page
         .getByRole("link", { name: "My private review request history" })
@@ -432,7 +432,7 @@ for (const [index, fault] of (["request", "assign"] as const).entries()) {
       ownerId = session.learner.id;
       const note = "Invented recovery note; no member or customer data";
       await page.goto(origin + "/workflow-feedback/WF-001");
-      await page.getByLabel("Your private feedback on version 2").fill(note);
+      await page.getByLabel("Your private feedback on version 3").fill(note);
       await page.getByLabel("I choose to save this note privately.").check();
       await page
         .getByRole("button", { name: "Save private feedback", exact: true })

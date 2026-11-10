@@ -74,7 +74,7 @@ for (const [index, background] of (
         [0, "Invented first note"],
         [1, "Invented corrected note"],
       ] as const) {
-        await page.getByLabel("Your private feedback on version 2").fill(note);
+        await page.getByLabel("Your private feedback on version 3").fill(note);
         await page.getByLabel("I choose to save this note privately.").check();
         await pool.query(
           "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE id=$1",
@@ -105,10 +105,10 @@ for (const [index, background] of (
         );
         await page.goto(origin + "/workflow-feedback/WF-001");
         await expect(
-          page.getByLabel("Your private feedback on version 2"),
+          page.getByLabel("Your private feedback on version 3"),
         ).toHaveValue(note);
       }
-      await page.getByLabel("Remove my private note for version 2").check();
+      await page.getByLabel("Remove my private note for version 3").check();
       await pool.query(
         "UPDATE principals SET expires_at=clock_timestamp()+interval '2 seconds' WHERE id=$1",
         [session.learner.id],
@@ -118,7 +118,7 @@ for (const [index, background] of (
         (r) => r.url().endsWith("/withdraw") && r.request().method() === "POST",
       );
       await page
-        .getByRole("button", { name: "Withdraw version 2 feedback" })
+        .getByRole("button", { name: "Withdraw version 3 feedback" })
         .click();
       expect((await reply).status()).toBe(503);
       await expect(
@@ -138,7 +138,7 @@ for (const [index, background] of (
       );
       await page.goto(origin + "/workflow-feedback/WF-001");
       await expect(
-        page.getByLabel("Your private feedback on version 2"),
+        page.getByLabel("Your private feedback on version 3"),
       ).toHaveValue("");
     } finally {
       await context.close();
