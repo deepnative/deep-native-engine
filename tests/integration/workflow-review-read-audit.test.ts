@@ -43,7 +43,7 @@ it("NOTEREAD-01 a moderator opening an assigned note shows on the member's histo
   expect(entries[0]).toMatchObject({
     source: "workflow",
     action: "note_read",
-    file: "WF-001, version 2",
+    file: "WF-001, version 3",
   });
   expect(entries[0]!.at).toBeInstanceOf(Date);
   const shown = JSON.stringify(entries);
@@ -61,7 +61,7 @@ it("NOTEREAD-01 a moderator opening an assigned note shows on the member's histo
       grant_id: f.grantId,
       request_id: f.requestId,
       workflow_id: "WF-001",
-      workflow_version: 2,
+      workflow_version: 3,
       revision: 1,
     },
   ]);
@@ -104,7 +104,7 @@ it("NOTEREAD-03 a refused read logs nothing and shows no note", async () => {
   });
   // The note changed after it was sent: the exact version is no longer there.
   expect(
-    await f.feedback.save(f.member, "WF-001", 2, "Invented change", 1),
+    await f.feedback.save(f.member, "WF-001", 3, "Invented change", 1),
   ).toBe(true);
   await refused(f.moderator);
 });
@@ -199,7 +199,7 @@ it("NOTEREAD-06 entries can't be changed and outlast the access, the note and th
     (await f.staff.revoke(f.admin, f.grantId, randomUUID(), "yes")).kind,
   ).toBe("applied");
   expect(
-    await f.feedback.save(f.member, "WF-001", 2, "Invented change", 1),
+    await f.feedback.save(f.member, "WF-001", 3, "Invented change", 1),
   ).toBe(true);
   await pool.query(`DELETE FROM principals WHERE id=$1`, [f.moderatorId]);
   expect(await noteReads(f.member)).toHaveLength(1);

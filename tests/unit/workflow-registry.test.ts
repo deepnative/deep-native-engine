@@ -24,15 +24,16 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   };
 });
 let server: Server | undefined;
-it("WFR114-01 exposes ordinary reviewed workflow version2 with factual editorial and maintenance metadata", async () => {
+it("WFR114-01 #774 exposes the re-reviewed workflow version3 with factual editorial and maintenance metadata", async () => {
   const item = await workflowBundle("WF-003");
   expect(item).toMatchObject({
-    version: 2,
+    version: 3,
     reviewer:
-      "Codex root, claim DNE-2026-10-27-93-foundation-editorial-netcsc-root",
+      "Claude Code for netcsc, claim DNE-2026-11-10-774-v3-release-worker-z; owner approval recorded on #774",
+    nextReviewDate: "2026-12-10",
   });
   expect(item?.lastVerification).toContain(
-    "2026-10-27 manual input/output comparison",
+    "2026-11-10 manual input/output comparison against current sources",
   );
   expect(item?.license).toContain("No new license granted");
 });
@@ -40,13 +41,13 @@ it("WFR114-01/03 withholds invalid or retired reviewed files instead of revertin
   const original = (await workflowBundle("WF-003"))!;
   for (const change of [
     original.download.replace("id: WF-003", "id: WF-999"),
-    original.download.replace("version: 2", "version: 1"),
-    original.download.replace("version: 2\n", ""),
-    original.download.replace("version: 2", "version: 02"),
-    original.download.replace("version: 2", "version: 9007199254740992"),
+    original.download.replace("version: 3", "version: 1"),
+    original.download.replace("version: 3\n", ""),
+    original.download.replace("version: 3", "version: 02"),
+    original.download.replace("version: 3", "version: 9007199254740992"),
     original.download.replace(
-      "version: 2",
-      "version: 2\npublication_state: retired",
+      "version: 3",
+      "version: 3\npublication_state: retired",
     ),
     original.download.split("\n---\n")[0] + "\n---\n",
     original.download.split("\n---\n")[0] + "\n---\n \n",
@@ -78,14 +79,21 @@ it("WFR114-01/03 withholds invalid or retired reviewed files instead of revertin
     expect(await workflowBundle("WF-003")).toBeNull();
   }
   fixture.replacement = original.download.replace(
-    "version: 2",
-    "version: 2\npublication_state: reviewed",
+    "version: 3",
+    "version: 3\npublication_state: reviewed",
   );
-  expect((await workflowBundle("WF-003"))?.version).toBe(2);
+  expect((await workflowBundle("WF-003"))?.version).toBe(3);
 });
-it("WFR114-03 a cached version1 link cannot read or download version2, and retirement preserves safe recovery", async () => {
+it("WFR114-03 cached version1 and version2 links cannot read or download version3, and retirement preserves safe recovery", async () => {
   const get = await workflowHttp();
   for (const suffix of ["", "/download"]) {
+    for (const old of [1, 2]) {
+      const stale = await get(
+        `/workflows/WF-003${suffix}?version=${old}`,
+      ).expect(409);
+      expect(stale.headers["content-disposition"]).toBeUndefined();
+      expect(stale.text).not.toContain("## Synthetic input");
+    }
     const stale = await get(`/workflows/WF-003${suffix}?version=1`).expect(409);
     expect(stale.headers["content-disposition"]).toBeUndefined();
     expect(stale.text).not.toContain("## Synthetic input");
@@ -93,10 +101,10 @@ it("WFR114-03 a cached version1 link cannot read or download version2, and retir
   }
   const original = (await workflowBundle("WF-003"))!;
   fixture.replacement = original.download.replace(
-    "version: 2",
-    "version: 2\npublication_state: retired",
+    "version: 3",
+    "version: 3\npublication_state: retired",
   );
-  const retired = await get("/workflows/WF-003/download?version=2").expect(404);
+  const retired = await get("/workflows/WF-003/download?version=3").expect(404);
   expect(retired.headers["content-disposition"]).toBeUndefined();
   expect(retired.text).not.toContain("## Synthetic input");
   expect(retired.text).toContain("not currently available");
@@ -116,7 +124,7 @@ it("[WFDL-02] refuses an unavailable pinned version before sending an attachment
     app(store, { origin: "http://127.0.0.1:3000", secret: "secret" }),
   );
   const response = await request(server)
-    .get("/workflows/WF-003/download?version=3")
+    .get("/workflows/WF-003/download?version=4")
     .set("Host", "127.0.0.1:3000");
   expect.soft(response.status).toBe(409);
   expect.soft(response.headers["content-disposition"]).toBeUndefined();
@@ -133,13 +141,13 @@ it("[WFDL-01 WFDL-02] refuses a retained displayed-version link after a draft re
   const get = (path: string) =>
     request(server!).get(path).set("Host", "127.0.0.1:3000");
   const original = (await workflowBundle("WF-003"))!;
-  const detail = await get("/workflows/WF-003?version=2").expect(200);
+  const detail = await get("/workflows/WF-003?version=3").expect(200);
   const link = detail.text.match(
     /href="([^"]+)"[^>]*>Download Markdown text<\/a>/,
   )![1]!;
-  expect.soft(link).toBe("/workflows/WF-003/download?version=2");
+  expect.soft(link).toBe("/workflows/WF-003/download?version=3");
   fixture.replacement = original.download
-    .replace("version: 2\n", "version: 3\n")
+    .replace("version: 3\n", "version: 4\n")
     .replace(
       "## Synthetic input",
       "## Synthetic input\nReplacement-only invented text",
@@ -149,20 +157,20 @@ it("[WFDL-01 WFDL-02] refuses a retained displayed-version link after a draft re
   expect.soft(response.headers["content-disposition"]).toBeUndefined();
   expect(response.text).not.toContain("Replacement-only invented text");
   expect(response.text).toContain('href="/workflows">Browse current workflows');
-  const staleDetail = await get("/workflows/WF-003?version=2").expect(409);
+  const staleDetail = await get("/workflows/WF-003?version=3").expect(409);
   expect(staleDetail.text).not.toContain("Replacement-only invented text");
   expect(staleDetail.headers["content-disposition"]).toBeUndefined();
   const currentList = await get("/workflows").expect(200);
-  expect(currentList.text).toContain('href="/workflows/WF-003?version=3"');
-  expect(currentList.text).toContain('href="/workflows/WF-001?version=2"');
-  const currentDetail = await get("/workflows/WF-003?version=3").expect(200);
+  expect(currentList.text).toContain('href="/workflows/WF-003?version=4"');
+  expect(currentList.text).toContain('href="/workflows/WF-001?version=3"');
+  const currentDetail = await get("/workflows/WF-003?version=4").expect(200);
   expect(currentDetail.text).toContain(
-    'href="/workflows/WF-003/download?version=3"',
+    'href="/workflows/WF-003/download?version=4"',
   );
-  const current = await get("/workflows/WF-003/download?version=3").expect(200);
+  const current = await get("/workflows/WF-003/download?version=4").expect(200);
   expect(current.text).toBe(fixture.replacement);
   expect(current.headers["content-disposition"]).toBe(
-    'attachment; filename="WF-003-v3.md"',
+    'attachment; filename="WF-003-v4.md"',
   );
 });
 
@@ -170,7 +178,7 @@ it("loads only the three fixed reviewed Markdown bundles and filters their metad
   const all = await workflowRegistry();
   expect(all.map((item) => item.id)).toEqual(["WF-001", "WF-002", "WF-003"]);
   for (const item of all) {
-    expect(item.version).toBe(2);
+    expect(item.version).toBe(3);
     expect(item.body).toContain("## Synthetic input");
     expect(item.body).toContain("## Hand-authored example");
     expect(item.setup).toBeTruthy();
@@ -199,7 +207,7 @@ it("[WFDL-01 WFDL-04] serves read-only demonstration pages and inert Markdown at
   const get = (path: string) => agent.get(path).set("Host", "127.0.0.1:3000");
   const list = await get("/workflows").expect(200);
   for (const id of ["WF-001", "WF-002", "WF-003"]) {
-    expect(list.text).toContain(`href="/workflows/${id}?version=2"`);
+    expect(list.text).toContain(`href="/workflows/${id}?version=3"`);
   }
   expect(list.text).toContain("ORDINARY REVIEWED WORKFLOWS");
   expect((await get("/workflows?q=meeting").expect(200)).text).toContain(
@@ -219,11 +227,11 @@ it("[WFDL-01 WFDL-04] serves read-only demonstration pages and inert Markdown at
   expect(detail.text).toContain(
     "no AI provider, calendar or messaging integration verified",
   );
-  const download = await get("/workflows/WF-003/download?version=2").expect(
+  const download = await get("/workflows/WF-003/download?version=3").expect(
     200,
   );
   expect(download.headers["content-disposition"]).toContain(
-    'attachment; filename="WF-003-v2.md"',
+    'attachment; filename="WF-003-v3.md"',
   );
   expect(download.headers["x-content-type-options"]).toBe("nosniff");
   expect(download.headers["content-type"]).toBe("text/markdown; charset=utf-8");
@@ -296,7 +304,7 @@ it("[WFDL-03] keeps legacy detail entry but refuses missing download pins with r
   for (const suffix of ["", "?q=unrelated"]) {
     const detail = await get(`/workflows/WF-003${suffix}`).expect(200);
     expect(detail.text).toContain(
-      'href="/workflows/WF-003/download?version=2"',
+      'href="/workflows/WF-003/download?version=3"',
     );
     const denied = await get(`/workflows/WF-003/download${suffix}`).expect(400);
     expect(denied.headers["content-disposition"]).toBeUndefined();
@@ -307,7 +315,7 @@ it("[WFDL-03] keeps legacy detail entry but refuses missing download pins with r
 
 it("[WFDL-02 WFDL-03] distinguishes safe positive mismatches from malformed versions", async () => {
   const get = await workflowHttp();
-  for (const version of ["1", "3", "9007199254740991"]) {
+  for (const version of ["1", "2", "4", "9007199254740991"]) {
     for (const suffix of ["", "/download"]) {
       const response = await get(
         `/workflows/WF-003${suffix}?version=${version}`,
@@ -326,7 +334,7 @@ it("[WFDL-01 WFDL-03] accepts the largest safe declared draft version exactly", 
   const get = await workflowHttp();
   const original = (await workflowBundle("WF-003"))!;
   fixture.replacement = original.download.replace(
-    "version: 2\n",
+    "version: 3\n",
     "version: 9007199254740991\n",
   );
   const detail = await get("/workflows/WF-003?version=9007199254740991").expect(
@@ -349,7 +357,7 @@ it("[WFDL-03] gives unknown fixed IDs precedence over version errors", async () 
   for (const query of [
     "",
     "?version=0",
-    "?version=2",
+    "?version=3",
     "?version[]=1",
     "?version=1&version=1",
   ]) {
@@ -372,14 +380,14 @@ it("[WFDL-01 WFDL-04] keeps concurrent repeated reads exact and isolated across 
   const items = await workflowRegistry();
   for (const item of items) {
     const responses = await Promise.all([
-      get(`/workflows/${item.id}/download?version=2`).expect(200),
-      get(`/workflows/${item.id}/download?version=3`).expect(409),
-      get(`/workflows/${item.id}/download?version=2`).expect(200),
+      get(`/workflows/${item.id}/download?version=3`).expect(200),
+      get(`/workflows/${item.id}/download?version=4`).expect(409),
+      get(`/workflows/${item.id}/download?version=3`).expect(200),
     ]);
     for (const response of [responses[0], responses[2]]) {
       expect(Buffer.from(response.text)).toEqual(Buffer.from(item.download));
       expect(response.headers["content-disposition"]).toBe(
-        `attachment; filename="${item.id}-v2.md"`,
+        `attachment; filename="${item.id}-v3.md"`,
       );
       expect(response.headers["content-type"]).toBe(
         "text/markdown; charset=utf-8",

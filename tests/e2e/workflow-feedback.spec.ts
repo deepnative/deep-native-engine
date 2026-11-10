@@ -57,16 +57,16 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
   const ownerId = session.kind === "active" ? session.learner.id : "";
   const csrf = await page.locator('input[name="csrf"]').first().inputValue();
   const note = "Invented private feedback about clearer setup steps.";
-  await page.getByLabel("Your private feedback on version 2").fill(note);
+  await page.getByLabel("Your private feedback on version 3").fill(note);
   await page.getByLabel("I choose to save this note privately.").check();
   await page.getByRole("button", { name: "Save private feedback" }).click();
   await expect(page.getByRole("status")).toContainText("saved privately");
   await page.reload();
   await expect(
-    page.getByLabel("Your private feedback on version 2"),
+    page.getByLabel("Your private feedback on version 3"),
   ).toHaveValue(note);
   await page
-    .getByLabel("Your private feedback on version 2")
+    .getByLabel("Your private feedback on version 3")
     .fill("Invented correction for a second reading.");
   await page.getByLabel("I choose to save this note privately.").check();
   await page.getByRole("button", { name: "Save private feedback" }).click();
@@ -74,7 +74,7 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
     headers: { origin },
     form: {
       csrf,
-      workflow_version: "2",
+      workflow_version: "3",
       revision: "1",
       note: "Stale replay",
       confirm: "yes",
@@ -85,7 +85,7 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
     headers: { origin },
     form: {
       csrf: "forged",
-      workflow_version: "2",
+      workflow_version: "3",
       revision: "2",
       note: "Forged CSRF",
       confirm: "yes",
@@ -95,7 +95,7 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
   const exportBefore = await context.request.get("/api/member/export");
   expect(exportBefore.status()).toBe(200);
   expect((await exportBefore.json()).records.workflowFeedback).toMatchObject([
-    { workflowId: "WF-001", workflowVersion: 2, revision: 2 },
+    { workflowId: "WF-001", workflowVersion: 3, revision: 2 },
   ]);
   const outsider = await browser.newContext({ baseURL: origin });
   const reviewer = await browser.newContext({ baseURL: origin });
@@ -104,7 +104,7 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
     await onboard(otherPage, "professional");
     await otherPage.goto(`/workflow-feedback/WF-001?member_id=${ownerId}`);
     await expect(
-      otherPage.getByLabel("Your private feedback on version 2"),
+      otherPage.getByLabel("Your private feedback on version 3"),
     ).toHaveValue("");
     await expect(
       otherPage.getByText("Invented correction for a second reading."),
@@ -138,14 +138,14 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
     await outsider.close();
     await reviewer.close();
   }
-  await page.getByLabel("Remove my private note for version 2").check();
+  await page.getByLabel("Remove my private note for version 3").check();
   await page
-    .getByRole("button", { name: "Withdraw version 2 feedback" })
+    .getByRole("button", { name: "Withdraw version 3 feedback" })
     .click();
   await expect(page.getByRole("status")).toHaveCount(0);
   const exportAfter = await context.request.get("/api/member/export");
   expect((await exportAfter.json()).records.workflowFeedback).toEqual([]);
-  await page.getByLabel("Your private feedback on version 2").fill(note);
+  await page.getByLabel("Your private feedback on version 3").fill(note);
   await page.getByLabel("I choose to save this note privately.").check();
   await page.getByRole("button", { name: "Save private feedback" }).click();
   // Model the retained-row phase of deletion before the existing purge flow.
@@ -159,7 +159,7 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
     page.getByRole("heading", { name: "Feedback unavailable" }),
   ).toBeVisible();
   await expect(
-    page.getByLabel("Your private feedback on version 2"),
+    page.getByLabel("Your private feedback on version 3"),
   ).toHaveCount(0);
   await expect(page.getByText(note, { exact: true })).toHaveCount(0);
   expect(
@@ -193,7 +193,7 @@ test("[L99] feedback save waiting past session expiry leaves the private note un
   await onboard(page, "explorer");
   await page.goto("/workflow-feedback/WF-001");
   await page
-    .getByLabel("Your private feedback on version 2")
+    .getByLabel("Your private feedback on version 3")
     .fill("Original invented private workflow note.");
   await page.getByLabel("I choose to save this note privately.").check();
   await page.getByRole("button", { name: "Save private feedback" }).click();
@@ -229,7 +229,7 @@ test("[L99] feedback save waiting past session expiry leaves the private note un
       await holder.query<{ pid: number }>("SELECT pg_backend_pid() AS pid")
     ).rows[0]!.pid;
     await page
-      .getByLabel("Your private feedback on version 2")
+      .getByLabel("Your private feedback on version 3")
       .fill("Late invented replacement that must not save.");
     await page.getByLabel("I choose to save this note privately.").check();
     saving = Promise.all([

@@ -250,10 +250,10 @@ it("WAITWORK reads waiting work with a real administrator session, skipping reti
     },
   });
 
-  // Requests for the current (2) and a retired (1) version of one workflow.
+  // Requests for the current (3) and a retired (2) version of one workflow.
   const owner = await member();
   const requests = [];
-  for (const version of [2, 1]) {
+  for (const version of [3, 2]) {
     await pool.query(
       "INSERT INTO workflow_feedback(member_id,workflow_id,workflow_version,note) VALUES($1,'WF-001',$2,'Invented note')",
       [owner.id, version],

@@ -22,11 +22,11 @@ test("[L41] general learner explores three reviewed workflows without execution"
   });
   await expect(detailLink).toHaveAttribute(
     "href",
-    "/workflows/WF-003?version=2",
+    "/workflows/WF-003?version=3",
   );
   await detailLink.click();
   await expect(
-    page.getByText("ORDINARY REVIEWED WORKFLOW · VERSION 2"),
+    page.getByText("ORDINARY REVIEWED WORKFLOW · VERSION 3"),
   ).toBeVisible();
   await expect(
     page.getByText("No account or external system access"),
@@ -39,12 +39,12 @@ test("[L41] general learner explores three reviewed workflows without execution"
   ).toHaveAttribute("readonly", "");
   await expect(
     page.getByText(
-      "2026-10-27 manual input/output comparison; no AI call or software test execution",
+      "2026-11-10 manual input/output comparison against current sources; no AI call or software test execution",
     ),
   ).toBeVisible();
   await expect(
     page.getByText(
-      "2026-11-27 or earlier when source requirements or supported environment change",
+      "2026-12-10 or earlier when source requirements or supported environment change",
     ),
   ).toBeVisible();
   await expect(
@@ -57,24 +57,24 @@ test("[L41] general learner explores three reviewed workflows without execution"
   });
   await expect(downloadLink).toHaveAttribute(
     "href",
-    "/workflows/WF-003/download?version=2",
+    "/workflows/WF-003/download?version=3",
   );
   const href = (await downloadLink.getAttribute("href"))!;
   const expectedBytes = await readFile(
     new URL(
-      "../../assets/docs/content/reviewed-v2/workflows/WF-003-meeting-actions.md",
+      "../../assets/docs/content/reviewed-v3/workflows/WF-003-meeting-actions.md",
       import.meta.url,
     ),
   );
   const downloadPromise = page.waitForEvent("download");
   await downloadLink.click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("WF-003-v2.md");
+  expect(download.suggestedFilename()).toBe("WF-003-v3.md");
   expect(await readFile((await download.path())!)).toEqual(expectedBytes);
   const attachment = await page.request.get(href);
   expect(attachment.status()).toBe(200);
   expect(attachment.headers()["content-disposition"]).toBe(
-    'attachment; filename="WF-003-v2.md"',
+    'attachment; filename="WF-003-v3.md"',
   );
   expect(attachment.headers()["content-type"]).toBe(
     "text/markdown; charset=utf-8",

@@ -29,7 +29,7 @@ it("rejects invalid, unknown and stale workflow versions without a database writ
     expect(
       await feedback.save("owner", id, version, "Invented note", revision),
     ).toBe(false);
-  expect(await feedback.save("owner", "WF-001", 2, " ", 0)).toBe(false);
+  expect(await feedback.save("owner", "WF-001", 3, " ", 0)).toBe(false);
   expect(
     db.query.mock.calls.some(([sql]) => /^(INSERT|UPDATE)/.test(sql)),
   ).toBe(false);
@@ -38,7 +38,7 @@ it("rejects invalid, unknown and stale workflow versions without a database writ
 it("keeps disabled feedback unavailable without implying persistence", async () => {
   const feedback = disabledWorkflowFeedbackStore();
   expect(await feedback.list("owner")).toBeNull();
-  expect(await feedback.save("owner", "WF-001", 2, "Invented note", 0)).toBe(
+  expect(await feedback.save("owner", "WF-001", 3, "Invented note", 0)).toBe(
     false,
   );
   expect(await feedback.withdraw("owner", "WF-001", 1, 1)).toBe(false);
@@ -84,7 +84,7 @@ it.each([0, 1])(
       await workflowFeedbackStore(db.pool).save(
         "owner",
         "WF-001",
-        2,
+        3,
         " Invented ",
         revision,
       ),
@@ -105,7 +105,7 @@ it.each([
     await workflowFeedbackStore(db.pool).save(
       "owner",
       "WF-001",
-      2,
+      3,
       "Invented",
       1,
     ),
@@ -127,7 +127,7 @@ it.each([
       await workflowFeedbackStore(db.pool).save(
         "owner",
         "WF-001",
-        2,
+        3,
         "Invented",
         statement.startsWith("INSERT") ? 0 : 1,
       ),
@@ -145,7 +145,7 @@ it("discards a feedback save connection when rollback fails", async () => {
     await workflowFeedbackStore(db.pool).save(
       "owner",
       "WF-001",
-      2,
+      3,
       "Invented",
       0,
     ),
@@ -159,7 +159,7 @@ it("denies a save when the database cannot connect", async () => {
     await workflowFeedbackStore({ connect } as unknown as Pool).save(
       "owner",
       "WF-001",
-      2,
+      3,
       "Invented",
       0,
     ),
