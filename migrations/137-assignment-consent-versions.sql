@@ -7,5 +7,5 @@ BEGIN;
 -- the origin row is immutable (migration 074) and nobody agreed to a version.
 ALTER TABLE assignment_evidence_origins ADD COLUMN IF NOT EXISTS consent_version text
  CHECK(consent_version IS NULL OR consent_version ~ '^assignment-feedback-v[1-9][0-9]{0,3}$');
-INSERT INTO schema_migrations(version) VALUES(133) ON CONFLICT DO NOTHING;
+INSERT INTO schema_migrations(version) VALUES(137) ON CONFLICT DO NOTHING;
 COMMIT;
