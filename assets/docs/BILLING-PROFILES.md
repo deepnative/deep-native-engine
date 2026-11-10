@@ -15,7 +15,7 @@ Migration086 creates only the member-owned billing_profiles table with cascade e
 - **Defaults before a recipient is saved.** Billing recipient, coaching months and course proposals suggest the member's registered display name and verified sign-in email. A saved recipient always wins over the defaults.
 - **Readable sign-in email (owner decision, 9 November 2026: "it should go with sign in email").**
   - Migration 129 keeps the verified address readable on the member's own `member_email_identities` row, beside the unchanged fingerprint. Sign-in, session and verification checks still use only the fingerprint.
-  - The address is captured when a link that proves it is used: linking an email, or an email sign-in. Members verified earlier get theirs at their next email sign-in; until then the invoice email starts empty.
+  - The address is captured when a link that proves it is used: linking an email, or an email sign-in. A successful password sign-in also keeps it (#801) when the typed email hashes to the member's verified fingerprint and no address is kept yet; it never overwrites one, and an unverified sign-up email changes nothing. Members verified earlier get theirs at their next email-link or password sign-in; until then the invoice email starts empty.
   - A waiting link holds the address only until it is used (a trigger clears it) or expires (later email activity clears it).
   - The address goes with the identity row, so it is removed with the account and replaced with the identity. It is in the member's own records download (`signInEmail`, v46).
   - Only the member's own pages and records download read it; nothing writes it to logs, metrics, URLs or change history.
@@ -36,6 +36,7 @@ Migration086 creates only the member-owned billing_profiles table with cascade e
 | RECIPIENT-02 saved recipient wins                                         | billing-profile and coaching route units; coaching-invoices PostgreSQL; L280             |
 | RECIPIENT-03 coaching edits saved for later months                        | coaching-store unit; coaching-invoices PostgreSQL; L280                                  |
 | RECIPIENT-04 optional company validation                                  | simple-invoice-values, billing-profile and route units; simple-invoices PostgreSQL; L280 |
+| PWEMAIL-01..04 capture at password sign-in (#801)                         | member-password-access unit (real DB); L285                                              |
 | SIGNEMAIL-01..05 readable verified email, capture, clearing, logs, export | member-email-access and billing-profile units; coaching-invoices PostgreSQL; L280        |
 | RECIPIENT-05 company on the invoice                                       | views, email, coaching-store and simple-invoice-store units; both PostgreSQL files; L280 |
 

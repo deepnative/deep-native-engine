@@ -5,6 +5,7 @@ import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import { app } from "../../src/app.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";
 import { memberPasswordAccess } from "../../src/member-password-access.ts";
+import { billingProfileStore } from "../../src/billing-profile.ts";
 import { migrate, store } from "../../src/store.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 
@@ -72,6 +73,7 @@ test("[L285] PWD-01/02/06 a verified member sets a password, signs out and signs
       secret: "synthetic-browser-password-secret",
       memberEmail: email,
       memberPassword: memberPasswordAccess(pool),
+      billingProfiles: billingProfileStore(pool),
     }),
   );
   const binding = server.address();
@@ -93,6 +95,12 @@ test("[L285] PWD-01/02/06 a verified member sets a password, signs out and signs
     await expect(
       page.getByRole("heading", { name: "Email linked" }),
     ).toBeVisible();
+    // PWEMAIL-01 (#801): act as a member verified before #799, whose
+    // readable address was never kept.
+    await pool.query(
+      "UPDATE member_email_identities SET address=NULL WHERE principal_id=$1",
+      [session.learner.id],
+    );
 
     await page.goto(`${origin}/account`);
     await page
@@ -146,6 +154,13 @@ test("[L285] PWD-01/02/06 a verified member sets a password, signs out and signs
     expect(await members.progress(session.learner.id)).toMatchObject({
       instruction: "My invented password-return plan.",
     });
+    // PWEMAIL-01: the password sign-in kept the verified email, so the
+    // invoice email starts from it.
+    await page.goto(`${origin}/account/billing`);
+    await expect(page.getByLabel("Invoice email", { exact: true })).toHaveValue(
+      address,
+    );
+    await friendly(page, "billing-prefilled-after-password");
     expect((await members.session(token)).kind).not.toBe("active");
   } finally {
     await closeLoopback(server);
