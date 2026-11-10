@@ -42,7 +42,7 @@ test("[F-BUILD-07-C] a declared workflow version downloads its exact bytes and a
       expect(download.suggestedFilename()).toBe(`${id}-v3.md`);
       const bytes = await readFile((await download.path())!);
       expect(bytes.equals(files.get(id)!)).toBe(true);
-      expect(metadata(bytes.toString("utf8"), "version")).toBe("2");
+      expect(metadata(bytes.toString("utf8"), "version")).toBe("3");
     }
     // Another version is refused rather than answered with the current bytes.
     for (const path of [
