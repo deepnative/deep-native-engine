@@ -299,7 +299,10 @@ const overview = {
   months: [],
   sample: true,
 };
-function routes(terms?: Partial<CoachingTermsStore>) {
+function routes(
+  terms?: Partial<CoachingTermsStore>,
+  extra: Record<string, unknown> = {},
+) {
   const app = express();
   app.use(express.urlencoded({ extended: false }));
   app.use((_req, res, next) => {
@@ -315,6 +318,7 @@ function routes(terms?: Partial<CoachingTermsStore>) {
       kind: "ready",
       value: { terms: null, recipient: null, invoiceId: null },
     }),
+    ...extra,
   };
   mountCoachingRoutes(app, invoices as unknown as SimpleInvoiceStore, {
     origin,
@@ -330,6 +334,8 @@ function routes(terms?: Partial<CoachingTermsStore>) {
     coachingTerms: terms as CoachingTermsStore | undefined,
   });
   return {
+    raw: (use: Parameters<typeof withLoopback<request.Response>>[1]) =>
+      withLoopback(app, use),
     get: (path: string) => withLoopback(app, (s) => request(s).get(path)),
     post: (fields: Record<string, string>) =>
       withLoopback(app, (s) =>
@@ -461,4 +467,120 @@ it("TERMSINV318-07 the terms-invoice section explains each state and only offers
     'name="tax" inputmode="decimal" value="0.00" required',
   );
   expect(text(sample)).toContain("SAMPLE · NOT PAYABLE.");
+  // A configured service without HST asks for an explicit tax; a company prints.
+  const explicit = adminTermsInvoiceSection(
+    {
+      terms,
+      recipient: { ...recipient, company: "Invented Co" },
+      invoiceId: null,
+    },
+    "/a",
+    "",
+    undefined,
+    false,
+  );
+  expect(text(explicit)).toContain(
+    "CAD 1,200.00 plus the explicit tax below, to Invented &lt;Student&gt; · Invented Co · s@example.test.",
+  );
+  expect(explicit).toContain(
+    '<label>Explicit tax amount (CAD)<input name="tax" inputmode="decimal"  required>',
+  );
+  expect(text(explicit)).toContain("Issuing doesn't take payment.");
+});
+
+it("TERMSINV318-04 the terms-invoice route checks the form, passes the version and maps every refusal", async () => {
+  const termsStore = {
+    own: vi.fn().mockResolvedValue({ kind: "ready", value: saved }),
+    forStudent: vi.fn().mockResolvedValue({ kind: "ready", value: saved }),
+    save: vi.fn(),
+  };
+  const issue = vi
+    .fn()
+    .mockResolvedValue({ kind: "ready", value: { invoiceId: key } });
+  const read = vi.fn().mockResolvedValue({
+    kind: "ready",
+    value: { terms: null, recipient: null, invoiceId: null },
+  });
+  const send = (r: ReturnType<typeof routes>, fields: Record<string, string>) =>
+    r.raw((s) =>
+      request(s)
+        .post(`/operator/coaching/${id}/terms-invoice`)
+        .set("Origin", origin)
+        .type("form")
+        .send({
+          csrf: csrf(token, secret),
+          operationId: key,
+          revision: "1",
+          confirm: "terms-invoice",
+          ...fields,
+        }),
+    );
+  // Sample mode: an invented tax is required and passed through.
+  const r = routes(termsStore, {
+    issueCoachingTerms: issue,
+    coachingTermsInvoice: read,
+  });
+  expect(text((await r.get(`/operator/coaching/${id}`)).text)).toContain(
+    "Set coaching terms first.",
+  );
+  read.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await r.get(`/operator/coaching/${id}`)).status).toBe(403);
+  read.mockResolvedValueOnce({ kind: "unavailable" });
+  expect((await r.get(`/operator/coaching/${id}`)).status).toBe(503);
+  const ok = await send(r, { tax: "5.00" });
+  expect(ok.status).toBe(303);
+  expect(ok.headers.location).toBe(`/operator/invoices/${key}`);
+  expect(issue).toHaveBeenCalledWith(token, {
+    ownerId: id,
+    version: 1,
+    operationId: key,
+    taxCents: 500,
+  });
+  expect((await send(r, {})).status).toBe(422);
+  expect((await send(r, { tax: "x" })).status).toBe(422);
+  expect((await send(r, { tax: "1.00", confirm: "issue" })).status).toBe(422);
+  expect((await send(r, { tax: "1.00", revision: "0" })).status).toBe(422);
+  expect((await send(r, { tax: "1.00", other: "x" })).status).toBe(403);
+  issue.mockResolvedValueOnce({ kind: "conflict" });
+  expect((await send(r, { tax: "1.00" })).status).toBe(409);
+  // Configured HST: a typed tax is refused, and none is passed.
+  const hst = routes(termsStore, {
+    issueCoachingTerms: issue,
+    coachingTermsInvoice: read,
+    tax: {
+      label: "HST",
+      registration: "713254472RT0001",
+      rateBasisPoints: 1300,
+    },
+  });
+  expect((await send(hst, { tax: "1.00" })).status).toBe(403);
+  issue.mockClear();
+  expect((await send(hst, {})).status).toBe(303);
+  expect(issue).toHaveBeenCalledWith(token, {
+    ownerId: id,
+    version: 1,
+    operationId: key,
+  });
+  // Without invoicing configured, nothing can be issued.
+  const off = express();
+  off.use(express.urlencoded({ extended: false }));
+  off.use((_req, res, next) => {
+    res.locals.token = token;
+    next();
+  });
+  mountCoachingRoutes(off, undefined, { origin, secret });
+  const none = await withLoopback(off, (s) =>
+    request(s)
+      .post(`/operator/coaching/${id}/terms-invoice`)
+      .set("Origin", origin)
+      .type("form")
+      .send({
+        csrf: csrf(token, secret),
+        operationId: key,
+        revision: "1",
+        confirm: "terms-invoice",
+        tax: "1.00",
+      }),
+  );
+  expect(none.status).toBe(503);
 });
