@@ -510,7 +510,7 @@ it("TERMSINV318-07 the terms-invoice section explains each state and only offers
     false,
   );
   expect(text(corrected)).toContain(
-    "Terms version 1 covers an overlapping coaching period (2026-12-01 to 2027-05-31) and is already invoiced: view that invoice. Issue another invoice only if the student owes both. To replace the earlier invoice, void it first.",
+    "Terms version 1 covers an overlapping coaching period (December 1, 2026 to May 31, 2027) and is already invoiced: view that invoice. Issue another invoice only if the student owes both. To replace the earlier invoice, void it first.",
   );
   expect(corrected).toContain(
     'href="/operator/invoices/44444444-4444-4444-8444-444444444444"',
