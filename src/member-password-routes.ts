@@ -63,6 +63,7 @@ export function mountMemberPasswordRoutes(
     status = 200,
     error?: string,
     email?: string,
+    saved?: string,
   ) {
     const state = await access.status(token(res));
     if (state === "unavailable")
@@ -85,7 +86,7 @@ export function mountMemberPasswordRoutes(
       .status(status)
       .send(
         passwordPage(
-          `<h2>${state === "set" ? "Password set" : "Choose a password"}</h2>${state === "set" ? "<p>You can sign in with your verified email and this password. Change it below.</p>" : ""}${passwordForm(csrf(res), state === "set", error)}`,
+          `<h2>${state === "set" ? "Password set" : "Choose a password"}</h2>${saved ? `<p role="status">${saved}</p>` : ""}${state === "set" ? "<p>You can sign in with your verified email and this password. Change it below.</p>" : ""}${passwordForm(csrf(res), state === "set", error)}`,
         ),
       );
   }
@@ -156,7 +157,14 @@ export function mountMemberPasswordRoutes(
     const result = await access
       .setPassword(token(res), password, current)
       .catch(() => "unavailable" as const);
-    if (result === "saved") return show(res);
+    if (result === "saved")
+      return show(
+        res,
+        200,
+        undefined,
+        undefined,
+        "Password saved. Other browsers were signed out.",
+      );
     if (result === "email_required")
       return show(res, 409, "Add a sign-in email with your password.");
     if (result === "current_required" || result === "current_incorrect")

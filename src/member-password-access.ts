@@ -11,6 +11,15 @@ import {
   normalizedEmail,
   transaction,
 } from "./member-email-access.ts";
+import {
+  addBrowserSession,
+  cookieHash,
+  remember,
+  replaceAccountValue,
+  replaced,
+  separateSessions,
+  type Opened,
+} from "./member-sessions.ts";
 import { hash } from "./store.ts";
 
 export type PasswordStatus = "set" | "unset" | "email_required" | "unavailable";
@@ -141,7 +150,7 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
         const reset = await pool.query(
           `SELECT 1 FROM member_password_reset_windows
            WHERE principal_id=$1 AND token_hash=$2 AND expires_at>clock_timestamp()`,
-          [found.id, hash(memberToken)],
+          [found.id, cookieHash(memberToken)],
         );
         if (!reset.rowCount) {
           if (current === undefined || current === "")
@@ -151,7 +160,9 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
         }
       }
       const stored = await hashPassword(password);
-      return transaction(pool, async (client) => {
+      let ended: string | undefined;
+      let opened: Opened[] = [];
+      const changed = await transaction(pool, async (client) => {
         // Recheck the same live owner and sign-in email inside the write.
         const live = await client.query(
           `SELECT p.id FROM principals p JOIN workspaces w ON w.owner_principal_id=p.id
@@ -172,8 +183,25 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
           "DELETE FROM member_password_reset_windows WHERE principal_id=$1",
           [found.id],
         );
+        // MULTISESSION-03: a new password signs out every other browser.
+        await separateSessions(client, found.id);
+        const browser = cookieHash(memberToken);
+        await client.query(
+          "DELETE FROM member_sessions WHERE principal_id=$1 AND token_hash<>$2",
+          [found.id, browser],
+        );
+        const { previous, account } = await replaceAccountValue(
+          client,
+          found.id,
+        );
+        ended = previous;
+        opened = [[browser, account]];
         return "saved" as const;
       });
+      // The other browsers' sessions ended; this browser opens the new value.
+      if (ended) replaced(ended);
+      remember(opened);
+      return changed;
     },
     async signIn(address, password) {
       const normalized = normalizedEmail(address);
@@ -213,7 +241,6 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
         );
         return { kind: "refused" };
       }
-      const token = randomBytes(32).toString("hex");
       const signedIn = await transaction(pool, async (client) => {
         const principal = await client.query(
           `SELECT p.id FROM principals p JOIN workspaces w ON w.owner_principal_id=p.id
@@ -223,25 +250,18 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
            FOR UPDATE OF p`,
           [candidate.principal_id, candidate.stored],
         );
-        if (!principal.rowCount) return false;
-        // Same rotation as email sign-in: one current browser token.
-        await client.query(
-          `UPDATE principals SET token_hash=$2,expires_at=clock_timestamp()+INTERVAL '30 days'
-           WHERE id=$1`,
-          [candidate.principal_id, hash(token)],
-        );
-        await client.query(
-          `UPDATE learners SET token_hash=$2,expires_at=(SELECT expires_at FROM principals WHERE id=$1)
-           WHERE id=$1`,
-          [candidate.principal_id, hash(token)],
-        );
+        if (!principal.rowCount) return undefined;
+        // MULTISESSION-01: this browser joins any already signed in.
+        const added = await addBrowserSession(client, candidate.principal_id);
         await client.query(
           "DELETE FROM member_password_failures WHERE email_hash=$1",
           [digest],
         );
-        return true;
+        return added;
       });
-      return signedIn ? { kind: "signed_in", token } : { kind: "refused" };
+      if (!signedIn) return { kind: "refused" };
+      remember(signedIn.opened);
+      return { kind: "signed_in", token: signedIn.token };
     },
     async emailAvailable(address) {
       const normalized = normalizedEmail(address);
@@ -258,7 +278,8 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
       if (!normalized || !acceptablePassword(password)) return "invalid";
       const digest = emailHash(normalized);
       const stored = await hashPassword(password);
-      return transaction(pool, async (client) => {
+      let opened: Opened[] = [];
+      const registered = await transaction(pool, async (client) => {
         const principal = (
           await client.query<{ id: string }>(
             `SELECT p.id FROM principals p JOIN workspaces w ON w.owner_principal_id=p.id
@@ -291,8 +312,12 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
            ON CONFLICT(principal_id) DO UPDATE SET password_hash=EXCLUDED.password_hash,updated_at=clock_timestamp()`,
           [principal.id, stored],
         );
+        // MULTISESSION: an account signs in separately on each browser.
+        opened = await separateSessions(client, principal.id);
         return "saved" as const;
       });
+      remember(opened);
+      return registered;
     },
   };
 }

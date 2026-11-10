@@ -2928,6 +2928,15 @@
       "expected": "The download is JSON with only the learning sections (the milestone, not the support body); support records are refused with nothing downloaded; the member sees Downloaded once and the plain-words history line, without who downloaded; after stopping, the page says nothing is allowed and the next download is refused; no sideways scrolling",
       "issues": [40],
       "critical": true
+    },
+    {
+      "id": "L329",
+      "actor": "Member signed in on three browsers",
+      "preconditions": "Dedicated synthetic PostgreSQL database dropped afterwards, deterministic email outbox, password sign-in enabled, port0 server; desktop/mobile Chromium",
+      "steps": "MULTISESSION-01/02: the first browser links and verifies an email and sets a password; a second browser signs in with the password and a third with an email link; the second signs out from the Sign out page, the first from My account; the second signs back in with the password",
+      "expected": "Each sign-in leaves the earlier browsers signed in; the Sign out page and My account say other browsers stay signed in; signing out ends only that browser; signing back in keeps the remaining browser signed in",
+      "issues": [695],
+      "critical": true
     }
   ],
   "fullMvp": [
