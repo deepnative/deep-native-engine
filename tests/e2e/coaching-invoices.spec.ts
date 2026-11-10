@@ -13,6 +13,7 @@ import { app } from "../../src/app.ts";
 import { monthLabel } from "../../src/coaching-values.ts";
 import { migrate, store } from "../../src/store.ts";
 import { simpleInvoiceStore } from "../../src/simple-invoice-store.ts";
+import { coachingTermsStore } from "../../src/coaching-terms.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
 import { administratorEntry } from "../../src/administrator-entry.ts";
@@ -26,6 +27,7 @@ async function fixture(
   info: TestInfo,
   enabled = true,
   ownerEntry = false,
+  terms = false,
 ) {
   const base = process.env.DNE_TEST_DATABASE_URL;
   if (!base || !/^\/dne_test_[a-f0-9]{32}$/.test(new URL(base).pathname))
@@ -95,6 +97,8 @@ async function fixture(
       invoiceSender: enabled ? { send: async () => {} } : undefined,
       // L284 only: verified owners enter administration through the menu.
       ...(ownerEntry ? { administratorEntry: administratorEntry(pool) } : {}),
+      // L330 only: per-student coaching terms and their allowance units.
+      ...(terms ? { coachingTerms: coachingTermsStore(pool) } : {}),
     }),
   );
   const address = server.address();
@@ -766,6 +770,62 @@ test("[L276] HOUR09 disabled invoicing keeps monthly entry honest and learning a
     ).toHaveCount(0);
     await m.page.getByRole("link", { name: "My account", exact: true }).click();
     await expect(m.page.locator("code").first()).toHaveText(m.id);
+  } finally {
+    await f.close();
+  }
+});
+
+test("[L330] ALLOW27-01/03/07 an administrator sets a student's allowances and the student sees the units left this period", async ({
+  browser,
+}, info) => {
+  const f = await fixture(browser, info, true, false, true);
+  try {
+    const m = await f.member("Invented allowance learner");
+    const a = await f.admin();
+    const day = (offset: number) =>
+      new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+    async function setTerms(aiRequests: string) {
+      await a.goto(`${f.origin}/operator/coaching/${m.id}`);
+      await a.getByLabel("Price (CAD)").fill("1500.00");
+      await a.getByLabel("Start date").fill(day(-1));
+      await a.getByLabel("End date").fill(day(60));
+      await a.getByLabel("Renewal date").fill(day(61));
+      await a.getByLabel("Expert review minutes").fill("90");
+      await a.getByLabel("Coaching sessions").fill("4");
+      await a.getByLabel("AI requests").fill(aiRequests);
+      await a.getByRole("button", { name: "Save coaching terms" }).click();
+      await expect(
+        a.getByRole("heading", { name: "Allowances left this period" }),
+      ).toBeVisible();
+    }
+    await setTerms("25");
+    const staffList = a.locator("dl.coaching-allowances");
+    await expect(staffList).toContainText(
+      "90 of 90 minutes left, 0 held, 0 used",
+    );
+    await expect(staffList).toContainText("25 of 25 left, 0 held, 0 used");
+    await m.page.goto(f.origin + "/account/coaching");
+    const own = m.page.locator("dl.coaching-allowances");
+    await expect(own).toContainText("90 of 90 minutes left, 0 held, 0 used");
+    await expect(own).toContainText("25 of 25 left, 0 held, 0 used");
+    await expect(
+      m.page.getByText(
+        "Coaching sessions are arranged with your coach and aren't counted here.",
+      ),
+    ).toBeVisible();
+    // A lower number writes off unused units; the student sees the new total.
+    await setTerms("10");
+    await m.page.reload();
+    await expect(own).toContainText("10 of 10 left, 0 held, 0 used");
+    expect(
+      await m.page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await m.page.screenshot({
+      path: info.outputPath("coaching-allowances-student.png"),
+      fullPage: true,
+    });
   } finally {
     await f.close();
   }
