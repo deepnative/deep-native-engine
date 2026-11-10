@@ -1044,6 +1044,7 @@ export function app(
     options.programs ?? disabledProgramStore(),
     options.origin,
     options.secret,
+    options.coachingTerms,
   );
   app.get("/readiness/offers", (_req, res) => res.send(offerHypothesesPage()));
   app.get("/readiness/tracks", async (_req, res) =>

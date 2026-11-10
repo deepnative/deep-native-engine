@@ -13,6 +13,7 @@ import { programEnrollmentStore } from "../../src/program-enrollments.ts";
 import { PROGRAM_DIGEST, PROGRAM_PATH } from "../../src/program-values.ts";
 import { migrate, store } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
+import { coachingTermsStore } from "../../src/coaching-terms.ts";
 
 const pool = testPool();
 const members = store(pool);
@@ -20,11 +21,13 @@ const catalog = catalogStore(pool);
 const origin = "http://127.0.0.1:3000";
 const secret = "invented-local-program-test-secret";
 const programs = programEnrollmentStore(pool, "test");
+const coachingTerms = coachingTermsStore(pool);
 const application = app(members, {
   origin,
   secret,
   catalog,
   programs,
+  coachingTerms,
 });
 const memberToken = randomBytes(32).toString("hex");
 
@@ -283,4 +286,52 @@ it("PROGRAM-02/03/05/ENR-02/05 admits once only after explicit confirmation and 
       )
     ).rows[0].n,
   ).toBe(0);
+});
+
+it("COURSETERMS557-04 My courses shows the terms an administrator saved for this student, and nobody else's", async () => {
+  const student = randomBytes(32).toString("hex"),
+    other = randomBytes(32).toString("hex"),
+    admin = randomBytes(32).toString("hex");
+  for (const token of [student, other])
+    await members.create(token, { background: "explorer", goal: "everyday" });
+  await authorizationStore(pool).provisionStaff(
+    admin,
+    "platform_admin",
+    new Date(Date.now() + 3600000),
+  );
+  const session = await members.session(student, "account");
+  if (session.kind !== "active") throw Error("Expected an active student");
+  const page = async (token: string) =>
+    (
+      await request(server)
+        .get("/my-courses")
+        .set("Host", "127.0.0.1:3000")
+        .set("Cookie", `${COOKIE}=${token}`)
+        .expect(200)
+    ).text;
+  expect(await page(student)).toContain(
+    "Your administrator hasn't set your coaching terms",
+  );
+  expect(
+    await coachingTerms.save(admin, {
+      ownerId: session.learner.id,
+      expectedVersion: 0,
+      operationId: "7f0c3b8e-4b1e-4c43-9d55-0b7c2f2a5e11",
+      priceCents: 98000,
+      startsOn: "2026-12-01",
+      endsOn: "2027-02-28",
+      renewsOn: "2027-03-01",
+      reviewMinutes: 90,
+      coachingSessions: 3,
+      aiRequests: 40,
+    }),
+  ).toEqual({ kind: "ready", value: { version: 1 } });
+  const mine = await page(student);
+  expect(mine).toContain("Price CAD 980.00");
+  expect(mine).toContain("December 1, 2026 to February 28, 2027");
+  expect(mine).toContain("Renewal date March 1, 2027");
+  expect(mine).toContain("Enrolling in a program is free");
+  const theirs = await page(other);
+  expect(theirs).not.toContain("CAD 980.00");
+  expect(theirs).toContain("Your administrator hasn't set your coaching terms");
 });

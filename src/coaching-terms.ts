@@ -474,6 +474,16 @@ function balanceList(t: CoachingTerms, admin: boolean) {
 export function memberTermsSection(t: CoachingTerms | null) {
   return `<section class="portal-card" aria-labelledby="coaching-terms"><h2 id="coaching-terms">Your coaching terms</h2>${t ? `${termsList(t)}${balanceList(t, false)}<p>Your administrator set these terms. Your coaching price covers these allowances.</p><p>${NO_AUTOMATIC_RENEWAL} To renew, contact <a href="mailto:${SERVICE_CONTACT}">${SERVICE_CONTACT}</a>.</p>` : "<p>Your administrator hasn't set your coaching terms yet.</p>"}<p>${NO_CANCELLATION}</p></section>`;
 }
+/** COURSETERMS557-01/02: the student's coaching terms in brief, on My courses. */
+export function courseTermsSection(t: CoachingTerms | null | "unavailable") {
+  const body =
+    t === "unavailable"
+      ? "<p>Your coaching terms can't be shown right now.</p>"
+      : t
+        ? `<p>Coaching period ${readable(t.startsOn)} to ${readable(t.endsOn)} · Renewal date ${readable(t.renewsOn)} · Price ${money(t.priceCents)}</p><p>Your administrator set these terms. ${NO_AUTOMATIC_RENEWAL} To renew or ask about changes, contact <a href="mailto:${SERVICE_CONTACT}">${SERVICE_CONTACT}</a>.</p>`
+        : "<p>Your administrator hasn't set your coaching terms. Your learning and enrollment don't depend on them.</p>";
+  return `<section aria-labelledby="course-coaching"><h2 id="course-coaching">Your coaching</h2><p>Enrolling in a program is free. Coaching is arranged separately and invoiced.</p>${body}<p><a href="/account/coaching">Coaching terms, allowances and hours</a></p></section>`;
+}
 /** TERMS316-01: current terms and the form an administrator saves a new version with. */
 export function adminTermsSection(
   t: CoachingTerms | null,
