@@ -59,7 +59,9 @@ DEMO = {"DNE_DEMO_SITE": "enabled"}
 # CONTRIB-HOSTED-01 (#40, 4 Nov 2026): members may share an editorially accepted
 # contribution with signed-in members. The owner chose info@deepnative.io as the
 # contribution review contact on #97. Every release sets exactly these values.
-FEATURES = {"DNE_MEMBER_CONTRIBUTIONS": "enabled"}
+# AHO-10 (#545, 10 Nov 2026): members may make a private feedback copy of one exact
+# submitted assignment version. Copies grant no reviewer access by themselves.
+FEATURES = {"DNE_MEMBER_CONTRIBUTIONS": "enabled", "DNE_ASSIGNMENT_HANDOFF": "enabled"}
 
 
 def require(condition):

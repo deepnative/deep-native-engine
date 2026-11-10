@@ -1192,7 +1192,7 @@ class AzureReleasePreservation(unittest.TestCase):
         # CONTRIB-HOSTED-01 (#40, 4 Nov 2026): owner-chosen review contact on #97 lets
         # hosted members share accepted contributions with signed-in members.
         r = self.release()
-        self.assertEqual(r.FEATURES, {'DNE_MEMBER_CONTRIBUTIONS': 'enabled'})
+        self.assertEqual(r.FEATURES['DNE_MEMBER_CONTRIBUTIONS'], 'enabled')
         cutover = r.env_values(r.prepare(self.app(), 'a'*40, self.receipt())['properties']['template']['containers'][0])
         self.assertEqual(cutover['DNE_MEMBER_CONTRIBUTIONS'], 'enabled')
         app = self.durable()
@@ -1203,6 +1203,21 @@ class AzureReleasePreservation(unittest.TestCase):
         self.assertEqual(names.count('DNE_MEMBER_CONTRIBUTIONS'), 1)
         self.assertEqual(r.env_values(released)['DNE_MEMBER_CONTRIBUTIONS'], 'enabled')
         self.assertRegex((SOURCE / 'infra/app.tf').read_text(), r'DNE_MEMBER_CONTRIBUTIONS +=  *"enabled"')
+
+    def test_aho10_release_enables_private_assignment_handoff(self):
+        # AHO-10 (#545, 3 Nov review finding 2): hosted members can make a private
+        # feedback copy of an exact submitted assignment. Every release sets it.
+        r = self.release()
+        self.assertEqual(r.FEATURES, {'DNE_MEMBER_CONTRIBUTIONS': 'enabled', 'DNE_ASSIGNMENT_HANDOFF': 'enabled'})
+        cutover = r.env_values(r.prepare(self.app(), 'a'*40, self.receipt())['properties']['template']['containers'][0])
+        self.assertEqual(cutover['DNE_ASSIGNMENT_HANDOFF'], 'enabled')
+        app = self.durable()
+        container = app['properties']['template']['containers'][0]
+        container['env'] = [v for v in container['env'] if v['name'] != 'DNE_ASSIGNMENT_HANDOFF'] + [{'name': 'DNE_ASSIGNMENT_HANDOFF', 'value': 'disabled'}]
+        released = r.prepare(app, 'b'*40)['properties']['template']['containers'][0]
+        self.assertEqual([v['name'] for v in released['env']].count('DNE_ASSIGNMENT_HANDOFF'), 1)
+        self.assertEqual(r.env_values(released)['DNE_ASSIGNMENT_HANDOFF'], 'enabled')
+        self.assertRegex((SOURCE / 'infra/app.tf').read_text(), r'DNE_ASSIGNMENT_HANDOFF +=  *"enabled"')
 
     def test_terms06_database_declares_owner_30_day_backup_retention(self):
         # TERMS-06 (#12, owner decision 9 Nov 2026): database backups are kept 30 days.
