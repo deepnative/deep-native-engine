@@ -343,8 +343,10 @@ it("TERMSINV318-05 staff record the offline payment with the existing form; the 
       [m.id],
     )
   ).rows;
+  // Every migration re-runs at each start; the logged issue must survive it.
+  await migrate(pool);
   expect(events.map((e) => [e.action, Number(e.amount)])).toEqual([
-    ["terms_invoice_issued", 135600],
+    ["coaching_invoice_issued", 135600],
     ["payment_recorded", 135600],
   ]);
 });

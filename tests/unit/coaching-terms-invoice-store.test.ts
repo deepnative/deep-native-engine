@@ -143,7 +143,7 @@ it("TERMSINV318-01 issues the terms price with server-computed HST to the saved 
   });
   expect(sql(f, "INSERT INTO billing_change_events")![1]).toEqual([
     id,
-    "terms_invoice_issued",
+    "coaching_invoice_issued",
     id,
     null,
     135600,

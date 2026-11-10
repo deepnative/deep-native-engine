@@ -50,7 +50,6 @@ type BillingChangeAction =
   | "rate_set"
   | "hours_returned"
   | "coaching_invoice_issued"
-  | "terms_invoice_issued"
   | "monthly_invoice_issued"
   | "payment_recorded"
   | "payment_refunded"
@@ -1029,7 +1028,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             terms.id,
           ],
         );
-        await logChange(tx, actor, "terms_invoice_issued", {
+        // Logged with no month, which names it a coaching-terms invoice.
+        await logChange(tx, actor, "coaching_invoice_issued", {
           memberId: input.ownerId,
           amountCents: total,
         });
