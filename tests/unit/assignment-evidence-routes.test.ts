@@ -9,7 +9,11 @@ import type {
   AssignmentEvidenceStore,
   AssignmentEvidenceReceipt,
 } from "../../src/assignment-evidence.ts";
-import { ASSIGNMENT_ORIGIN_LABEL } from "../../src/assignment-evidence-values.ts";
+import {
+  ASSIGNMENT_CONSENT_TEXT,
+  ASSIGNMENT_CONSENT_VERSION,
+  ASSIGNMENT_ORIGIN_LABEL,
+} from "../../src/assignment-evidence-values.ts";
 import { config } from "../../src/config.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import type { AdmitCopy } from "../../src/upload-admission.ts";
@@ -59,6 +63,7 @@ const input = () => ({
   rubricVersion: "3",
   sourceSha256: source.sourceSha256,
   privateReview: "yes",
+  consentVersion: ASSIGNMENT_CONSENT_VERSION,
 });
 async function fixture(enabled = true, present = true, admit?: AdmitCopy) {
   const store = {
@@ -139,6 +144,10 @@ it("AHO-02/04 rejects extra or missing fields and missing permission without a w
     {},
     { ...input(), extra: "x" },
     { ...input(), privateReview: "no" },
+    // CONSENT125-02: a form without a consent wording version writes nothing.
+    (({ consentVersion: _, ...rest }) => rest)(input()),
+    { ...input(), consentVersion: "" },
+    { ...input(), consentVersion: "anything-else" },
     { ...input(), sequence: "01" },
     { ...input(), contentVersion: "0" },
     { ...input(), rubricVersion: "NaN" },
@@ -199,6 +208,7 @@ it("AHO-02/03 shows canonical created and replayed outcomes without requesting r
     rubricVersion: 3,
     sourceSha256: source.sourceSha256,
     privateReview: true,
+    consentVersion: ASSIGNMENT_CONSENT_VERSION,
   });
   f.store.create.mockResolvedValueOnce({
     kind: "replayed",
@@ -386,4 +396,54 @@ it("ADMIT-10 admits neither disabled, invalid nor inspection requests for assign
     .send({ csrf: "nonce", operationId: randomUUID() })
     .expect(200);
   expect(admit).not.toHaveBeenCalled();
+});
+
+it("CONSENT125-01/02 the copy step states purpose, retention and no appeal, sends its wording version, and says so when the wording has changed", async () => {
+  const f = await fixture();
+  f.store.open.mockResolvedValue({
+    kind: "ready",
+    source,
+    deadline: Date.now() + 60000,
+  });
+  const page = await request(f.server)
+    .get(base + "?sequence=1")
+    .expect(200);
+  expect(page.text).toContain(
+    `<input type="hidden" name="consentVersion" value="${ASSIGNMENT_CONSENT_VERSION}">`,
+  );
+  expect(page.text).toContain(ASSIGNMENT_CONSENT_TEXT);
+  for (const promise of [
+    "used only for private feedback from one reviewer an administrator assigns",
+    "kept until I delete it, delete the original attempt or delete my account",
+    "Withdrawing consent stops further reviewer access and keeps feedback I already received",
+    "not a formal assessment, and there is no appeal",
+  ])
+    expect(ASSIGNMENT_CONSENT_TEXT).toContain(promise);
+  expect(page.text).toContain(
+    `Consent wording ${ASSIGNMENT_CONSENT_VERSION}. The version you agree to is saved with the copy.`,
+  );
+  // An older wording version reaches the store, which refuses a new copy.
+  f.store.create.mockResolvedValue({ kind: "conflict" });
+  const stale = await request(f.server)
+    .post(base)
+    .type("form")
+    .send({ ...input(), consentVersion: "assignment-feedback-v999" })
+    .expect(409);
+  expect(stale.text).toContain(
+    "The consent wording has changed since this form was opened. Nothing was copied.",
+  );
+  expect(f.store.create).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ consentVersion: "assignment-feedback-v999" }),
+  );
+  // The same refusal with the current wording keeps the provenance message.
+  const mismatch = await request(f.server)
+    .post(base)
+    .type("form")
+    .send(input())
+    .expect(409);
+  expect(mismatch.text).toContain(
+    "This request does not match the original submitted version or saved request.",
+  );
+  expect(mismatch.text).not.toContain("consent wording has changed");
 });

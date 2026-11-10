@@ -15,7 +15,11 @@ import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { store } from "../../src/store.ts";
 import { COOKIE } from "../../src/session.ts";
-import { ASSIGNMENT_ORIGIN_LABEL } from "../../src/assignment-evidence-values.ts";
+import {
+  ASSIGNMENT_CONSENT_TEXT,
+  ASSIGNMENT_CONSENT_VERSION,
+  ASSIGNMENT_ORIGIN_LABEL,
+} from "../../src/assignment-evidence-values.ts";
 import { testPool } from "../support/database.ts";
 import { startAssignmentEvidenceRecoveryServer } from "../support/assignment-evidence-recovery-server.ts";
 
@@ -212,6 +216,11 @@ async function prepareCopy(
   await expect(page.locator("pre").nth(1)).toHaveText(draft.rubric!);
   const confirmation = page.getByLabel(consentName, { exact: false });
   await expect(confirmation).not.toBeChecked();
+  // CONSENT125-01: purpose, retention, withdrawal and no appeal, with a version.
+  await expect(page.getByText(ASSIGNMENT_CONSENT_TEXT)).toBeVisible();
+  await expect(page.locator('input[name="consentVersion"]')).toHaveValue(
+    ASSIGNMENT_CONSENT_VERSION,
+  );
   return confirmation;
 }
 async function createCopy(
@@ -235,12 +244,25 @@ async function createCopy(
     .locator("[data-assignment-evidence]")
     .getAttribute("data-assignment-evidence");
   expect(id).toMatch(/^[a-f0-9-]{36}$/);
+  // CONSENT125-03: the receipt and the copy list name the wording agreed to.
+  await expect(
+    page.getByText(`Consent wording ${ASSIGNMENT_CONSENT_VERSION}, agreed`),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "A private feedback copy of a submitted assignment is kept until you delete the copy, delete the original attempt or delete your account.",
+      { exact: false },
+    ),
+  ).toBeVisible();
   await page
     .getByRole("link", {
       name: "Manage private copies and request feedback",
       exact: true,
     })
     .click();
+  await expect(evidenceItem(page, id!)).toContainText(
+    `Consent wording ${ASSIGNMENT_CONSENT_VERSION}, agreed`,
+  );
   return id!;
 }
 function evidenceItem(page: Page, id: string) {

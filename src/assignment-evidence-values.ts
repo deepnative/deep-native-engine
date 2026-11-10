@@ -3,6 +3,20 @@ import { sampleUuid } from "./sample-feedback-values.ts";
 
 export const ASSIGNMENT_ORIGIN_LABEL =
   "Member assignment submission · private · unreviewed";
+/**
+ * CONSENT125-01: the wording a member agrees to before a submitted assignment
+ * version is copied for private feedback. Change the text only together with
+ * the version; earlier copies keep the version they were made under.
+ */
+export const ASSIGNMENT_CONSENT_VERSION = "assignment-feedback-v1";
+export const ASSIGNMENT_CONSENT_TEXT =
+  "Create a private feedback copy of this submitted version. I will request review separately. The copy is used only for private feedback from one reviewer an administrator assigns. It is kept until I delete it, delete the original attempt or delete my account; deleting the original attempt also deletes its copies and feedback. Withdrawing consent stops further reviewer access and keeps feedback I already received. Feedback is not a formal assessment, and there is no appeal.";
+/** Owner decision of 10 November 2026, in the member's words. */
+export const ASSIGNMENT_COPY_RETENTION =
+  "A private feedback copy of a submitted assignment is kept until you delete the copy, delete the original attempt or delete your account. Feedback on it is not a formal assessment, and there is no appeal process.";
+const consentVersion = (value: unknown): value is string =>
+  typeof value === "string" &&
+  /^assignment-feedback-v[1-9][0-9]{0,3}$/.test(value);
 export interface AssignmentEvidenceSource {
   attemptId: string;
   sequence: number;
@@ -24,6 +38,8 @@ export interface AssignmentEvidenceInstruction {
   rubricVersion: number;
   sourceSha256: string;
   privateReview: true;
+  /** The wording version shown on the form that was submitted. */
+  consentVersion: string;
 }
 export interface AssignmentEvidenceOrigin {
   kind: "member-assignment-submission";
@@ -35,6 +51,8 @@ export interface AssignmentEvidenceOrigin {
   submittedAt: Date | string;
   sourceSha256: string;
   acknowledgedAt: Date | string;
+  /** Null for copies made before wording versions were recorded. */
+  consentVersion?: string | null;
   label: typeof ASSIGNMENT_ORIGIN_LABEL;
 }
 export function assignmentSequence(value: unknown): value is number {
@@ -56,6 +74,7 @@ export function assignmentEvidenceInstruction(
     "rubricVersion",
     "sourceSha256",
     "privateReview",
+    "consentVersion",
   ];
   if (
     Object.keys(row).length !== names.length ||
@@ -73,7 +92,8 @@ export function assignmentEvidenceInstruction(
     Number(row.rubricVersion) > 2147483647 ||
     typeof row.sourceSha256 !== "string" ||
     !/^[a-f0-9]{64}$/.test(row.sourceSha256) ||
-    row.privateReview !== true
+    row.privateReview !== true ||
+    !consentVersion(row.consentVersion)
   )
     return null;
   return {
@@ -120,4 +140,5 @@ export const ASSIGNMENT_ORIGIN_SQL = `CASE WHEN ao.evidence_id IS NULL THEN NULL
  'sequence',ao.sequence,'contentId',ao.content_id,'contentVersion',ao.content_version,
  'rubricVersion',ao.rubric_version,'submittedAt',ao.submitted_at,
  'sourceSha256',ao.source_sha256,'acknowledgedAt',ao.acknowledged_at,
+ 'consentVersion',ao.consent_version,
  'label','Member assignment submission · private · unreviewed') END AS "assignmentOrigin"`;

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, it } from "vitest";
 import {
+  ASSIGNMENT_CONSENT_VERSION,
   assignmentEvidenceInstruction,
   assignmentPayloadDigest,
   assignmentEvidenceName,
@@ -15,6 +16,7 @@ const valid = () => ({
   rubricVersion: 4,
   sourceSha256: "a".repeat(64),
   privateReview: true as const,
+  consentVersion: ASSIGNMENT_CONSENT_VERSION,
 });
 it("AHO-01/02 accepts only a deliberate exact submitted identity and private purpose, with no replacement response field", () => {
   const input = valid();
@@ -78,4 +80,36 @@ it("AHO-03 operation fingerprint binds the complete selected provenance and purp
     expect(assignmentPayloadDigest({ ...input, ...change })).not.toBe(digest);
   expect(assignmentEvidenceName(1)).toBe("Assignment submission 1.txt");
   expect(assignmentSequence(10)).toBe(true);
+});
+
+it("CONSENT125-01/02 an instruction names a consent wording version, which never changes the request fingerprint", () => {
+  const input = valid();
+  expect(assignmentEvidenceInstruction(input)?.consentVersion).toBe(
+    "assignment-feedback-v1",
+  );
+  for (const consentVersion of [
+    undefined,
+    null,
+    "",
+    1,
+    "v1",
+    "assignment-feedback-v0",
+    "assignment-feedback-v01",
+    "assignment-feedback-v12345",
+    "assignment-feedback-v1 ",
+  ])
+    expect(
+      assignmentEvidenceInstruction({ ...input, consentVersion }),
+      String(consentVersion),
+    ).toBeNull();
+  const missing: Record<string, unknown> = { ...input };
+  delete missing.consentVersion;
+  expect(assignmentEvidenceInstruction(missing)).toBeNull();
+  // Replaying an original request under a later wording still matches it.
+  expect(
+    assignmentPayloadDigest({
+      ...input,
+      consentVersion: "assignment-feedback-v2",
+    }),
+  ).toBe(assignmentPayloadDigest(input));
 });

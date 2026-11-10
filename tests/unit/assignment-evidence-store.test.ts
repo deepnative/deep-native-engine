@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from "pg";
 import { expect, it, vi } from "vitest";
 import { assignmentEvidenceStore } from "../../src/assignment-evidence.ts";
 import {
+  ASSIGNMENT_CONSENT_VERSION,
   ASSIGNMENT_ORIGIN_LABEL,
   assignmentPayloadDigest,
   type AssignmentEvidenceOrigin,
@@ -21,6 +22,7 @@ const input = (): AssignmentEvidenceInstruction => ({
   rubricVersion: 4,
   sourceSha256: "b".repeat(64),
   privateReview: true,
+  consentVersion: ASSIGNMENT_CONSENT_VERSION,
 });
 const source = {
   attemptId,
@@ -356,4 +358,32 @@ it("AHO-03 missing own just-created receipt cannot be reported as a confirmed ef
   f.state.forgetCreated = true;
   expect(await f.store.create(token, input())).toEqual({ kind: "unavailable" });
   expect(f.query.mock.calls.some(([sql]) => sql === "COMMIT")).toBe(false);
+});
+
+it("CONSENT125-01/02 a new copy records the current wording version; another version creates nothing, yet an original request still replays", async () => {
+  const f = fixture(),
+    instruction = input();
+  const stale = { ...input(), consentVersion: "assignment-feedback-v2" };
+  expect(await f.store.create(token, stale)).toEqual({ kind: "conflict" });
+  expect(
+    f.query.mock.calls.filter(([sql]) => sql.includes("INSERT INTO")),
+  ).toHaveLength(0);
+  expect(await f.store.create(token, instruction)).toMatchObject({
+    kind: "created",
+  });
+  const origin = f.query.mock.calls.find(([sql]) =>
+    sql.includes("INSERT INTO assignment_evidence_origins"),
+  )!;
+  expect(origin[0]).toContain("source_sha256,consent_version)");
+  expect((origin[1] as unknown[]).at(-1)).toBe(ASSIGNMENT_CONSENT_VERSION);
+  // The saved request is recognised whatever wording the repeat form carries.
+  expect(
+    await f.store.create(token, {
+      ...instruction,
+      consentVersion: "assignment-feedback-v2",
+    }),
+  ).toMatchObject({
+    kind: "replayed",
+    receipt: { receiptId: f.state.operation!.receiptId },
+  });
 });

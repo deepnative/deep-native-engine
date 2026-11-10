@@ -1,6 +1,7 @@
 import type { Express, Response } from "express";
 import type { AssignmentEvidenceStore } from "./assignment-evidence.ts";
 import {
+  ASSIGNMENT_CONSENT_VERSION,
   assignmentEvidenceInstruction,
   type AssignmentEvidenceInstruction,
 } from "./assignment-evidence-values.ts";
@@ -58,7 +59,10 @@ export function mountAssignmentEvidenceRoutes(
           kind === "invalid"
             ? "Choose an exact submitted version and confirm the private copy."
             : kind === "conflict"
-              ? "This request does not match the original submitted version or saved request."
+              ? instruction &&
+                instruction.consentVersion !== ASSIGNMENT_CONSENT_VERSION
+                ? "The consent wording has changed since this form was opened. Nothing was copied. Open the submission's feedback step again to read the current wording."
+                : "This request does not match the original submitted version or saved request."
               : kind === "disabled"
                 ? "Creating assignment feedback copies is currently unavailable."
                 : kind === "denied"
@@ -111,6 +115,7 @@ export function mountAssignmentEvidenceRoutes(
         "rubricVersion",
         "sourceSha256",
         "privateReview",
+        "consentVersion",
       ])
     )
       return failure(res, "invalid");
@@ -124,6 +129,7 @@ export function mountAssignmentEvidenceRoutes(
       rubricVersion: integer(b.rubricVersion!),
       sourceSha256: b.sourceSha256,
       privateReview: b.privateReview === "yes",
+      consentVersion: b.consentVersion,
     });
     if (!instruction) return failure(res, "invalid");
     try {

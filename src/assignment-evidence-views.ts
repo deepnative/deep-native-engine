@@ -1,10 +1,13 @@
 import { timeTag } from "./display-time.ts";
 import { randomUUID } from "node:crypto";
-import { page, escape, hidden } from "./views.ts";
+import { assignmentConsentLine, page, escape, hidden } from "./views.ts";
 import type { AssignmentEvidenceReceipt } from "./assignment-evidence.ts";
-import type {
-  AssignmentEvidenceInstruction,
-  AssignmentEvidenceSource,
+import {
+  ASSIGNMENT_CONSENT_TEXT,
+  ASSIGNMENT_CONSENT_VERSION,
+  ASSIGNMENT_COPY_RETENTION,
+  type AssignmentEvidenceInstruction,
+  type AssignmentEvidenceSource,
 } from "./assignment-evidence-values.ts";
 
 export const ASSIGNMENT_INSPECT_PATH = "/assignment-feedback/inspect";
@@ -22,10 +25,13 @@ export function assignmentInspectionPage(csrf: string) {
 
 function copyForm(
   csrf: string,
-  instruction: Omit<AssignmentEvidenceInstruction, "privateReview">,
+  instruction: Omit<
+    AssignmentEvidenceInstruction,
+    "privateReview" | "consentVersion"
+  >,
   repeat = false,
 ) {
-  return `<form method="post" action="${assignmentHandoffPath(instruction.attemptId)}">${hidden(csrf)}${input("operationId", instruction.operationId)}${input("sequence", instruction.sequence)}${input("contentId", instruction.contentId)}${input("contentVersion", instruction.contentVersion)}${input("rubricVersion", instruction.rubricVersion)}${input("sourceSha256", instruction.sourceSha256)}<label class="check"><input type="checkbox" name="privateReview" value="yes" required><span>Create a private feedback copy of this submitted version. I will request review separately. Deleting the original attempt also deletes its copies and feedback.</span></label><button>${repeat ? "Repeat this original copy request" : "Create private feedback copy"}</button></form>`;
+  return `<form method="post" action="${assignmentHandoffPath(instruction.attemptId)}">${hidden(csrf)}${input("operationId", instruction.operationId)}${input("sequence", instruction.sequence)}${input("contentId", instruction.contentId)}${input("contentVersion", instruction.contentVersion)}${input("rubricVersion", instruction.rubricVersion)}${input("sourceSha256", instruction.sourceSha256)}${input("consentVersion", ASSIGNMENT_CONSENT_VERSION)}<label class="check"><input type="checkbox" name="privateReview" value="yes" required><span>${ASSIGNMENT_CONSENT_TEXT}</span></label><p>Consent wording ${ASSIGNMENT_CONSENT_VERSION}. The version you agree to is saved with the copy.</p><button>${repeat ? "Repeat this original copy request" : "Create private feedback copy"}</button></form>`;
 }
 
 export function assignmentHandoffPage(
@@ -45,7 +51,7 @@ export function assignmentReceiptPage(
   const origin = receipt.assignmentOrigin;
   return page(
     "Your assignment feedback copy",
-    `<section class="reading"><h1>Your assignment feedback copy</h1><p role="status">${escape(message)}</p><p>Receipt ${escape(receipt.receiptId)} · ${timeTag(receipt.createdAt)} · ${receipt.state}</p>${origin ? `<p>Assignment ${escape(origin.contentId)} · version ${origin.contentVersion} · submission ${origin.sequence} · rubric ${origin.rubricVersion}</p>` : "<p>The copy or its original source has been removed. Repeating the original request cannot recreate it.</p>"}${receipt.evidenceId ? `<p data-assignment-evidence="${escape(receipt.evidenceId)}">Private copy ${escape(receipt.evidenceId)}</p>` : ""}<p>No reviewer was assigned and no feedback was requested automatically. Withdrawing review does not remove feedback you already received; deleting its source does.</p><p><a href="/evidence">Manage private copies and request feedback</a></p><p><a href="/assignments/attempts">Your assignments</a></p></section>`,
+    `<section class="reading"><h1>Your assignment feedback copy</h1><p role="status">${escape(message)}</p><p>Receipt ${escape(receipt.receiptId)} · ${timeTag(receipt.createdAt)} · ${receipt.state}</p>${origin ? `<p>Assignment ${escape(origin.contentId)} · version ${origin.contentVersion} · submission ${origin.sequence} · rubric ${origin.rubricVersion}</p><p>${assignmentConsentLine(origin)}</p><p>${ASSIGNMENT_COPY_RETENTION} You can delete the copy from your private copies.</p>` : "<p>The copy or its original source has been removed. Repeating the original request cannot recreate it.</p>"}${receipt.evidenceId ? `<p data-assignment-evidence="${escape(receipt.evidenceId)}">Private copy ${escape(receipt.evidenceId)}</p>` : ""}<p>No reviewer was assigned and no feedback was requested automatically. Withdrawing review does not remove feedback you already received; deleting its source does.</p><p><a href="/evidence">Manage private copies and request feedback</a></p><p><a href="/assignments/attempts">Your assignments</a></p></section>`,
   );
 }
 
