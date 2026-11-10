@@ -7,6 +7,7 @@ import {
   coachingTermsStore,
   memberTermsSection,
   parseCoachingTerms,
+  renewalsSection,
   type CoachingTerms,
   type CoachingTermsStore,
 } from "../../src/coaching-terms.ts";
@@ -70,6 +71,7 @@ function fixture(
     student?: boolean;
     current?: CoachingTerms | null;
     earlier?: { digest: string; version: number };
+    due?: unknown[];
     fail?: Error;
   } = {},
 ) {
@@ -92,6 +94,7 @@ function fixture(
       rows = o.student === false ? [] : [{ "?column?": 1 }];
     else if (sql.includes("WHERE actor_id=$1 AND operation_id=$2"))
       rows = o.earlier ? [o.earlier] : [];
+    else if (sql.includes("DISTINCT ON (owner_id)")) rows = o.due ?? [];
     else if (sql.includes("FROM coaching_terms WHERE owner_id"))
       rows = o.current ? [o.current] : [];
     return { rows, rowCount: rows.length };
@@ -306,6 +309,27 @@ function routes(terms?: Partial<CoachingTermsStore>) {
     next();
   });
   const invoices = {
+    coachingDashboard: vi.fn().mockResolvedValue({
+      kind: "ready",
+      value: {
+        month: "2026-10",
+        today: "2026-10",
+        contractors: [],
+        summary: {
+          submittedMinutes: 0,
+          contractorsSubmitted: 0,
+          awaitingReview: 0,
+          oldestWaitingDays: null,
+          invoicedCents: 0,
+          invoicesNotSent: 0,
+          outstandingCents: 0,
+        },
+      },
+    }),
+    adminOverview: vi.fn().mockResolvedValue({
+      kind: "ready",
+      value: { members: [], coachingPending: [] },
+    }),
     coachingOverview: vi
       .fn()
       .mockResolvedValue({ kind: "ready", value: overview }),
@@ -383,4 +407,92 @@ it("TERMS316-01/05/06 routes show the sections, save through the store and map e
   expect((await off.get("/account/coaching")).text).not.toContain(
     "Your coaching terms",
   );
+});
+
+// #317 owner decisions of 9 Nov 2026: renewal is the admin-set date only.
+// Nothing renews or charges automatically; staff see whose date is near or past.
+const due = [
+  {
+    ownerId: id,
+    displayName: "Ada <Sample>",
+    renewsOn: "2026-11-01",
+    days: -8,
+  },
+  { ownerId: key, displayName: null, renewsOn: "2026-11-09", days: 0 },
+  { ownerId: id, displayName: "Bo", renewsOn: "2026-11-10", days: 1 },
+  { ownerId: key, displayName: "Cy", renewsOn: "2026-12-09", days: 30 },
+];
+
+it("RENEW317-01/02 lists renewals due to platform administrators only", async () => {
+  const { terms, query } = fixture({ due });
+  expect(await terms.renewalsDue(token)).toEqual({ kind: "ready", value: due });
+  const sql = String(query.mock.calls.at(-1)![0]);
+  expect(sql).toContain("ORDER BY owner_id,version DESC");
+  expect(sql).toContain("renews_on<=d.today+30");
+  expect(sql).toContain("w.deleting_at IS NULL");
+  expect(sql).toContain("p.revoked_at IS NULL");
+  expect(await fixture({ kind: "member" }).terms.renewalsDue(token)).toEqual({
+    kind: "denied",
+  });
+  expect(await fixture({ role: "reviewer" }).terms.renewalsDue(token)).toEqual({
+    kind: "denied",
+  });
+  expect(await fixture().terms.renewalsDue("bad")).toEqual({ kind: "denied" });
+  expect(
+    await fixture({ fail: new Error("down") }).terms.renewalsDue(token),
+  ).toEqual({ kind: "unavailable" });
+});
+
+it("RENEW317-01/03 shows each renewal's state and that nothing renews automatically", () => {
+  const html = renewalsSection(due, "/operator/coaching");
+  const shown = text(html);
+  for (const line of [
+    "Renewals due",
+    "Students whose renewal date has passed or is within 30 days.",
+    "Nothing renews or charges automatically.",
+    "Ada &lt;Sample&gt; · renewal date November 1, 2026 · 8 days overdue",
+    "Name needed · renewal date November 9, 2026 · due today",
+    "Bo · renewal date November 10, 2026 · due in 1 day",
+    "Cy · renewal date December 9, 2026 · due in 30 days",
+  ])
+    expect(shown).toContain(line);
+  expect(html).toContain("Ada &lt;Sample&gt;");
+  expect(html).toContain(`href="/operator/coaching/${id}"`);
+  expect(text(renewalsSection([{ ...due[0]!, days: -1 }], "/o"))).toContain(
+    "1 day overdue",
+  );
+  expect(text(renewalsSection(Array(200).fill(due[0]), "/o"))).toContain(
+    "Showing the first 200 students.",
+  );
+  expect(text(renewalsSection(due, "/o"))).not.toContain("Showing the first");
+  expect(text(renewalsSection([], "/o"))).toContain(
+    "No renewal dates have passed or fall within the next 30 days.",
+  );
+  expect(text(memberTermsSection(saved))).toContain(
+    "Nothing renews or charges automatically. To renew, contact info@deepnative.io.",
+  );
+  expect(text(adminTermsSection(saved, "/a", ""))).toContain(
+    "Nothing renews or charges automatically. To renew, save new terms with the next renewal date.",
+  );
+  expect(text(memberTermsSection(null))).not.toContain("To renew");
+});
+
+it("RENEW317-01/04 the administration page shows renewals due and maps a failure", async () => {
+  const store = {
+    renewalsDue: vi.fn().mockResolvedValue({ kind: "ready", value: due }),
+  };
+  const r = routes(store);
+  const page = await r.get("/operator/coaching");
+  expect(page.status).toBe(200);
+  expect(text(page.text)).toContain("Bo · renewal date November 10, 2026");
+  expect(store.renewalsDue).toHaveBeenCalledWith(token);
+  store.renewalsDue.mockResolvedValueOnce({ kind: "denied" });
+  expect((await r.get("/operator/coaching")).status).toBe(403);
+  store.renewalsDue.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await r.get("/operator/coaching")).status).toBe(403);
+  store.renewalsDue.mockResolvedValueOnce({ kind: "unavailable" });
+  expect((await r.get("/operator/coaching")).status).toBe(503);
+  const off = await routes().get("/operator/coaching");
+  expect(off.status).toBe(200);
+  expect(off.text).not.toContain("Renewals due");
 });
