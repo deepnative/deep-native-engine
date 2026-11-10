@@ -343,7 +343,7 @@ function routes(
     // #318: the terms-invoice section reads the current version and recipient.
     coachingTermsInvoice: vi.fn().mockResolvedValue({
       kind: "ready",
-      value: { terms: null, recipient: null, invoiceId: null },
+      value: { terms: null, recipient: null, invoiceId: null, earlier: [] },
     }),
     ...extra,
   };
@@ -443,7 +443,7 @@ it("TERMSINV318-07 the terms-invoice section explains each state and only offers
       rateBasisPoints: 1300,
     };
   const none = adminTermsInvoiceSection(
-    { terms: null, recipient, invoiceId: null },
+    { terms: null, recipient, invoiceId: null, earlier: [] },
     "/a",
     "",
     hst,
@@ -452,7 +452,7 @@ it("TERMSINV318-07 the terms-invoice section explains each state and only offers
   expect(text(none)).toContain("Set coaching terms first.");
   expect(none).not.toContain("<form");
   const noRecipient = adminTermsInvoiceSection(
-    { terms, recipient: null, invoiceId: null },
+    { terms, recipient: null, invoiceId: null, earlier: [] },
     "/a",
     "",
     hst,
@@ -461,7 +461,12 @@ it("TERMSINV318-07 the terms-invoice section explains each state and only offers
   expect(text(noRecipient)).toContain("hasn't saved a billing recipient yet");
   expect(noRecipient).not.toContain("<form");
   const done = adminTermsInvoiceSection(
-    { terms, recipient, invoiceId: "33333333-3333-4333-8333-333333333333" },
+    {
+      terms,
+      recipient,
+      invoiceId: "33333333-3333-4333-8333-333333333333",
+      earlier: [],
+    },
     "/a",
     "",
     hst,
@@ -472,7 +477,7 @@ it("TERMSINV318-07 the terms-invoice section explains each state and only offers
   );
   expect(done).not.toContain("<form");
   const ready = adminTermsInvoiceSection(
-    { terms, recipient, invoiceId: null },
+    { terms, recipient, invoiceId: null, earlier: [] },
     "/a",
     "<x>",
     hst,
@@ -483,8 +488,38 @@ it("TERMSINV318-07 the terms-invoice section explains each state and only offers
   );
   expect(ready).toContain('<form method="post" action="/a"><x>');
   expect(ready).not.toContain('name="tax"');
+  expect(ready).not.toContain("already invoiced");
+  // TERMSINV318-08: an earlier version's live invoice is named above the form.
+  const corrected = adminTermsInvoiceSection(
+    {
+      terms,
+      recipient,
+      invoiceId: null,
+      earlier: [
+        {
+          version: 1,
+          startsOn: "2026-12-01",
+          endsOn: "2027-05-31",
+          invoiceId: "44444444-4444-4444-8444-444444444444",
+        },
+      ],
+    },
+    "/a",
+    "",
+    hst,
+    false,
+  );
+  expect(text(corrected)).toContain(
+    "Terms version 1 covers an overlapping coaching period (2026-12-01 to 2027-05-31) and is already invoiced: view that invoice. Issue another invoice only if the student owes both. To replace the earlier invoice, void it first.",
+  );
+  expect(corrected).toContain(
+    'href="/operator/invoices/44444444-4444-4444-8444-444444444444"',
+  );
+  expect(corrected.indexOf("already invoiced")).toBeLessThan(
+    corrected.indexOf("<form"),
+  );
   const sample = adminTermsInvoiceSection(
-    { terms, recipient, invoiceId: null },
+    { terms, recipient, invoiceId: null, earlier: [] },
     "/a",
     "",
     undefined,
@@ -500,6 +535,7 @@ it("TERMSINV318-07 the terms-invoice section explains each state and only offers
       terms,
       recipient: { ...recipient, company: "Invented Co" },
       invoiceId: null,
+      earlier: [],
     },
     "/a",
     "",
@@ -526,7 +562,7 @@ it("TERMSINV318-04 the terms-invoice route checks the form, passes the version a
     .mockResolvedValue({ kind: "ready", value: { invoiceId: key } });
   const read = vi.fn().mockResolvedValue({
     kind: "ready",
-    value: { terms: null, recipient: null, invoiceId: null },
+    value: { terms: null, recipient: null, invoiceId: null, earlier: [] },
   });
   const send = (r: ReturnType<typeof routes>, fields: Record<string, string>) =>
     r.raw((s) =>

@@ -49,6 +49,7 @@ function fixture(
     terms?: typeof terms | null;
     recipient?: typeof recipient | null;
     live?: boolean;
+    earlier?: unknown[];
     receipt?: { digest: string; result: unknown };
     settings?: InvoiceSettings;
   } = {},
@@ -70,6 +71,8 @@ function fixture(
       rows = o.recipient === null ? [] : [o.recipient ?? recipient];
     else if (sql.includes("FROM simple_invoices WHERE coaching_terms_id"))
       rows = o.live ? [{ id: key }] : [];
+    else if (sql.includes("FROM simple_invoices i JOIN coaching_terms"))
+      rows = o.earlier ?? [];
     else if (sql.includes("AS today")) rows = [{ today: "2026-11-10" }];
     return { rows, rowCount: rows.length };
   });
@@ -91,7 +94,7 @@ it("TERMSINV318-01 reads the current version, recipient and live invoice for the
     await fixture({ live: true }).service.coachingTermsInvoice(token, id),
   ).toEqual({
     kind: "ready",
-    value: { terms, recipient, invoiceId: key },
+    value: { terms, recipient, invoiceId: key, earlier: [] },
   });
   expect(
     await fixture({
@@ -100,15 +103,44 @@ it("TERMSINV318-01 reads the current version, recipient and live invoice for the
     }).service.coachingTermsInvoice(token, id),
   ).toEqual({
     kind: "ready",
-    value: { terms: null, recipient: null, invoiceId: null },
+    value: { terms: null, recipient: null, invoiceId: null, earlier: [] },
   });
   expect(await fixture().service.coachingTermsInvoice(token, id)).toEqual({
     kind: "ready",
-    value: { terms, recipient, invoiceId: null },
+    value: { terms, recipient, invoiceId: null, earlier: [] },
   });
   expect(await fixture().service.coachingTermsInvoice(token, "x")).toEqual({
     kind: "invalid",
   });
+});
+
+it("TERMSINV318-08 lists live invoices of earlier versions with an overlapping period while the current one is unbilled", async () => {
+  const earlier = [
+    {
+      version: 1,
+      startsOn: "2026-12-01",
+      endsOn: "2027-05-31",
+      invoiceId: key,
+    },
+  ];
+  const f = fixture({ earlier });
+  expect(await f.service.coachingTermsInvoice(token, id)).toEqual({
+    kind: "ready",
+    value: { terms, recipient, invoiceId: null, earlier },
+  });
+  const read = sql(f, "SELECT t.version")!;
+  expect(read[0]).toContain("i.void_reason IS NULL");
+  expect(read[0]).toContain("t.starts_on<=$4::date AND t.ends_on>=$3::date");
+  expect(read[1]).toEqual([id, termsId, "2026-12-01", "2027-05-31"]);
+  // An invoiced current version, or no terms, asks nothing more.
+  for (const o of [
+    { live: true, earlier },
+    { terms: null, earlier },
+  ]) {
+    const g = fixture(o);
+    await g.service.coachingTermsInvoice(token, id);
+    expect(sql(g, "SELECT t.version")).toBeUndefined();
+  }
 });
 
 it("TERMSINV318-01 issues the terms price with server-computed HST to the saved recipient", async () => {

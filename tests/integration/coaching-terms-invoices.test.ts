@@ -384,3 +384,48 @@ it("TERMSINV318-06 sample mode keeps an invented typed tax and marks the invoice
   });
   expect(row.document.tax).toBeUndefined();
 });
+
+// #44 walk of 10 Nov 2026: the one-invoice rule is per version, so a
+// correction of the same period must not look unbilled.
+it("TERMSINV318-08 a corrected version names the earlier invoice for the same period; a renewal or a voided invoice doesn't", async () => {
+  const m = await member();
+  await setTerms(m.id);
+  const { invoiceId } = ready(
+    await invoices.issueCoachingTerms(admin, issueInput(m.id)),
+  );
+  // The same period with a different allowance: version 2, not yet invoiced.
+  await setTerms(m.id, 1, { ...agreed, aiRequests: 100 });
+  const corrected = (await get(`/operator/coaching/${m.id}`, admin)).text;
+  expect(text(corrected)).toContain(
+    "Terms version 1 covers an overlapping coaching period (2026-12-01 to 2027-05-31) and is already invoiced: view that invoice. Issue another invoice only if the student owes both. To replace the earlier invoice, void it first.",
+  );
+  expect(corrected).toContain(`href="/operator/invoices/${invoiceId}"`);
+  // The warning informs; the form is still offered.
+  expect(text(corrected)).toContain("Issue an invoice for terms version 2:");
+  expect(corrected).toContain('name="confirm" value="terms-invoice"');
+  // Once the earlier invoice is void, nothing is named.
+  ready(
+    await invoices.voidInvoice(admin, {
+      invoiceId,
+      expectedRevision: 1,
+      operationId: randomUUID(),
+      reason: "Invented correction",
+    }),
+  );
+  expect(
+    text((await get(`/operator/coaching/${m.id}`, admin)).text),
+  ).not.toContain("is already invoiced");
+  // A renewal for a later, separate period is its own invoice.
+  const r = await member();
+  await setTerms(r.id);
+  ready(await invoices.issueCoachingTerms(admin, issueInput(r.id)));
+  await setTerms(r.id, 1, {
+    ...agreed,
+    startsOn: "2027-06-01",
+    endsOn: "2027-11-30",
+    renewsOn: "2027-12-01",
+  });
+  const renewal = text((await get(`/operator/coaching/${r.id}`, admin)).text);
+  expect(renewal).toContain("Issue an invoice for terms version 2:");
+  expect(renewal).not.toContain("is already invoiced");
+});
