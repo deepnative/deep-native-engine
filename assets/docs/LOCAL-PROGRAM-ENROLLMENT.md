@@ -14,6 +14,12 @@ Selection lasts up to 15 minutes in a signed HttpOnly cookie, SameSite=Lax and S
 
 An account already enrolled in this exact term sees its existing receipt instead of consuming another place, even if inventory later closes. Different students cannot read one another's receipts or original-key results. Term closure or source unavailability retains the private receipt and original learning history. Current course access still obeys ordinary publication/version rules; a receipt does not grant access to retired content or silently count a newer version. Account erasure cascades the enrollment and denies stale receipt/download/inspection routes.
 
+## Enrollment and paid coaching
+
+Enrolling is free. Paid coaching is separate and arranged for each student (owner decisions of 9 November 2026). An administrator sets the student's price, coaching period, renewal date and allowances on `/operator/coaching/<student>`. Deep Native Inc. sends an invoice and the student pays offline. Nothing renews or charges automatically, and there are no cancellation or refund rules; students contact info@deepnative.io. The program page says this under **What comes next**.
+
+When coaching terms are configured, My courses shows the student's own current terms: coaching period, renewal date and price, or that none are set. It links to `/account/coaching` for allowances and monthly hours. If the terms can't be read, My courses still loads and says they can't be shown. Students never see another student's terms (COURSETERMS557-01 to 04).
+
 ## Local administrator and publication
 
 The migration creates one not-open inventory record, not members, enrollments, staff, progress or published lessons. The trusted program definition in `src/program-values.ts` and the exact migration snapshot bind one program/term version to six ordinary reviewed foundation lesson versions.
