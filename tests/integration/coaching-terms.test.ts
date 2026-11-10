@@ -316,3 +316,94 @@ it("TERMS316-07 the student's download has every version without the administrat
   await pool.query("DELETE FROM principals WHERE id=$1", [m.id]);
   expect(await versions(m.id)).toBe(0);
 });
+
+// #317 owner decisions of 9 Nov 2026: renewal is the admin-set date only.
+// Nothing renews or charges automatically; staff see whose date is near or past.
+it("RENEW317-01/02 administrators see current renewal dates that have passed or fall within 30 days, oldest first", async () => {
+  const today = (
+    await pool.query<{ d: string }>(
+      "SELECT to_char((clock_timestamp() AT TIME ZONE 'UTC')::date,'YYYY-MM-DD') d",
+    )
+  ).rows[0]!.d;
+  const day = (offset: number) =>
+    new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86400000)
+      .toISOString()
+      .slice(0, 10);
+  const terms0 = (renew: number) => ({
+    ...agreed,
+    startsOn: day(-90),
+    endsOn: day(-1),
+    renewsOn: day(renew),
+  });
+  const overdue = await member(),
+    soon = await member(),
+    later = await member(),
+    moved = await member(),
+    edge = await member(),
+    gone = await member();
+  await pool.query("UPDATE learners SET display_name=$2 WHERE id=$1", [
+    overdue.id,
+    "Renewal <Overdue>",
+  ]);
+  ready(await terms.save(admin, input(overdue.id, 0, terms0(-5))));
+  ready(await terms.save(admin, input(soon.id, 0, terms0(10))));
+  ready(await terms.save(admin, input(later.id, 0, terms0(31))));
+  ready(await terms.save(admin, input(moved.id, 0, terms0(1))));
+  ready(await terms.save(admin, input(moved.id, 1, terms0(90))));
+  ready(await terms.save(admin, input(edge.id, 0, terms0(30))));
+  ready(await terms.save(admin, input(gone.id, 0, terms0(0))));
+  await pool.query("UPDATE principals SET revoked_at=now() WHERE id=$1", [
+    gone.id,
+  ]);
+  const mine = [overdue, soon, later, moved, edge, gone].map((m) => m.id);
+  const listed = ready(await terms.renewalsDue(admin)).filter((r) =>
+    mine.includes(r.ownerId),
+  );
+  expect(listed).toEqual([
+    {
+      ownerId: overdue.id,
+      displayName: "Renewal <Overdue>",
+      renewsOn: day(-5),
+      days: -5,
+    },
+    { ownerId: soon.id, displayName: null, renewsOn: day(10), days: 10 },
+    { ownerId: edge.id, displayName: null, renewsOn: day(30), days: 30 },
+  ]);
+  const page = await get("/operator/coaching", admin);
+  expect(page.status).toBe(200);
+  expect(page.text).toContain("Renewal &lt;Overdue&gt;");
+  expect(text(page.text)).toContain(
+    `renewal date ${new Date(`${day(-5)}T00:00:00Z`).toLocaleDateString("en-CA", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })} · 5 days overdue`,
+  );
+  const section = page.text.match(
+    /<section[^>]*aria-labelledby="renewals-due".*?<\/section>/,
+  )![0];
+  expect(section).toContain(`href="/operator/coaching/${soon.id}"`);
+  for (const hidden of [later, moved, gone])
+    expect(section).not.toContain(hidden.id);
+  // Listing changes nothing: no new version, charge or invoice.
+  expect(await versions(overdue.id)).toBe(1);
+  expect(
+    (
+      await pool.query(
+        "SELECT 1 FROM simple_invoices WHERE owner_id=ANY($1::uuid[])",
+        [mine],
+      )
+    ).rowCount,
+  ).toBe(0);
+  expect(await terms.renewalsDue(overdue.token)).toEqual({ kind: "denied" });
+  expect(await terms.renewalsDue(await staff("reviewer"))).toEqual({
+    kind: "denied",
+  });
+  expect((await get("/operator/coaching", overdue.token)).status).toBe(403);
+});
+
+it("RENEW317-03 the student sees their renewal date and that nothing renews automatically", async () => {
+  const m = await member();
+  ready(await terms.save(admin, input(m.id)));
+  const page = text((await get("/account/coaching", m.token)).text);
+  expect(page).toContain("Renewal date June 1, 2027");
+  expect(page).toContain(
+    "Nothing renews or charges automatically. To renew, contact info@deepnative.io.",
+  );
+});

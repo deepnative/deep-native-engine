@@ -29,6 +29,7 @@ import {
   adminTermsSection,
   memberTermsSection,
   parseCoachingTerms,
+  renewalsSection,
   TERMS_FIELDS,
   type CoachingTermsStore,
 } from "./coaching-terms.ts";
@@ -184,6 +185,14 @@ export function mountCoachingRoutes(
     if (dashboard.kind !== "ready") return failure(res, dashboard.kind, true);
     const result = await store.adminOverview(token(res));
     if (result.kind !== "ready") return failure(res, result.kind, true);
+    // #317 RENEW317-01: renewal dates that have passed or are near; read-only.
+    let renewals = "";
+    if (options.coachingTerms) {
+      const due = await options.coachingTerms.renewalsDue(token(res));
+      if (due.kind !== "ready")
+        return failure(res, due.kind === "invalid" ? "denied" : due.kind, true);
+      renewals = renewalsSection(due.value, adminPath);
+    }
     res.send(
       page(
         "Coaching administration",
@@ -192,7 +201,7 @@ export function mountCoachingRoutes(
             ["/operator/invoices", "Courses and invoices"],
             ["/operator", "Administration console"],
           ],
-        )}${coachingDashboardSection(dashboard.value, adminPath, sort)}<section class="portal-card"><h2>Members</h2><ul class="portal-list">${result.value.members.map((m) => `<li><a href="${adminPath}/${m.id}">${escape(m.displayName ?? "Name needed")}</a><p class="small">Account reference: <code>${escape(m.id)}</code></p></li>`).join("") || "<li>No members available.</li>"}</ul></section><section class="portal-card"><h2>Pending months</h2><ul class="portal-list">${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${escape(m.displayName ?? "Name needed")} · ${monthLabel(m.month)}</a><p class="small">Account reference: <code>${escape(m.ownerId)}</code></p></li>`).join("") || "<li>No submitted months await review.</li>"}</ul></section></section>`,
+        )}${coachingDashboardSection(dashboard.value, adminPath, sort)}${renewals}<section class="portal-card"><h2>Members</h2><ul class="portal-list">${result.value.members.map((m) => `<li><a href="${adminPath}/${m.id}">${escape(m.displayName ?? "Name needed")}</a><p class="small">Account reference: <code>${escape(m.id)}</code></p></li>`).join("") || "<li>No members available.</li>"}</ul></section><section class="portal-card"><h2>Pending months</h2><ul class="portal-list">${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${escape(m.displayName ?? "Name needed")} · ${monthLabel(m.month)}</a><p class="small">Account reference: <code>${escape(m.ownerId)}</code></p></li>`).join("") || "<li>No submitted months await review.</li>"}</ul></section></section>`,
       ),
     );
   });

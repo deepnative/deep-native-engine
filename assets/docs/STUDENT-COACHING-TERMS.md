@@ -22,10 +22,19 @@ On the same page, **Invoice these coaching terms** issues one invoice for the cu
 
 Each terms version has at most one invoice that isn't void (`simple_invoices.coaching_terms_id`, unique while not void, and it can't change). Replaying the same form returns the same invoice; a form for an older version is refused as out of date. Voiding the invoice allows it to be issued again. Issuing takes no payment: staff record the offline payment with the invoice's existing **Record offline payment** form, and the student sees the invoice under **Courses and invoices**. Each issue is in staff change history.
 
+## Renewals ([#317](https://github.com/deepnative/deep-native-engine/issues/317))
+
+Renewal is the renewal date an administrator set, nothing more. Nothing renews or charges automatically, and listing a renewal changes nothing.
+
+- **Administrators.** The coaching administration page (`/operator/coaching`) has a **Renewals due** list: students whose _current_ terms have a renewal date that has passed or falls within the next 30 days (UTC), oldest first, each marked "N days overdue", "due today" or "due in N days" and linking to the student's page. Earlier versions, revoked accounts and accounts being deleted aren't listed. To renew, open the student and save new terms with the next renewal date.
+- **Students.** Beside their renewal date on `/account/coaching`: "Nothing renews or charges automatically. To renew, contact info@deepnative.io."
+
+No migration and no export change. Tests: RENEW317-01..04 in `tests/unit/coaching-terms.test.ts` and `tests/integration/coaching-terms.test.ts`.
+
 ## What this doesn't do
 
 - Allowances are agreed numbers shown to the student. They don't mint test units or grants (#27); the existing review and support grant tools are unchanged.
-- The renewal date is shown, not acted on. Renewal and acceptance stay with #317; there is no cancellation flow (#319).
-- Nothing is invoiced automatically, on the renewal date or otherwise. Monthly coaching hours and their invoices work as before ([MONTHLY-COACHING-INVOICES.md](MONTHLY-COACHING-INVOICES.md)).
+- The renewal date is shown and listed for administrators, never acted on: no automatic renewal, acceptance, charge, grant or invoice. There is no cancellation flow (#319).
+- Nothing is invoiced automatically. An administrator issues a terms invoice on the student's page (#318). Monthly coaching hours and their invoices work as before ([MONTHLY-COACHING-INVOICES.md](MONTHLY-COACHING-INVOICES.md)).
 
 Tests: TERMS316-01..07 in `tests/integration/coaching-terms.test.ts`; TERMSINV318-01..06 in `tests/integration/coaching-terms-invoices.test.ts`, TERMSINV318-07 in `tests/unit/coaching-terms.test.ts` and browser journey L330 in `tests/e2e/coaching-terms-invoice.spec.ts`; export index in `tests/unit/member-export.test.ts`.
