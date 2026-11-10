@@ -9,7 +9,7 @@ Download my records (My account → Download my records, `src/member-export.ts`)
 - **EXPCOV-04:** simulated assessment results recorded on the member's work are in the download (`contentAssessments`, v41), without the reviewer. No page records these yet.
 - **EXPCOV-05:** how many coaches are assigned to the member, and since when, is in the download (`coachAssignments`, v42) as one row, without any coach's email fingerprint or who assigned them.
 - **EXPCOV-06:** test payments staff recorded by hand about the member are in the download (`manualPaymentObservations`, v42), labelled unverified, without the staff member.
-- **SIGNEMAIL-05:** the member's verified sign-in email is in the download (`signInEmail`, v46, #796) as the readable address and when it was verified, without its fingerprint. Members verified before #796 have no row content until their next email sign-in.
+- **SIGNEMAIL-05:** the member's verified sign-in email is in the download (`signInEmail`, v46, #796) as the readable address and when it was verified, without its fingerprint. Members verified before #796 have no row content until their next email-link or password sign-in.
 - **RECACCESS-07:** each permission the member gave operators to download their records is in the download (`recordAccess`, v44), with how many downloads were made, and each download is in `staffAccess`, without the operator.
 - **TERMS316-07:** every version of the coaching terms an administrator set for the member is in the download (`coachingTerms`, v45), without the administrator.
 

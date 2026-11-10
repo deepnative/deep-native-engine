@@ -257,6 +257,14 @@ export function memberPasswordAccess(pool: Pool): MemberPasswordAccess {
           "DELETE FROM member_password_failures WHERE email_hash=$1",
           [digest],
         );
+        // PWEMAIL-01..03 (#801): the typed address hashes to this member's
+        // verified fingerprint, so keep it readable as their default invoice
+        // email. Never overwrite one already kept; an unverified sign-up email
+        // has no identity row and changes nothing.
+        await client.query(
+          "UPDATE member_email_identities SET address=$3 WHERE principal_id=$1 AND email_hash=$2 AND address IS NULL",
+          [candidate.principal_id, digest, normalized],
+        );
         return added;
       });
       if (!signedIn) return { kind: "refused" };

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import { randomBytes } from "node:crypto";
 import type { Server } from "node:http";
 import request from "supertest";
@@ -9,6 +9,7 @@ import { memberPasswordAccess } from "../../src/member-password-access.ts";
 import { COOKIE, csrf } from "../../src/session.ts";
 import { Pool } from "pg";
 import { migrate, store } from "../../src/store.ts";
+import { billingProfileStore } from "../../src/billing-profile.ts";
 
 // A private database per file, like member-email-access.test.ts.
 const root = new URL(
@@ -277,4 +278,86 @@ it("PWD-05 needs the current password to change it, except just after an email-l
   );
   await pool.query("DELETE FROM principals WHERE id=$1", [owner.id]);
   expect((await pool.query("SELECT 1 FROM member_passwords")).rowCount).toBe(0);
+});
+
+const readable = async (id: string) =>
+  (
+    await pool.query<{ address: string | null }>(
+      "SELECT address FROM member_email_identities WHERE principal_id=$1",
+      [id],
+    )
+  ).rows.map((row) => row.address);
+// A member verified before #799 has a fingerprint but no readable address.
+async function earlierMember(address: string) {
+  const owner = await member(address);
+  expect(await passwords.setPassword(owner.token, PASSWORD)).toBe("saved");
+  await pool.query(
+    "UPDATE member_email_identities SET address=NULL WHERE principal_id=$1",
+    [owner.id],
+  );
+  return owner;
+}
+
+it("PWEMAIL-01 a password sign-in with the verified email keeps it readable and prefills the invoice email", async () => {
+  const owner = await earlierMember("owner@example.com");
+  const signedIn = await passwords.signIn(" OWNER@example.com ", PASSWORD);
+  expect(signedIn.kind).toBe("signed_in");
+  expect(await readable(owner.id)).toEqual(["owner@example.com"]);
+  expect(await billingProfileStore(pool).suggest(owner.token)).toMatchObject({
+    kind: "ready",
+    value: { email: "owner@example.com" },
+  });
+});
+
+it("PWEMAIL-02 a password sign-in never overwrites a readable address already kept", async () => {
+  const owner = await earlierMember("owner@example.com");
+  await pool.query(
+    "UPDATE member_email_identities SET address='kept@example.com' WHERE principal_id=$1",
+    [owner.id],
+  );
+  expect((await passwords.signIn("owner@example.com", PASSWORD)).kind).toBe(
+    "signed_in",
+  );
+  expect(await readable(owner.id)).toEqual(["kept@example.com"]);
+});
+
+it("PWEMAIL-03 a refused sign-in or an unverified sign-up email stores nothing", async () => {
+  const owner = await earlierMember("owner@example.com");
+  expect(
+    (await passwords.signIn("owner@example.com", "wrong synthetic password"))
+      .kind,
+  ).toBe("refused");
+  expect(await readable(owner.id)).toEqual([null]);
+  const pending = await member();
+  await passwords.register(pending.token, "pending@example.com", PASSWORD);
+  expect((await passwords.signIn("pending@example.com", PASSWORD)).kind).toBe(
+    "signed_in",
+  );
+  expect(await readable(pending.id)).toEqual([]);
+  expect(await readable(owner.id)).toEqual([null]);
+  expect(
+    (
+      await pool.query(
+        "SELECT 1 FROM member_email_identities WHERE address='pending@example.com'",
+      )
+    ).rowCount,
+  ).toBe(0);
+});
+
+it("PWEMAIL-04 a password sign-in never writes the address to logs", async () => {
+  const owner = await earlierMember("quiet@example.com");
+  const lines: unknown[] = [];
+  const spies = (["info", "log", "warn", "error"] as const).map((level) =>
+    vi.spyOn(console, level).mockImplementation((...args) => {
+      lines.push(args);
+    }),
+  );
+  try {
+    await passwords.signIn("quiet@example.com", "wrong synthetic password");
+    await passwords.signIn("quiet@example.com", PASSWORD);
+  } finally {
+    for (const spy of spies) spy.mockRestore();
+  }
+  expect(await readable(owner.id)).toEqual(["quiet@example.com"]);
+  expect(JSON.stringify(lines)).not.toContain("quiet@example.com");
 });
