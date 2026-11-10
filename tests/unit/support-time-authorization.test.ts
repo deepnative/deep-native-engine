@@ -84,6 +84,7 @@ const meta = {
   acknowledgedAt: null,
   receivedAt: date,
   coverageState: "unverified",
+  coverageReviewedAt: null,
 };
 type Options = {
   actor?: "member" | "operator" | "admin";

@@ -27,6 +27,10 @@ it("upgrades populated legacy support requests and note grants twice without bac
     await client.query(
       "ALTER TABLE learners ADD COLUMN display_name text, ADD COLUMN created_on_demo_site boolean NOT NULL DEFAULT false",
     );
+    // #195: the current receipt projection reads the coverage-review time.
+    await client.query(
+      "ALTER TABLE support_requests ADD COLUMN coverage_reviewed_at timestamptz",
+    );
     const scoped = {
       query: client.query.bind(client),
       async connect() {

@@ -41,7 +41,9 @@ export interface SupportReceipt {
   acknowledgedAt: Date | null;
   resolvedAt: Date | null;
   withdrawnAt: Date | null;
-  coverageState: "unverified";
+  /** #195 AC3: "outside-current-support" grants no entitlement or booking. */
+  coverageState: "unverified" | "outside-current-support";
+  coverageReviewedAt: Date | null;
 }
 export interface SupportRequestSummary extends SupportReceipt {
   subject: string | null;
@@ -64,7 +66,9 @@ export interface SupportOperatorContext {
   elapsedSeconds: number;
   grantStartsAt: Date;
   grantExpiresAt: Date;
-  allowedActions: ("acknowledge" | "note" | "reply" | "resolve")[];
+  allowedActions: (
+    "acknowledge" | "note" | "reply" | "resolve" | "coverage-review"
+  )[];
 }
 export interface SupportOperatorSummary extends SupportRequestSummary {
   grantId: string;
@@ -158,6 +162,11 @@ export interface SupportRequestStore {
     scope: SupportOperatorScope,
     key: string,
   ): Promise<SupportTransition>;
+  reviewCoverage(
+    token: string,
+    scope: SupportOperatorScope,
+    key: string,
+  ): Promise<SupportTransition>;
   withdraw(
     token: string,
     requestId: string,
@@ -191,6 +200,7 @@ export function disabledSupportRequestStore(): SupportRequestStore {
     reply: denied,
     note: denied,
     resolve: denied,
+    reviewCoverage: denied,
     withdraw: denied,
     grant: denied,
     revoke: denied,
@@ -208,7 +218,7 @@ const purpose = "support-request-local-v1";
 const uuid =
   /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 const receiptColumns = `r.id AS "requestId",r.received_at AS "receivedAt",r.acknowledged_at AS "acknowledgedAt",
- r.resolved_at AS "resolvedAt",r.withdrawn_at AS "withdrawnAt",r.coverage_state AS "coverageState"`;
+ r.resolved_at AS "resolvedAt",r.withdrawn_at AS "withdrawnAt",r.coverage_state AS "coverageState",r.coverage_reviewed_at AS "coverageReviewedAt"`;
 const metadataColumns = `${receiptColumns},r.member_id AS "memberId",r.workspace_id AS "workspaceId"`;
 const at = (column: string) =>
   `to_char(${column} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "cursorAt"`;
@@ -265,6 +275,7 @@ function receipt(row: SupportReceipt): SupportReceipt {
     resolvedAt: row.resolvedAt,
     withdrawnAt: row.withdrawnAt,
     coverageState: row.coverageState,
+    coverageReviewedAt: row.coverageReviewedAt,
   };
 }
 function validScope(scope: SupportOperatorScope): boolean {
@@ -965,9 +976,15 @@ export function supportRequestStore(
         grantExpiresAt: grant.expiresAt,
         allowedActions: value.resolvedAt
           ? []
-          : value.acknowledgedAt
-            ? ["note", "reply", "resolve"]
-            : ["acknowledge", "note", "reply", "resolve"],
+          : [
+              ...(value.acknowledgedAt ? [] : (["acknowledge"] as const)),
+              "note" as const,
+              "reply" as const,
+              "resolve" as const,
+              ...(value.coverageReviewedAt
+                ? []
+                : (["coverage-review"] as const)),
+            ],
       },
       ...(time
         ? {
@@ -1036,7 +1053,8 @@ export function supportRequestStore(
     token: string,
     scope: SupportOperatorScope,
     key: string,
-    action: "acknowledged" | "replied" | "noted" | "resolved",
+    action:
+      "acknowledged" | "replied" | "noted" | "resolved" | "coverage-reviewed",
     body?: string,
   ): Promise<SupportTransition> {
     if (!validScope(scope) || !uuid.test(key)) return { kind: "denied" };
@@ -1067,7 +1085,10 @@ export function supportRequestStore(
         }
         return { kind: "replayed", receipt: existing };
       }
-      if (action === "acknowledged" && row.acknowledgedAt)
+      if (
+        (action === "acknowledged" && row.acknowledgedAt) ||
+        (action === "coverage-reviewed" && row.coverageReviewedAt)
+      )
         return { kind: "conflict" };
       let messageId: string | null = null;
       if (action === "replied" || action === "noted") {
@@ -1075,6 +1096,11 @@ export function supportRequestStore(
         await ctx.client.query(
           `INSERT INTO ${action === "noted" ? "support_request_notes" : "support_request_replies"}(id,request_id,actor_id,body) VALUES($1,$2,$3,$4)`,
           [messageId, scope.requestId, ctx.actor.id, body],
+        );
+      } else if (action === "coverage-reviewed") {
+        await ctx.client.query(
+          `UPDATE support_requests SET coverage_state='outside-current-support',coverage_reviewed_by=$2,coverage_reviewed_at=clock_timestamp() WHERE id=$1`,
+          [scope.requestId, ctx.actor.id],
         );
       } else {
         const prefix = action === "acknowledged" ? "acknowledged" : "resolved";
@@ -1432,7 +1458,7 @@ export function supportRequestStore(
         const saved = (
           await ctx.client.query<SupportReceipt>(
             `INSERT INTO support_requests(id,member_id,workspace_id,intake_key,subject,body) VALUES($1,$2,$2,$3,$4,$5)
-           RETURNING id AS "requestId",received_at AS "receivedAt",acknowledged_at AS "acknowledgedAt",resolved_at AS "resolvedAt",withdrawn_at AS "withdrawnAt",coverage_state AS "coverageState"`,
+           RETURNING id AS "requestId",received_at AS "receivedAt",acknowledged_at AS "acknowledgedAt",resolved_at AS "resolvedAt",withdrawn_at AS "withdrawnAt",coverage_state AS "coverageState",NULL::timestamptz AS "coverageReviewedAt"`,
             [id, ctx.actor.id, input.idempotencyKey, input.subject, input.body],
           )
         ).rows[0]!;
@@ -1603,6 +1629,8 @@ export function supportRequestStore(
     acknowledge: (token, scope, key) =>
       transition(token, scope, key, "acknowledged"),
     resolve: (token, scope, key) => transition(token, scope, key, "resolved"),
+    reviewCoverage: (token, scope, key) =>
+      transition(token, scope, key, "coverage-reviewed"),
     async reply(token, scope, key, body) {
       return supportTextValid(body, 2000)
         ? transition(token, scope, key, "replied", body)
