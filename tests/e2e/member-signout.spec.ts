@@ -326,6 +326,8 @@ test("[L241] MOUT-06 failed and lost-commit signout shows uncertainty without re
         (await page.context().cookies()).find((c) => c.name === "dne_preview")
           ?.value,
       ).toBe(f.token);
+      // A request looks the browser up again before reading anything.
+      await members.browserSession!(f.token);
       expect((await members.session(f.token)).kind === "active").toBe(
         failure === "before-commit",
       );

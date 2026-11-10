@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { invoiceUuid } from "./simple-invoice-values.ts";
+import { cookieHash } from "./member-sessions.ts";
 import { hash } from "./store.ts";
 import { ACCOUNT_ROLES, type AccountRole } from "./account-view.ts";
 import {
@@ -113,14 +114,14 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
           await tx.query(
             `UPDATE administrator_sessions SET revoked_at=clock_timestamp()
              WHERE member_id=$1 AND member_token_hash=$2 AND revoked_at IS NULL RETURNING staff_id`,
-            [owner.id, hash(memberToken)],
+            [owner.id, cookieHash(memberToken)],
           );
           return { kind: "ready" };
         }
         // Expired sessions require deliberate ending, never silent replacement.
         const previous = await tx.query(
           "SELECT 1 FROM administrator_sessions WHERE member_id=$1 AND member_token_hash=$2 AND revoked_at IS NULL",
-          [owner.id, hash(memberToken)],
+          [owner.id, cookieHash(memberToken)],
         );
         if (previous.rowCount) throw new PracticeLifetimeFailure("denied");
         const expires = owner.session_expires;
@@ -136,7 +137,8 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
         );
         await tx.query(
           "INSERT INTO administrator_sessions(staff_id,member_id,member_token_hash,expires_at) VALUES($1,$2,$3,$4)",
-          [id, owner.id, hash(memberToken), expires],
+          // MULTISESSION-05: administration belongs to this browser's session.
+          [id, owner.id, cookieHash(memberToken), expires],
         );
         await tx.observe([expires]);
         return { kind: "ready", credential, expires };

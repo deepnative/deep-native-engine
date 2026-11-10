@@ -7,7 +7,7 @@ import {
   it,
   vi,
 } from "vitest";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { Pool } from "pg";
 import {
   memberEmailAccess,
@@ -109,7 +109,8 @@ it("links by proof of email possession and signs in the same saved member withou
     kind: "active",
     learner: { id: owner.id },
   });
-  expect((await members.session(owner.token)).kind).not.toBe("active");
+  // MULTISESSION-01 (#695): the first browser stays signed in too.
+  expect((await members.session(owner.token)).kind).toBe("active");
   expect(await members.progress(owner.id)).toMatchObject({
     instruction: "Invented plan",
   });
@@ -577,58 +578,72 @@ it.each(["expired", "revoked", "staff", "deleting", "deleted"])(
         [owner.id],
       );
     if (state === "deleted") await members.remove(owner.id);
+    const stored = async () =>
+      (
+        await pool.query<{ token_hash: string }>(
+          "SELECT token_hash FROM principals WHERE id=$1",
+          [owner.id],
+        )
+      ).rows[0]?.token_hash;
+    const before = await stored();
     expect(await access.signOut(owner.token)).toBe("unavailable");
     expect((await members.session(other.token)).kind).toBe("active");
-    expect(
-      (
-        await pool.query("SELECT token_hash FROM principals WHERE id=$1", [
-          owner.id,
-        ])
-      ).rows[0]?.token_hash,
-    ).toBe(state === "deleted" ? undefined : hash(owner.token));
+    expect(await stored()).toBe(before);
+    if (state === "deleted") expect(before).toBeUndefined();
   },
 );
 
-it("MOUT-04 rechecks expiry after dependent locking before changing either bearer", async () => {
-  const owner = await member();
-  await access.requestAttach(owner.token, "expiry@example.com");
-  await access.consume(code(), owner.token);
-  const boundary = {
-    async connect() {
-      const client = await pool.connect();
-      return {
-        async query(sql: string, values?: unknown[]) {
-          const result = await client.query(sql, values);
-          if (
-            sql.includes("member_email_identities") &&
-            sql.includes("FOR UPDATE")
-          ) {
-            await client.query(
-              "UPDATE principals SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
-              [owner.id],
-            );
-          }
-          return result;
-        },
-        release: (error?: Error) => client.release(error),
-      };
-    },
-  } as unknown as Pool;
-  expect(
-    await memberEmailAccess(
-      boundary,
-      sender,
-      "https://engine.deepnative.io",
-    ).signOut(owner.token),
-  ).toBe("unavailable");
-  expect(
-    (
-      await pool.query("SELECT token_hash FROM principals WHERE id=$1", [
-        owner.id,
-      ])
-    ).rows[0].token_hash,
-  ).toBe(hash(owner.token));
-});
+it.each(["account", "no account"])(
+  "MOUT-04 rechecks expiry after dependent locking before changing either bearer (%s)",
+  async (kind) => {
+    const owner = await member();
+    if (kind === "account") {
+      await access.requestAttach(owner.token, "expiry@example.com");
+      await access.consume(code(), owner.token);
+    }
+    const fingerprint = createHash("sha256").update(owner.token).digest("hex");
+    const boundary = {
+      async connect() {
+        const client = await pool.connect();
+        return {
+          async query(sql: string, values?: unknown[]) {
+            const result = await client.query(sql, values);
+            if (
+              sql.includes("member_email_identities") &&
+              sql.includes("FOR UPDATE")
+            ) {
+              await client.query(
+                "UPDATE principals SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",
+                [owner.id],
+              );
+            }
+            return result;
+          },
+          release: (error?: Error) => client.release(error),
+        };
+      },
+    } as unknown as Pool;
+    expect(
+      await memberEmailAccess(
+        boundary,
+        sender,
+        "https://engine.deepnative.io",
+      ).signOut(owner.token, true),
+    ).toBe("unavailable");
+    // MULTISESSION (#695): an account keeps this browser's own session row;
+    // without an account the member row keeps this browser's fingerprint.
+    expect(
+      (
+        await pool.query(
+          kind === "account"
+            ? "SELECT 1 FROM member_sessions WHERE token_hash=$1 AND principal_id=$2"
+            : "SELECT 1 FROM principals WHERE token_hash=$1 AND id=$2",
+          [fingerprint, owner.id],
+        )
+      ).rowCount,
+    ).toBe(1);
+  },
+);
 
 it.each(["write", "commit"])(
   "MOUT-06 reports uncertain %s failure without replay and preserves inspectable native state",
@@ -644,7 +659,11 @@ it.each(["write", "commit"])(
         const client = await pool.connect();
         return {
           async query(sql: string, values?: unknown[]) {
-            if (failure === "write" && sql.startsWith("UPDATE learners"))
+            // MULTISESSION (#695): an account ends this browser's session row.
+            if (
+              failure === "write" &&
+              sql.trimStart().startsWith("DELETE FROM member_sessions")
+            )
               throw Error("synthetic write failure");
             const result = await client.query(sql, values);
             if (sql === "COMMIT") {
@@ -671,6 +690,8 @@ it.each(["write", "commit"])(
     expect(commits).toBe(failure === "commit" ? 1 : 0);
     expect(releases).toBe(1);
     expect(discarded).toBe(failure === "commit");
+    // A request looks the browser up again before reading anything.
+    await members.browserSession!(owner.token);
     expect((await members.session(owner.token)).kind === "active").toBe(
       failure === "write",
     );

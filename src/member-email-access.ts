@@ -1,5 +1,15 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
+import {
+  addBrowserSession,
+  cookieHash,
+  forget,
+  remember,
+  replaceAccountValue,
+  replaced,
+  separateSessions,
+  type Opened,
+} from "./member-sessions.ts";
 import { hash } from "./store.ts";
 import {
   UNKNOWN_VISITOR,
@@ -90,6 +100,32 @@ export async function signOutMember(
   memberToken: string,
   acknowledgeAccessLoss = false,
 ): ReturnType<MemberEmailAccess["signOut"]> {
+  let change: { previous: string; account: string } | undefined;
+  let result: Awaited<ReturnType<MemberEmailAccess["signOut"]>>;
+  try {
+    result = await signOutTransaction(
+      pool,
+      memberToken,
+      acknowledgeAccessLoss,
+      (replacement) => (change = replacement),
+    );
+  } catch (error) {
+    // The outcome is uncertain; the next request looks this browser up again.
+    forget(cookieHash(memberToken));
+    throw error;
+  }
+  if (result === "signed_out") forget(cookieHash(memberToken));
+  // The account's other browsers stay signed in under its new value.
+  if (change) replaced(change.previous, change.account);
+  return result;
+}
+
+function signOutTransaction(
+  pool: Pool,
+  memberToken: string,
+  acknowledgeAccessLoss: boolean,
+  onReplace: (replacement: { previous: string; account: string }) => void,
+): ReturnType<MemberEmailAccess["signOut"]> {
   return transaction(pool, async (client) => {
     // Serialize with email sign-in and account deletion before locking any
     // dependent row. PostgreSQL rechecks this exact bearer after a wait.
@@ -123,6 +159,32 @@ export async function signOutMember(
         )
       ).rowCount;
     if (!returnable && !acknowledgeAccessLoss) return "recovery_required";
+    const separate = (
+      await client.query<{ separate: boolean }>(
+        "SELECT separate_sessions AS separate FROM principals WHERE id=$1",
+        [principal.id],
+      )
+    ).rows[0]!.separate;
+    if (separate) {
+      // MULTISESSION-02: end this browser's session and its administration;
+      // the account's other browsers stay signed in.
+      const browser = cookieHash(memberToken);
+      // Recheck expiry after the dependent locks, as the bearer change does.
+      const ended = await client.query(
+        `DELETE FROM member_sessions s USING principals p
+         WHERE s.token_hash=$1 AND s.principal_id=$2 AND p.id=s.principal_id
+           AND p.expires_at>clock_timestamp()`,
+        [browser, principal.id],
+      );
+      if (!ended.rowCount) return "unavailable";
+      await client.query(
+        `UPDATE administrator_sessions SET revoked_at=clock_timestamp()
+         WHERE member_id=$1 AND member_token_hash=$2 AND revoked_at IS NULL`,
+        [principal.id, browser],
+      );
+      onReplace(await replaceAccountValue(client, principal.id));
+      return "signed_out";
+    }
     // No usable replacement bearer leaves this transaction. Keep durable
     // identity, expiry and existing email challenges for deliberate recovery.
     const discardedHash = hash(randomBytes(32).toString("hex"));
@@ -405,6 +467,7 @@ export function memberEmailAccess(
     },
     async consume(code, currentToken) {
       if (!/^[a-f0-9]{64}$/.test(code)) return { kind: "unavailable" };
+      let opened: Opened[] = [];
       const result = await transaction(pool, async (client) => {
         const candidate = (
           await client.query<{ principal_id: string }>(
@@ -464,11 +527,14 @@ export function memberEmailAccess(
           );
           // SIGNUP-04: the verified owner of an address wins over any
           // unverified claim to it, and this account's claim is now verified.
-          if (inserted.rowCount)
+          if (inserted.rowCount) {
             await client.query(
               "DELETE FROM member_login_emails WHERE email_hash=$1 OR principal_id=$2",
               [link.email_hash, principal.id],
             );
+            // MULTISESSION: an account signs in separately on each browser.
+            opened = await separateSessions(client, principal.id);
+          }
           return inserted.rowCount
             ? { kind: "attached" as const }
             : { kind: "unavailable" as const };
@@ -492,18 +558,11 @@ export function memberEmailAccess(
             "UPDATE member_email_identities SET address=$3 WHERE email_hash=$1 AND principal_id=$2",
             [link.email_hash, principal.id, address],
           );
-        const newToken = randomBytes(32).toString("hex");
-        const newHash = hash(newToken);
-        await client.query(
-          `UPDATE principals SET token_hash=$2,expires_at=clock_timestamp()+INTERVAL '30 days'
-           WHERE id=$1`,
-          [principal.id, newHash],
-        );
-        await client.query(
-          `UPDATE learners SET token_hash=$2,expires_at=(SELECT expires_at FROM principals WHERE id=$1)
-           WHERE id=$1`,
-          [principal.id, newHash],
-        );
+        // MULTISESSION-01: this browser joins any already signed in.
+        const added = await addBrowserSession(client, principal.id);
+        opened = added.opened;
+        const newToken = added.token;
+        const newHash = cookieHash(newToken);
         await client.query(
           "UPDATE member_email_links SET consumed_at=clock_timestamp() WHERE principal_id=$1 AND consumed_at IS NULL",
           [principal.id],
@@ -517,6 +576,7 @@ export function memberEmailAccess(
         );
         return { kind: "signed_in" as const, token: newToken };
       });
+      remember(opened);
       return result;
     },
   };

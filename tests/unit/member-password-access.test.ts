@@ -150,7 +150,7 @@ it("PWD-01 sets a hashed password only for a member with a sign-in email", async
   expect(await passwords.status(owner.token)).toBe("set");
 });
 
-it("PWD-02 signs in with email and password, rotating to one new session for the same work", async () => {
+it("PWD-02 signs in with email and password, adding a new session for the same work", async () => {
   const owner = await member("owner@example.com");
   await members.save(owner.token, {
     revision: 0,
@@ -172,7 +172,8 @@ it("PWD-02 signs in with email and password, rotating to one new session for the
   expect(signedIn.headers.location).toBe("/learn");
   const next = issuedToken(signedIn);
   expect(next).toBeDefined();
-  expect((await members.session(owner.token)).kind).not.toBe("active");
+  // MULTISESSION-01 (#695): the browser that set the password stays signed in.
+  expect((await members.session(owner.token)).kind).toBe("active");
   expect(await members.session(next!)).toMatchObject({
     kind: "active",
     learner: { id: owner.id },

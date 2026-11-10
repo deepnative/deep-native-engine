@@ -41,6 +41,7 @@ The check is about which tables the download reads, not which columns. Each sect
 | `member_login_emails`                      | Sign-in: the fingerprint of the sign-in address                                                                                                   |
 | `member_password_reset_windows`            | Sign-in: hashed password reset tokens                                                                                                             |
 | `member_passwords`                         | Sign-in: the password hash                                                                                                                        |
+| `member_sessions`                          | Sign-in: the fingerprint of each signed-in browser's cookie and when it expires (#695). A secret, not member content                              |
 | `preview_circle_appeals`                   | Open on #196: appeals of moderation decisions belong to the circle moderation work                                                                |
 | `preview_circle_moderation_audit`          | Open on #196: moderation actions on the member's circle posts                                                                                     |
 | `preview_circle_moderator_grants`          | Staff moderator grants for a circle. Not about a member                                                                                           |
