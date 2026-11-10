@@ -117,6 +117,8 @@ const base: PreviewMetrics = {
     returnEligible: "Eligible.",
     crossContentReturned: "Returned.",
     reportedOutcome: "Reported.",
+    enrolledInProgram: "Enrolled in the program term.",
+    withdrewFromProgram: "Withdrew from the program term.",
     usefulness: "Useful.",
     segments: "Segments.",
     cohorts: "Cohorts.",

@@ -92,10 +92,13 @@ test("[L102] three audiences keep exact private starter practice when changing g
     );
     await expect(page.getByText(first, { exact: true })).toBeVisible();
     await expect(page.locator('form[action="/exercise"]')).toHaveCount(0);
+    // L102-REPRO-02: Chromium's fragment-anchor step moves focus to the
+    // opened record (or clears it to <body> if the target cannot take focus).
+    // Waiting for that focus keeps it from landing after the checkbox focus.
+    await expect(page.locator(`#starter-version-1-${a}`)).toBeFocused();
     const withdraw = page.getByLabel(
       "Withdraw both saved text fields for version 1",
     );
-    await withdraw.scrollIntoViewIfNeeded();
     await withdraw.focus();
     await page.keyboard.press("Space");
     await expect(withdraw).toBeChecked();

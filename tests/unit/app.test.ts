@@ -631,6 +631,8 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         returnEligible: "matured first-open cohort",
         crossContentReturned: "bounded observed return",
         reportedOutcome: "member-reported outcome",
+        enrolledInProgram: "Enrolled in the program term.",
+        withdrewFromProgram: "Withdrew from the program term.",
         usefulness: "coarse self-reported usefulness",
         segments: "Segments.",
         cohorts: "Cohorts.",
@@ -649,6 +651,8 @@ it("denies an unconfigured operator metrics route and returns only a configured 
         returnEligible: 20,
         crossContentReturned: 8,
         reportedOutcome: 5,
+        enrolledInProgram: 5,
+        withdrewFromProgram: 5,
       }),
       segments: learningSegments(null, 30),
       cohorts: [],
@@ -684,6 +688,8 @@ it("denies an unconfigured operator metrics route and returns only a configured 
       returnEligible: "20-49",
       crossContentReturned: "5-19",
       reportedOutcome: "5-19",
+      enrolledInProgram: "5-19",
+      withdrewFromProgram: "5-19",
     },
   });
   expect(response.body.scope).toBe("synthetic-local-preview");
@@ -3999,9 +4005,41 @@ it("requires confirmation and deletes only the current learner before clearing i
     /<div class="notice" role="status">([\s\S]*?)<\/div>/,
   )?.[1];
   expect(status?.replace(/<[^>]+>/g, "")).toBe(
-    "Your account and its saved work were deleted, and you are signed out.Not everything is erased yet. Issued invoices and the payments and refunds recorded against them are kept for 6 years after the account is deleted, following Canada Revenue Agency record-keeping rules (records are kept 6 years from the end of the last tax year they relate to). Copies in service backups are kept for up to 30 days, then they expire. See everything that is kept.",
+    "Your account and its saved work were deleted, and you are signed out.Not everything is erased yet. Issued invoices and the payments and refunds recorded against them are kept after the account is deleted, following Canada Revenue Agency record-keeping rules: until December 31, 6 years after the tax year of the invoice (Deep Native Inc.'s tax year ends on December 31). An invoice from 2026 is kept until December 31, 2032. Then the invoice and its payment records are removed automatically. Copies in service backups are kept for up to 30 days, then they expire. See everything that is kept.",
   );
   expect(status).toContain('<a href="/terms#deletion-kept">');
+});
+it("RETEXP-02 reads the kept invoices' date before deleting and names it on the landing page", async () => {
+  const invoiceRetention = {
+    retainedUntil: vi.fn().mockResolvedValue("2032-12-31"),
+  };
+  const agent = await managedAgent(
+    app(db, {
+      origin,
+      secret: "secret",
+      evidence: evidenceStorage(),
+      invoiceRetention,
+    }),
+  );
+  const home = await agent.get("/").set("Host", host).expect(200);
+  const csrf = home.text.match(/name="csrf" value="([a-f0-9]+)"/)![1]!;
+  active();
+  await agent
+    .post("/delete")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf, confirm: "yes" })
+    .expect(303);
+  expect(invoiceRetention.retainedUntil).toHaveBeenCalledWith("owned");
+  expect(
+    invoiceRetention.retainedUntil.mock.invocationCallOrder[0],
+  ).toBeLessThan(db.remove.mock.invocationCallOrder.at(-1)!);
+  db.session.mockResolvedValue({ kind: "new" });
+  const landing = await agent.get("/").set("Host", host).expect(200);
+  expect(landing.text).toContain(
+    "Your issued invoices and their payment records are kept until December 31, 2032, then removed automatically.",
+  );
 });
 it("validates evidence upload consent and returns only safe result metadata", async () => {
   const files = evidenceStorage(),

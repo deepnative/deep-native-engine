@@ -27,6 +27,7 @@ import {
   BACKUP_RETENTION,
   BILLING_RETAINED_FIELDS,
   BILLING_RETENTION,
+  billingRetainedUntil,
 } from "./retention.ts";
 import { administrationLink } from "./administration-presentation.ts";
 import { accountView, viewSwitch } from "./account-view.ts";
@@ -133,9 +134,10 @@ function deleteAccountForm(csrf: string) {
   return `<form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>${hostingText("Delete my local preview and all its saved work.", "Delete my account and all its saved work.")}</span></label><button class="secondary" type="submit">${hostingText("Delete this preview", "Delete my account")}</button></form>`;
 }
 function landingNotice(notice?: LandingNotice) {
-  if (notice === "deleted")
+  if (notice === "deleted" || notice?.startsWith("deleted-until-"))
     // RETAIN-03 (#12 D08): the response names what stays and when it expires.
-    return `<div class="notice" role="status"><p>Your account and its saved work were deleted, and you are signed out.</p><p>Not everything is erased yet. ${BILLING_RETENTION} ${BACKUP_RETENTION} <a href="/terms#deletion-kept">See everything that is kept</a>.</p></div>`;
+    // RETEXP-02: with the account's own date when it had issued invoices.
+    return `<div class="notice" role="status"><p>Your account and its saved work were deleted, and you are signed out.</p><p>Not everything is erased yet. ${BILLING_RETENTION}${notice === "deleted" ? "" : ` ${billingRetainedUntil(notice.slice("deleted-until-".length))}`} ${BACKUP_RETENTION} <a href="/terms#deletion-kept">See everything that is kept</a>.</p></div>`;
   if (notice === "signed-out")
     return `<p class="notice" role="status">Sign in or create an account to open that page.${signInAvailable() ? ' <a href="/email/sign-in">Sign in</a>' : ""}</p>`;
   return "";
@@ -1323,7 +1325,7 @@ export function lesson(
     )
     .map(
       (row) =>
-        `<li id="starter-version-${row.version}-${row.goalAtStart ?? "unattributed"}"><h3>Earlier starter exercise · version ${row.version}</h3>${starterRecord(row, csrf)}</li>`,
+        `<li id="starter-version-${row.version}-${row.goalAtStart ?? "unattributed"}" tabindex="-1"><h3>Earlier starter exercise · version ${row.version}</h3>${starterRecord(row, csrf)}</li>`,
     )
     .join("");
   const guidedEntry = errors.length
@@ -1350,7 +1352,7 @@ export function starterRecordPage(row: ExerciseHistory, csrf: string) {
       : "This retained record is read-only. Open your current goal's lesson for current practice.";
   return page(
     "Saved starter practice",
-    `<section class="reading" id="starter-version-${row.version}-${row.goalAtStart ?? "unattributed"}"><h1>Saved starter practice · version ${row.version}</h1>${starterRecord(row, csrf)}<p>This is the exact saved record. ${guidance}</p><a href="/progress">Return to private activity</a> <a href="/lesson">Open your current goal's lesson</a></section>`,
+    `<section class="reading" id="starter-version-${row.version}-${row.goalAtStart ?? "unattributed"}" tabindex="-1"><h1>Saved starter practice · version ${row.version}</h1>${starterRecord(row, csrf)}<p>This is the exact saved record. ${guidance}</p><a href="/progress">Return to private activity</a> <a href="/lesson">Open your current goal's lesson</a></section>`,
   );
 }
 export function exerciseWriteRecoveryPage(

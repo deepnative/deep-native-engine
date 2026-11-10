@@ -78,6 +78,7 @@ const keys = {
   reply: "reply",
   note: "note",
   resolve: "resolve",
+  "coverage-review": "coverage-review",
 };
 it("shows observed calendar age and current request scope without exposing ungranted effort", async () => {
   const f = await fixture();
@@ -88,7 +89,13 @@ it("shows observed calendar age and current request scope without exposing ungra
       operatorContext: {
         grantStartsAt: f.startsAt,
         grantExpiresAt: f.expiresAt,
-        allowedActions: ["acknowledge", "note", "reply", "resolve"],
+        allowedActions: [
+          "acknowledge",
+          "note",
+          "reply",
+          "resolve",
+          "coverage-review",
+        ],
       },
     },
   });
@@ -305,7 +312,9 @@ it("shows current request actions and a single newest grant-specific receipt acr
   expect(await support.operatorDetail(f.operator, f.scope)).toMatchObject({
     kind: "ready",
     value: {
-      operatorContext: { allowedActions: ["note", "reply", "resolve"] },
+      operatorContext: {
+        allowedActions: ["note", "reply", "resolve", "coverage-review"],
+      },
     },
   });
   await support.resolve(f.operator, f.scope, randomUUID());

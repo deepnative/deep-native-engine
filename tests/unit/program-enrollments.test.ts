@@ -49,6 +49,7 @@ async function fixture(mode: "test" | "live" = "test") {
       snapshot: unknown;
       digest: string;
       originalKey: string;
+      withdrawn?: Date | string | null;
     },
     activity: [] as Array<{
       id: string;
@@ -112,6 +113,18 @@ async function fixture(mode: "test" | "live" = "test") {
       );
     }
     if (sql.includes("FROM lesson_activity")) return rows(state.activity);
+    // #121 withdrawal.
+    if (sql.startsWith("SELECT id FROM local_program_enrollments WHERE id=$1"))
+      return rows(
+        state.receipt && values[0] === state.receipt.id
+          ? [{ id: state.receipt.id }]
+          : [],
+      );
+    if (
+      sql.startsWith("INSERT INTO local_program_withdrawals") &&
+      state.receipt
+    )
+      state.receipt.withdrawn ??= state.missingInsert ? null : new Date();
     return rows([]);
   });
   const release = vi.fn(() => {
@@ -321,5 +334,51 @@ it("PROGRAM-03/05 reports missing writes and invalid retained rows as unavailabl
   expect(await f.db.mine(bearer)).toEqual({ kind: "unavailable" });
   f.state.receipt!.enrolled = new Date();
   f.state.receipt!.snapshot = {};
+  expect(await f.db.mine(bearer)).toEqual({ kind: "unavailable" });
+});
+
+it("#121 PROGWD-01 withdraws once with a retained date, keeping the receipt and activity", async () => {
+  const f = await fixture();
+  const enrolled = await f.db.enroll(bearer, key, intent);
+  if (enrolled.kind !== "ready") throw Error("Missing invented enrollment");
+  expect(enrolled.value.withdrawnAt).toBeNull();
+  const first = await f.db.withdraw(bearer, enrolled.value.id);
+  expect(first).toMatchObject({
+    kind: "ready",
+    value: { id: enrolled.value.id, withdrawnAt: expect.any(String) },
+  });
+  // Repeating keeps the first date.
+  expect(await f.db.withdraw(bearer, enrolled.value.id)).toEqual(first);
+  expect(await f.db.mine(bearer)).toEqual(first);
+  expect(
+    f.calls.filter((sql) =>
+      sql.startsWith("INSERT INTO local_program_withdrawals"),
+    ),
+  ).toHaveLength(2);
+});
+it("#121 PROGWD-02 denies a foreign or unknown enrollment and refuses malformed ids", async () => {
+  const f = await fixture();
+  await f.db.enroll(bearer, key, intent);
+  expect(
+    await f.db.withdraw(bearer, "13a81b72-3651-4426-888b-c7c45a41d919"),
+  ).toEqual({ kind: "denied" });
+  expect(await f.db.withdraw(bearer, "bad")).toEqual({ kind: "invalid" });
+  f.state.actor = false;
+  expect(await f.db.withdraw(bearer, key)).toEqual({ kind: "denied" });
+  expect(
+    f.calls.filter((sql) =>
+      sql.startsWith("INSERT INTO local_program_withdrawals"),
+    ),
+  ).toHaveLength(0);
+});
+it("#121 PROGWD-03 treats a missing or malformed withdrawal as unavailable", async () => {
+  const f = await fixture();
+  const enrolled = await f.db.enroll(bearer, key, intent);
+  if (enrolled.kind !== "ready") throw Error("Missing invented enrollment");
+  f.state.missingInsert = true;
+  expect(await f.db.withdraw(bearer, enrolled.value.id)).toEqual({
+    kind: "unavailable",
+  });
+  f.state.receipt!.withdrawn = "not a date";
   expect(await f.db.mine(bearer)).toEqual({ kind: "unavailable" });
 });
