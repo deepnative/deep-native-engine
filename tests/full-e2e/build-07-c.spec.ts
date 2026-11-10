@@ -47,7 +47,8 @@ test("[F-BUILD-07-C] a declared workflow version downloads its exact bytes and a
     // Another version is refused rather than answered with the current bytes.
     for (const path of [
       "/workflows/WF-001/download?version=1",
-      "/workflows/WF-001/download?version=3",
+      "/workflows/WF-001/download?version=2",
+      "/workflows/WF-001/download?version=4",
     ]) {
       const refused = await page.request.get(path);
       expect(refused.status()).toBe(409);
