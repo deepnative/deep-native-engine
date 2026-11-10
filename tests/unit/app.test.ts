@@ -3991,6 +3991,17 @@ it("requires confirmation and deletes only the current learner before clearing i
   expect(String(deleted.headers["set-cookie"])).toContain(
     "Expires=Thu, 01 Jan 1970",
   );
+  // RETAIN-03 (#12 D08): the response names the kept billing records and the
+  // backup copies with their expiry, and doesn't claim everything is erased.
+  db.session.mockResolvedValue({ kind: "new" });
+  const landing = await agent.get("/").set("Host", host).expect(200);
+  const status = landing.text.match(
+    /<div class="notice" role="status">([\s\S]*?)<\/div>/,
+  )?.[1];
+  expect(status?.replace(/<[^>]+>/g, "")).toBe(
+    "Your account and its saved work were deleted, and you are signed out.Not everything is erased yet. Issued invoices and the payments and refunds recorded against them are kept for 6 years after the account is deleted, following Canada Revenue Agency record-keeping rules (records are kept 6 years from the end of the last tax year they relate to). Copies in service backups are kept for up to 30 days, then they expire. See everything that is kept.",
+  );
+  expect(status).toContain('<a href="/terms#deletion-kept">');
 });
 it("validates evidence upload consent and returns only safe result metadata", async () => {
   const files = evidenceStorage(),
