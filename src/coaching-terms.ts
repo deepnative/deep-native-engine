@@ -20,8 +20,10 @@ import { coachingAllowanceLedgerOnConnection } from "./ledger.ts";
 // coaching price, length, renewal date and allowances. The student's own price
 // covers the allowances. Saving terms turns expert review minutes and AI
 // requests into ledger units for the coaching period (#27); coaching sessions
-// stay an agreed number. Nothing here renews (#317) or cancels (#319). No
-// cancellation or refund rules; students contact info@deepnative.io.
+// stay an agreed number. Nothing here cancels (#319). No cancellation or refund
+// rules; students contact info@deepnative.io. #317: renewal is the admin-set
+// date only. Nothing renews or charges automatically; administrators see whose
+// renewal date has passed or is near, and renew by saving new terms.
 
 export interface CoachingTermsValues {
   priceCents: number;
@@ -46,6 +48,16 @@ export interface CoachingTerms extends CoachingTermsValues {
     aiRequests: AllowanceBalance;
   } | null;
 }
+/** RENEW317-01: a student whose current renewal date has passed or is near. */
+export interface RenewalDue {
+  ownerId: string;
+  displayName: string | null;
+  renewsOn: string;
+  /** Days from today (UTC) to the renewal date; negative when it has passed. */
+  days: number;
+}
+/** How far ahead the renewals list looks. */
+export const RENEWAL_WINDOW_DAYS = 30;
 export type TermsFailure = {
   kind: "denied" | "invalid" | "conflict" | "unavailable";
 };
@@ -326,6 +338,18 @@ export function coachingTermsStore(pool: Pool) {
         return { kind: "ready", value: await withBalances(tx, ownerId) };
       });
     },
+    /** RENEW317-01/02: current renewal dates that have passed or fall within
+     * the window, oldest first. Read-only: it renews and charges nothing. */
+    async renewalsDue(token: string): Promise<TermsResult<RenewalDue[]>> {
+      return run(token, true, async (tx) => ({
+        kind: "ready",
+        value: (
+          await tx.query<RenewalDue>(
+            `SELECT t.owner_id AS "ownerId",l.display_name AS "displayName",to_char(t.renews_on,'YYYY-MM-DD') AS "renewsOn",(t.renews_on-d.today)::integer AS days FROM (SELECT DISTINCT ON (owner_id) owner_id,renews_on FROM coaching_terms ORDER BY owner_id,version DESC) t JOIN principals p ON p.id=t.owner_id AND p.kind='member' AND p.revoked_at IS NULL JOIN learners l ON l.id=p.id JOIN workspaces w ON w.id=p.id AND w.owner_principal_id=p.id AND w.deleting_at IS NULL CROSS JOIN (SELECT (clock_timestamp() AT TIME ZONE 'UTC')::date AS today) d WHERE t.renews_on<=d.today+${RENEWAL_WINDOW_DAYS} ORDER BY t.renews_on,t.owner_id LIMIT 200`,
+          )
+        ).rows,
+      }));
+    },
     /** TERMS316-01..05: a new immutable version, refused when the form is stale. */
     async save(
       token: string,
@@ -414,6 +438,19 @@ const readable = (date: string) =>
   });
 export const NO_CANCELLATION = `There are no cancellation or refund rules. To ask about changes, contact <a href="mailto:${SERVICE_CONTACT}">${SERVICE_CONTACT}</a>.`;
 
+const NO_AUTOMATIC_RENEWAL = "Nothing renews or charges automatically.";
+const days = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
+function renewalState(n: number) {
+  return n < 0
+    ? `${days(-n)} overdue`
+    : n === 0
+      ? "due today"
+      : `due in ${days(n)}`;
+}
+/** RENEW317-01/03: administrators' list of renewals that have passed or are near. */
+export function renewalsSection(rows: RenewalDue[], path: string) {
+  return `<section class="portal-card" aria-labelledby="renewals-due"><h2 id="renewals-due">Renewals due</h2><p>Students whose renewal date has passed or is within ${RENEWAL_WINDOW_DAYS} days. ${NO_AUTOMATIC_RENEWAL} To renew, open the student and save new terms.</p><ul class="portal-list">${rows.map((r) => `<li><a href="${path}/${escape(r.ownerId)}">${escape(r.displayName ?? "Name needed")}</a> · renewal date ${readable(r.renewsOn)} · ${renewalState(r.days)}</li>`).join("") || `<li>No renewal dates have passed or fall within the next ${RENEWAL_WINDOW_DAYS} days.</li>`}</ul>${rows.length >= 200 ? "<p>Showing the first 200 students.</p>" : ""}</section>`;
+}
 function termsList(t: CoachingTerms) {
   return `<dl class="coaching-terms"><dt>Price</dt><dd>${money(t.priceCents)}</dd><dt>Coaching period</dt><dd>${readable(t.startsOn)} to ${readable(t.endsOn)}</dd><dt>Renewal date</dt><dd>${readable(t.renewsOn)}</dd><dt>Expert review time</dt><dd>${t.reviewMinutes} minutes</dd><dt>Coaching sessions</dt><dd>${t.coachingSessions}</dd><dt>AI requests</dt><dd>${t.aiRequests}</dd></dl>`;
 }
@@ -431,7 +468,7 @@ function balanceList(t: CoachingTerms, admin: boolean) {
 }
 /** TERMS316-06: what the student sees, read-only. */
 export function memberTermsSection(t: CoachingTerms | null) {
-  return `<section class="portal-card" aria-labelledby="coaching-terms"><h2 id="coaching-terms">Your coaching terms</h2>${t ? `${termsList(t)}${balanceList(t, false)}<p>Your administrator set these terms. Your coaching price covers these allowances.</p>` : "<p>Your administrator hasn't set your coaching terms yet.</p>"}<p>${NO_CANCELLATION}</p></section>`;
+  return `<section class="portal-card" aria-labelledby="coaching-terms"><h2 id="coaching-terms">Your coaching terms</h2>${t ? `${termsList(t)}${balanceList(t, false)}<p>Your administrator set these terms. Your coaching price covers these allowances.</p><p>${NO_AUTOMATIC_RENEWAL} To renew, contact <a href="mailto:${SERVICE_CONTACT}">${SERVICE_CONTACT}</a>.</p>` : "<p>Your administrator hasn't set your coaching terms yet.</p>"}<p>${NO_CANCELLATION}</p></section>`;
 }
 /** TERMS316-01: current terms and the form an administrator saves a new version with. */
 export function adminTermsSection(
@@ -454,5 +491,5 @@ export function adminTermsSection(
     key: keyof CoachingTermsValues,
   ) =>
     `<label>${label}<input name="${name}" ${attributes} value="${value(key)}" required></label>`;
-  return `<section class="portal-card" aria-labelledby="coaching-terms"><h2 id="coaching-terms">Coaching terms</h2>${t ? `<p>Current terms, version ${t.version}:</p>${termsList(t)}${balanceList(t, true)}` : "<p>No coaching terms are set for this student.</p>"}<p>The student's coaching price covers these allowances. ${NO_CANCELLATION}</p><h3>Set coaching terms</h3><p>Saving creates a new version. Earlier versions are kept.</p><form method="post" action="${action}">${hiddenFields}${field("price", "Price (CAD)", 'inputmode="decimal"', "priceCents")}${field("startsOn", "Start date", 'type="date"', "startsOn")}${field("endsOn", "End date", 'type="date"', "endsOn")}${field("renewsOn", "Renewal date", 'type="date"', "renewsOn")}${field("reviewMinutes", "Expert review minutes", 'type="number" min="0" max="100000" step="1"', "reviewMinutes")}${field("coachingSessions", "Coaching sessions", 'type="number" min="0" max="1000" step="1"', "coachingSessions")}${field("aiRequests", "AI requests", 'type="number" min="0" max="1000000" step="1"', "aiRequests")}<button>Save coaching terms</button></form></section>`;
+  return `<section class="portal-card" aria-labelledby="coaching-terms"><h2 id="coaching-terms">Coaching terms</h2>${t ? `<p>Current terms, version ${t.version}:</p>${termsList(t)}${balanceList(t, true)}<p>${NO_AUTOMATIC_RENEWAL} To renew, save new terms with the next renewal date.</p>` : "<p>No coaching terms are set for this student.</p>"}<p>The student's coaching price covers these allowances. ${NO_CANCELLATION}</p><h3>Set coaching terms</h3><p>Saving creates a new version. Earlier versions are kept.</p><form method="post" action="${action}">${hiddenFields}${field("price", "Price (CAD)", 'inputmode="decimal"', "priceCents")}${field("startsOn", "Start date", 'type="date"', "startsOn")}${field("endsOn", "End date", 'type="date"', "endsOn")}${field("renewsOn", "Renewal date", 'type="date"', "renewsOn")}${field("reviewMinutes", "Expert review minutes", 'type="number" min="0" max="100000" step="1"', "reviewMinutes")}${field("coachingSessions", "Coaching sessions", 'type="number" min="0" max="1000" step="1"', "coachingSessions")}${field("aiRequests", "AI requests", 'type="number" min="0" max="1000000" step="1"', "aiRequests")}<button>Save coaching terms</button></form></section>`;
 }
