@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import request from "supertest";
 import { app } from "../../src/app.ts";
 import { termsPage } from "../../src/demo-terms.ts";
+import { deletionKept } from "../../src/views.ts";
 import { withHosting } from "../../src/hosting-presentation.ts";
 import { withLoopback } from "../support/loopback-server.ts";
 
@@ -63,7 +64,7 @@ it("TERMS-03 the terms page says nothing is recorded, how long backups last, and
   for (const sentence of [
     "Sessions, coaching, events and circles are not recorded. No audio or video is captured.",
     "Database backups are kept for up to 30 days, then they expire.",
-    "Deleting your account removes it from the service straight away. Copies in backups go when those backups expire, within 30 days.",
+    "Deleting your account removes it from the service straight away, except for the records below. Copies in backups go when those backups expire, within 30 days.",
     "The service takes no card or bank details.",
   ])
     expect(page).toContain(sentence);
@@ -84,5 +85,24 @@ it("TERMS-08 the terms page says how long a shared member contribution stays rea
   const page = text(withHosting(true, () => termsPage()));
   expect(page).toContain(
     "If you share a member contribution, other signed-in members can read it until you withdraw sharing or delete your account. Withdrawing or deleting removes it and its attribution straight away. Copies someone already saved can't be recalled.",
+  );
+});
+
+// #12 D08, owner decision 10 Nov 2026: invoices and payment records are kept
+// six years (CRA); backups 30 days. /terms lists the same kept records as the
+// account page, from the same source.
+it("RETAIN-01/02 /terms names the billing exception with its expiry and the backup expiry, and lists the same kept records as My account", () => {
+  const html = withHosting(true, () => termsPage());
+  const page = text(html);
+  for (const sentence of [
+    "Issued invoices and the payments and refunds recorded against them are kept for 6 years after the account is deleted, following Canada Revenue Agency record-keeping rules (records are kept 6 years from the end of the last tax year they relate to).",
+    "They hold only what the invoice needs: its number and date, the issuer, the billing name, company and email, the items, amounts and tax, whether it was voided, and the payments and refunds recorded. Sample invoices are deleted with the account.",
+    "Copies in service backups are kept for up to 30 days, then they expire.",
+  ])
+    expect(page).toContain(sentence);
+  expect(html).toContain(withHosting(true, () => deletionKept()));
+  expect(page).toContain("Not legally reviewed.");
+  expect(page).not.toMatch(
+    /all (of )?your data|everything is (deleted|erased)|permanently erased/i,
   );
 });

@@ -23,6 +23,11 @@ import {
   providedSampleLabel,
 } from "./hosting-presentation.ts";
 import type { LandingNotice } from "./landing-notice.ts";
+import {
+  BACKUP_RETENTION,
+  BILLING_RETAINED_FIELDS,
+  BILLING_RETENTION,
+} from "./retention.ts";
 import { administrationLink } from "./administration-presentation.ts";
 import { accountView, viewSwitch } from "./account-view.ts";
 import { navigationLink } from "./navigation-presentation.ts";
@@ -121,15 +126,16 @@ export function escape(value: string) {
   );
 }
 // #40 ERASE-06: the records listed in MEMBER-DELETION-RETENTION.md, in plain words.
-function deletionKept() {
-  return `<div id="deletion-kept"><p>Deleting removes your profile, learning records, saved work, files and sharing choices, and signs you out on every browser.</p><p>Some records stay after deletion:</p><ul><li>Issued invoices and the payments and refunds recorded against them, including the billing name and email on them, for accounting. Sample invoices are deleted.</li><li>Change history entries for staff changes to your coaches or billing, with your student reference and any amount, but no name or email.</li><li>A note that an administrator looked up your email address, which keeps a fingerprint of the address, not the address.</li><li>Counts that limit repeated sign-in and email attempts, tied to a fingerprint of your email address. Later sign-in activity on the site clears them once they are a day or 30 days old.</li><li>A coach or administrator role you were given stays with your email address until an administrator removes it.</li></ul><p>Copies in service backups are kept for up to 30 days, then they expire.</p></div>`;
+export function deletionKept() {
+  return `<div id="deletion-kept"><p>Deleting removes your profile, learning records, saved work, files and sharing choices, and signs you out on every browser.</p><p>Some records stay after deletion:</p><ul><li>${BILLING_RETENTION} ${BILLING_RETAINED_FIELDS}</li><li>Change history entries for staff changes to your coaches or billing, with your student reference and any amount, but no name or email.</li><li>A note that an administrator looked up your email address, which keeps a fingerprint of the address, not the address.</li><li>Counts that limit repeated sign-in and email attempts, tied to a fingerprint of your email address. Later sign-in activity on the site clears them once they are a day or 30 days old.</li><li>A coach or administrator role you were given stays with your email address until an administrator removes it.</li></ul><p>${BACKUP_RETENTION}</p></div>`;
 }
 function deleteAccountForm(csrf: string) {
   return `<form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>${hostingText("Delete my local preview and all its saved work.", "Delete my account and all its saved work.")}</span></label><button class="secondary" type="submit">${hostingText("Delete this preview", "Delete my account")}</button></form>`;
 }
 function landingNotice(notice?: LandingNotice) {
   if (notice === "deleted")
-    return '<p class="notice" role="status">Your account and its saved work were deleted, and you are signed out.</p>';
+    // RETAIN-03 (#12 D08): the response names what stays and when it expires.
+    return `<div class="notice" role="status"><p>Your account and its saved work were deleted, and you are signed out.</p><p>Not everything is erased yet. ${BILLING_RETENTION} ${BACKUP_RETENTION} <a href="/terms#deletion-kept">See everything that is kept</a>.</p></div>`;
   if (notice === "signed-out")
     return `<p class="notice" role="status">Sign in or create an account to open that page.${signInAvailable() ? ' <a href="/email/sign-in">Sign in</a>' : ""}</p>`;
   return "";

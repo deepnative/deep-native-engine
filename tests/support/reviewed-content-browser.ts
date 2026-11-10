@@ -198,6 +198,8 @@ export async function reviewedContentFixture(
       member,
       publishFixture,
       configuredInvoiceListener,
+      // The listener's private file storage, for checks that files are gone.
+      storageRoot: storage,
       close,
     };
   } catch (error) {
