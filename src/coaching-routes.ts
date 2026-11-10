@@ -25,6 +25,7 @@ import {
   type CoachingRate,
 } from "./coaching-values.ts";
 import {
+  adminTermsInvoiceSection,
   adminTermsSection,
   memberTermsSection,
   parseCoachingTerms,
@@ -260,6 +261,23 @@ export function mountCoachingRoutes(
               `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", t.value?.version ?? 0)}`,
             )
           : memberTermsSection(t.value);
+        // #318 TERMSINV318-01/03: invoice the current terms version.
+        if (admin && store) {
+          const i = await store.coachingTermsInvoice(token(res), v.ownerId);
+          if (i.kind !== "ready")
+            return failure(
+              res,
+              i.kind === "invalid" ? "denied" : i.kind,
+              admin,
+            );
+          body += adminTermsInvoiceSection(
+            i.value,
+            `${base}/terms-invoice`,
+            `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", i.value.terms?.version ?? 0)}`,
+            hst,
+            v.sample,
+          );
+        }
       }
       if (admin)
         body += `<h2>Set member rate</h2><form method="post" action="${base}/rate">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.rateVersion)}<label>Effective month<input type="month" name="effectiveMonth" value="${v.month}" required></label><label>Hourly rate (CAD)<input name="rate" inputmode="decimal" required></label><button>Save hourly rate</button></form>`;
@@ -327,6 +345,28 @@ export function mountCoachingRoutes(
     return r.kind === "ready"
       ? res.redirect(303, `${adminPath}/${ownerId}`)
       : failure(res, r.kind, true);
+  });
+  // #318 TERMSINV318-01..06: one invoice for the current terms version.
+  app.post(`${adminPath}/:ownerId/terms-invoice`, async (req, res) => {
+    // ISSUER-03: a typed tax is refused when the server computes HST.
+    if (!valid(req, res, store?.tax ? ["confirm"] : ["tax", "confirm"])) return;
+    if (!store) return failure(res, "unavailable", true);
+    const taxCents = parseInvoiceMoney(req.body.tax);
+    if (
+      req.body.confirm !== "terms-invoice" ||
+      !/^[1-9]\d{0,8}$/.test(String(req.body.revision)) ||
+      (!store.tax && taxCents === null)
+    )
+      return failure(res, "invalid", true);
+    const r = await store.issueCoachingTerms(token(res), {
+      ownerId: (req.params as Record<string, string>).ownerId!,
+      version: Number(req.body.revision),
+      operationId: req.body.operationId,
+      ...(store.tax ? {} : { taxCents: taxCents! }),
+    });
+    return r.kind === "ready"
+      ? res.redirect(303, `/operator/invoices/${r.value.invoiceId}`)
+      : failure(res, r.kind, true, req.body.operationId);
   });
   app.post(`${adminPath}/:ownerId/rate`, async (req, res) => {
     if (!valid(req, res, ["effectiveMonth", "rate"])) return;

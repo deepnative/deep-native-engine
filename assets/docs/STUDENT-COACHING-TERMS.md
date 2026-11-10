@@ -29,6 +29,16 @@ Nothing is granted for a period that has ended or for a student whose account is
 
 Limits: coaching sessions stay an agreed number, because no ledger category counts sessions. If a reservation on a written-off grant is later released, those units return to that grant as the ledger does today.
 
+## Invoicing the terms (#318)
+
+On the same page, **Invoice these coaching terms** issues one invoice for the current terms version ([#318](https://github.com/deepnative/deep-native-engine/issues/318), migration 132):
+
+- one line, "Coaching · <start> to <end> · terms version N", at the terms price;
+- configured invoices are from Deep Native Inc. with 13% HST computed by the server and the e-Transfer/cheque wording (`src/invoice-issuer.ts`, #797); sample mode asks for an invented tax instead;
+- billed to the student's saved billing recipient (name, email, optional company). Until the student saves one on **Billing recipient**, nothing can be issued and the page says so.
+
+Each terms version has at most one invoice that isn't void (`simple_invoices.coaching_terms_id`, unique while not void, and it can't change). Replaying the same form returns the same invoice; a form for an older version is refused as out of date. Voiding the invoice allows it to be issued again. Issuing takes no payment: staff record the offline payment with the invoice's existing **Record offline payment** form, and the student sees the invoice under **Courses and invoices**. Each issue is in staff change history.
+
 ## Renewals ([#317](https://github.com/deepnative/deep-native-engine/issues/317))
 
 Renewal is the renewal date an administrator set, nothing more. Nothing renews or charges automatically, and listing a renewal changes nothing.
@@ -41,6 +51,6 @@ No migration and no export change. Tests: RENEW317-01..04 in `tests/unit/coachin
 ## What this doesn't do
 
 - The renewal date is shown and listed for administrators, never acted on: no automatic renewal, acceptance, charge, grant or invoice. There is no cancellation flow (#319).
-- Invoices are unchanged; monthly coaching hours and invoices work as before ([MONTHLY-COACHING-INVOICES.md](MONTHLY-COACHING-INVOICES.md)).
+- Nothing is invoiced automatically. An administrator issues a terms invoice on the student's page (#318). Monthly coaching hours and their invoices work as before ([MONTHLY-COACHING-INVOICES.md](MONTHLY-COACHING-INVOICES.md)).
 
-Tests: TERMS316-01..07 in `tests/integration/coaching-terms.test.ts`; export index in `tests/unit/member-export.test.ts`. Allowance units: ALLOW27-01..08 in `tests/integration/coaching-allowances.test.ts` and `tests/unit/coaching-allowances.test.ts`; browser journey L330 in `tests/e2e/coaching-invoices.spec.ts`.
+Tests: TERMS316-01..07 in `tests/integration/coaching-terms.test.ts`; export index in `tests/unit/member-export.test.ts`. Allowance units: ALLOW27-01..08 in `tests/integration/coaching-allowances.test.ts` and `tests/unit/coaching-allowances.test.ts`; browser journey L330 in `tests/e2e/coaching-invoices.spec.ts`. TERMSINV318-01..06 in `tests/integration/coaching-terms-invoices.test.ts`, TERMSINV318-07 in `tests/unit/coaching-terms.test.ts` and browser journey L331 in `tests/e2e/coaching-terms-invoice.spec.ts`.

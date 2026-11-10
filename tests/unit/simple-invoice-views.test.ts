@@ -115,6 +115,23 @@ it("HOUR04/08 prints explicit coaching quantity, rate version and preserved repl
   }
 });
 
+it("TERMSINV318-01 an invoice issued from coaching terms names the version and period", () => {
+  const html = simpleInvoiceDocument({
+    ...invoice,
+    coachingTerms: {
+      version: 3,
+      startsOn: "2026-12-01",
+      endsOn: "2027-05-31",
+    },
+  });
+  expect(html).toContain("<h2>Coaching terms</h2>");
+  expect(html).toContain(
+    "Terms version 3 · coaching period 2026-12-01 to 2027-05-31",
+  );
+  expect(html).toContain("Coaching charges");
+  expect(simpleInvoiceDocument(invoice)).not.toContain("Coaching terms");
+});
+
 it("TESTPAY-10 labels signed test entries as simulated and keeps manual wording to manual entries", () => {
   const entry = {
     amountCents: 100,

@@ -11,8 +11,12 @@ import {
   invoiceDigest,
   invoiceUuid,
   parseInvoiceMoney,
+  salesTaxCents,
+  taxRate,
+  type InvoiceTax,
 } from "./simple-invoice-values.ts";
 import { escape } from "./views.ts";
+import type { CoachingTermsInvoiceView } from "./simple-invoice-store.ts";
 import { SERVICE_CONTACT } from "./demo-terms.ts";
 import { coachingAllowanceLedgerOnConnection } from "./ledger.ts";
 
@@ -492,4 +496,30 @@ export function adminTermsSection(
   ) =>
     `<label>${label}<input name="${name}" ${attributes} value="${value(key)}" required></label>`;
   return `<section class="portal-card" aria-labelledby="coaching-terms"><h2 id="coaching-terms">Coaching terms</h2>${t ? `<p>Current terms, version ${t.version}:</p>${termsList(t)}${balanceList(t, true)}<p>${NO_AUTOMATIC_RENEWAL} To renew, save new terms with the next renewal date.</p>` : "<p>No coaching terms are set for this student.</p>"}<p>The student's coaching price covers these allowances. ${NO_CANCELLATION}</p><h3>Set coaching terms</h3><p>Saving creates a new version. Earlier versions are kept.</p><form method="post" action="${action}">${hiddenFields}${field("price", "Price (CAD)", 'inputmode="decimal"', "priceCents")}${field("startsOn", "Start date", 'type="date"', "startsOn")}${field("endsOn", "End date", 'type="date"', "endsOn")}${field("renewsOn", "Renewal date", 'type="date"', "renewsOn")}${field("reviewMinutes", "Expert review minutes", 'type="number" min="0" max="100000" step="1"', "reviewMinutes")}${field("coachingSessions", "Coaching sessions", 'type="number" min="0" max="1000" step="1"', "coachingSessions")}${field("aiRequests", "AI requests", 'type="number" min="0" max="1000000" step="1"', "aiRequests")}<button>Save coaching terms</button></form></section>`;
+}
+
+/**
+ * TERMSINV318-01/03: issue one invoice for the current terms version, to the
+ * student's saved billing recipient. Configured invoices compute HST; sample
+ * mode asks for an invented tax. Payment is recorded on the invoice later.
+ */
+export function adminTermsInvoiceSection(
+  v: CoachingTermsInvoiceView,
+  action: string,
+  hiddenFields: string,
+  tax: InvoiceTax | undefined,
+  sample: boolean,
+) {
+  const head = `<section class="portal-card" aria-labelledby="terms-invoice"><h2 id="terms-invoice">Invoice these coaching terms</h2>`;
+  if (!v.terms)
+    return `${head}<p>Set coaching terms first. An invoice is issued for one terms version.</p></section>`;
+  if (v.invoiceId)
+    return `${head}<p>Terms version ${v.terms.version} is invoiced. <a href="/operator/invoices/${escape(v.invoiceId)}">View invoice</a>. Record the offline payment on the invoice when it arrives. To issue it again, void that invoice first.</p></section>`;
+  if (!v.recipient)
+    return `${head}<p role="status">This student hasn't saved a billing recipient yet. Ask them to save one on their Billing recipient page before you issue an invoice for these terms.</p></section>`;
+  const to = `${escape(v.recipient.name)}${v.recipient.company ? ` · ${escape(v.recipient.company)}` : ""} · ${escape(v.recipient.email)}`;
+  const amount = tax
+    ? `${money(v.terms.priceCents)} plus ${escape(tax.label)} (${taxRate(tax)}) ${money(salesTaxCents(v.terms.priceCents, tax))}, total ${money(v.terms.priceCents + salesTaxCents(v.terms.priceCents, tax))}`
+    : `${money(v.terms.priceCents)} plus the ${sample ? "invented sample" : "explicit"} tax below`;
+  return `${head}<p>Issue an invoice for terms version ${v.terms.version}: ${amount}, to ${to}.</p><p>${sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Issuing doesn't take payment. The student pays offline, and you record the payment on the invoice."}</p><form method="post" action="${action}">${hiddenFields}${tax ? "" : `<label>${sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${sample ? 'value="0.00"' : ""} required></label>`}<label class="check"><input type="checkbox" name="confirm" value="terms-invoice" required><span>I checked this terms version, amount and recipient.</span></label><button>Issue invoice for these terms</button></form></section>`;
 }

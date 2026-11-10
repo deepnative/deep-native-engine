@@ -775,6 +775,10 @@ it("CHANGELOG-02/04 words every kind of change", () => {
   expect(said("coaching_invoice_issued")).toBe(
     "Ada issued Bo a coaching invoice of CAD 120.00 for 2026-11.",
   );
+  // TERMSINV318: a coaching-terms invoice is logged with no month.
+  expect(said("coaching_invoice_issued", { month: null })).toBe(
+    "Ada issued Bo an invoice for their coaching terms of CAD 120.00.",
+  );
   expect(said("monthly_invoice_issued", { month: null })).toBe(
     "Ada issued Bo a monthly invoice of CAD 120.00.",
   );
