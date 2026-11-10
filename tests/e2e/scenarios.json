@@ -3009,27 +3009,27 @@
       "requirement": "an accepted pilot member receives the exact test/manual-paid entitlement, onboards, opens the common foundation, selects an appropriate assignment, submits a valid artifact, receives authorized human review, revises, and exports a portfolio statement labelled as simulated work. Verify each 30-minute review includes preparation and consumes one of the pilot's four units; publishing content alone does not mark member competence.",
       "source": "03-roadmap-and-backlog.md",
       "status": "outstanding",
-      "actor": "Pilot member and assigned reviewer",
-      "preconditions": "Explicit test/manual-paid pilot, reviewed foundation and qualified reviewer grant",
+      "actor": "Coached student and assigned reviewer",
+      "preconditions": "Administrator-set coaching terms for the student (invoices only, no payment processing), reviewed foundation and qualified reviewer grant",
       "steps": "Onboard, choose eligible assignment, submit clean private evidence, review one pinned version, revise and export simulated-work statement",
-      "expected": "Only an assigned human publishes versioned feedback; one 30-minute review including preparation consumes one of four pilot units; export remains labelled",
+      "expected": "Only an assigned human publishes versioned feedback; one 30-minute review including preparation consumes 30 minutes of the student's administrator-set review allowance; export remains labelled (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator replace the requirement's pilot entitlement and four pilot units)",
       "risk": "member-review; entitlement; privacy",
       "issues": [19, 20, 26, 27, 28, 33, 38],
       "critical": true,
       "cases": [
         {
           "id": "F-ROADMAP-01-A",
-          "steps": "Activate the test/manual-paid pilot and open its first billing period",
-          "expected": "Exactly the first monthly coach, review, support and AI allowances are available",
+          "steps": "Have an administrator save the student's coaching terms and open their first coaching period",
+          "expected": "Exactly the coaching, review and AI allowances the administrator set for that period are available",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Activate the accepted test/manual-paid pilot",
-              "expected": "Only the test/manual-paid pilot entitlement is active, with no live charge claimed"
+              "action": "Have an administrator save the student's coaching price, period, renewal date and allowances",
+              "expected": "Only those saved terms are current for the student, with no payment processed or live charge claimed"
             },
             {
-              "action": "Open pilot month one",
-              "expected": "The exact first-month coach, review, support and AI allowances are available"
+              "action": "Open the first coaching period",
+              "expected": "The coaching sessions, review minutes and AI requests the administrator set for that period are shown, and the review and AI units issue exactly once"
             }
           ]
         },
@@ -3257,59 +3257,59 @@
       "requirement": "run standalone CAD 3,000 pilot, explicit CAD 9,000 ten-month conversion, and twelve-month renewal/direct Professional. Ensure original anniversary, exact allowance totals, invoices, and payment schedule are correct. Duplicate/delayed/out-of-order test events, failed instalment/recovery, cancellation, and manual refund decisions remain consistent. Unconverted pilot is never charged again.",
       "source": "03-roadmap-and-backlog.md",
       "status": "outstanding",
-      "actor": "Pilot member and billing operator",
-      "preconditions": "Versioned optional pilot and Professional hypotheses approved in test/manual billing only",
-      "steps": "Run pilot, timely explicit continuation, direct annual and renewal; disorder payment events, fail installment, cancel and reconcile",
-      "expected": "CAD amounts, original anniversary, monthly grants and invoices agree; no unaccepted conversion or duplicate charge",
+      "actor": "Coached student and billing administrator",
+      "preconditions": "Versioned per-student coaching terms set by an administrator, with invoices only and no payment processing",
+      "steps": "Save a student's first terms, save their next terms before the renewal date, let a renewal date pass and renew with new terms; disorder payment events, fail installment, cancel and reconcile",
+      "expected": "Each terms version's CAD price, dates, allowances and invoice agree; nothing renews or charges automatically and no grant or invoice is duplicated (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator replace the requirement's CAD 3,000 pilot, CAD 9,000 conversion and twelve-month Professional offers)",
       "risk": "money; dates; event order",
       "issues": [19, 27, 32, 35],
       "critical": true,
       "cases": [
         {
           "id": "F-ROADMAP-04-A",
-          "steps": "Accept a standalone CAD 3,000 pilot",
-          "expected": "Only two pilot periods and their exact allowances and invoices are created",
+          "steps": "Have an administrator save a student's first coaching terms",
+          "expected": "Only that terms version, its dated period allowances and at most one invoice are created",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Accept a standalone CAD 3,000 pilot",
-              "expected": "Only the two pilot periods and correct total invoice obligation are created"
+              "action": "Save a student's first coaching price, period, renewal date and allowances",
+              "expected": "Only that terms version is current, and at most one invoice for its price plus HST can be issued"
             },
             {
-              "action": "Inspect each pilot period",
-              "expected": "Exact dated coach, review, support and AI allowances issue once per period"
+              "action": "Inspect the coaching period",
+              "expected": "Exact dated review and AI allowances issue once for the period and the coaching sessions match the saved terms"
             }
           ]
         },
         {
           "id": "F-ROADMAP-04-B",
-          "steps": "Explicitly accept the CAD 9,000 continuation before pilot period three",
-          "expected": "Ten remaining periods preserve the original first anniversary without duplicate grants",
+          "steps": "Save the student's next coaching terms before the current renewal date",
+          "expected": "The next period uses exactly the dates the administrator set, without duplicate grants or invoices",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Explicitly accept CAD 9,000 continuation before pilot period three",
-              "expected": "The accepted agreement and schedule preserve the original first anniversary"
+              "action": "Save the student's next coaching terms before the current renewal date",
+              "expected": "The new terms version keeps the dates the administrator set and leaves the earlier version and its invoice unchanged"
             },
             {
-              "action": "Inspect all remaining periods and invoices",
-              "expected": "Exactly ten remaining monthly grants occur with no duplicate grant or charge"
+              "action": "Inspect both periods' allowances and invoices",
+              "expected": "Each period's allowances issue once and each terms version has at most one invoice, with no duplicate grant or charge"
             }
           ]
         },
         {
           "id": "F-ROADMAP-04-C",
-          "steps": "Enroll directly in CAD 12,000 Professional and renew after twelve periods",
-          "expected": "The direct and renewal terms have their own correctly dated phases and monthly grants",
+          "steps": "Let the renewal date pass without new terms, then renew by saving new terms",
+          "expected": "Nothing renews or charges automatically; the renewal is its own correctly dated terms version with its own allowances",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Enroll directly in CAD 12,000 annual Professional",
-              "expected": "The direct annual phase has its own correct terms, invoice schedule, dates and grants"
+              "action": "Reach the student's renewal date without saving new terms",
+              "expected": "The student is shown as due for renewal, and no new period, allowance or invoice is created automatically"
             },
             {
-              "action": "Renew after twelve service periods",
-              "expected": "The renewed phase starts on the correct date and grants its own allowances once"
+              "action": "Renew by saving new terms with a different price and length",
+              "expected": "The renewed terms start on their own date and grant their own allowances once"
             }
           ]
         },
@@ -3529,27 +3529,27 @@
       "requirement": "after explicit continuation, member receives only the next month's Professional allowance, attends an available clinic, uses one goal/renewal workflow, books covered support, and sees appropriate activity. Clinic participation does not create private hours; training completion never auto-increments rate increases or verified contracts.",
       "source": "03-roadmap-and-backlog.md",
       "status": "outstanding",
-      "actor": "Explicitly continued member",
-      "preconditions": "Timely accepted continuation with available group clinic and funded support",
+      "actor": "Student whose coaching terms continue",
+      "preconditions": "Next coaching terms saved by an administrator, with available group clinic and funded support",
       "steps": "Advance one period, book covered support, attend clinic and update goal/renewal",
-      "expected": "Only next monthly allowance issues; group clinic creates no private hours; no invented rate or contract outcome",
+      "expected": "Only the next period's administrator-set allowance issues; group clinic creates no private hours; no invented rate or contract outcome (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator replace the requirement's explicit continuation and monthly Professional allowance)",
       "risk": "entitlement; service truth",
       "issues": [27, 35, 36, 37, 39],
       "critical": true,
       "cases": [
         {
           "id": "F-ROADMAP-07-A",
-          "steps": "Advance an explicitly continued member into the next billing period",
-          "expected": "Only that month's Professional service and AI allowances become available",
+          "steps": "Advance a student with saved next coaching terms into the next coaching period",
+          "expected": "Only that period's administrator-set service and AI allowances become available",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Advance an explicitly continued member one billing period",
-              "expected": "Only that month’s Professional service allowances become available"
+              "action": "Advance a student with saved next coaching terms one coaching period",
+              "expected": "Only that period’s administrator-set service allowances become available"
             },
             {
               "action": "Inspect AI grants for the same period",
-              "expected": "Only that month’s AI allowances become available, once"
+              "expected": "Only that period’s AI allowances become available, once"
             }
           ]
         },
@@ -4005,55 +4005,55 @@
       "requirement": "a CAD 3,000 pilot followed by a timely accepted CAD 9,000 continuation yields twelve total service months anchored at the pilot start, correct remaining monthly grants, and no duplicate charge or grant. A non-converter is not charged. Late acceptance cannot activate the standard continuation or bill missed service; it requires an explicitly accepted replacement agreement. Direct annual enrollment and a later renewal use their own correct phases.",
       "source": "02-codex-build-prompt.md",
       "status": "outstanding",
-      "actor": "Pilot, nonconverting and direct annual members",
-      "preconditions": "Test/manual billing with approved versioned offer snapshots",
-      "steps": "Convert timely or late, decline conversion, enroll direct annual and renew at anniversary",
-      "expected": "Twelve original-anchored months only for timely explicit conversion; late case needs new accepted agreement with no retroactive bill/grant",
+      "actor": "Continuing, lapsed and renewing coached students",
+      "preconditions": "Versioned per-student coaching terms and offers set by an administrator, with invoices only",
+      "steps": "Continue terms on time, let terms lapse, accept an offer late, save terms of a different length and renew",
+      "expected": "Each terms version keeps its own administrator-set dates and allowances; lapsed terms bring no further charge or grant; a late offer needs a new accepted agreement with no retroactive bill/grant (the owner's 9 and 10 November 2026 per-student coaching terms, set by an administrator replace the requirement's CAD 3,000 pilot, CAD 9,000 continuation and direct annual enrollment)",
       "risk": "money; month boundaries; consent",
       "issues": [19, 27, 32, 35],
       "critical": true,
       "cases": [
         {
           "id": "F-BUILD-04-A",
-          "steps": "Accept pilot then timely continuation",
-          "expected": "Exactly twelve original-anchored service months result from CAD 3,000 plus CAD 9,000 phases",
+          "steps": "Save first terms, then the next terms on time",
+          "expected": "The next period starts on the date the administrator set, with no gap, overlap or duplicate grant or invoice",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Accept the CAD 3,000 pilot and timely CAD 9,000 continuation",
-              "expected": "The original pilot date anchors exactly twelve total service months"
+              "action": "Save a student's first terms and then their next terms before the renewal date",
+              "expected": "The next terms start on the date the administrator set and the first period's dates are unchanged"
             },
             {
-              "action": "Inspect continuation charges and monthly grants",
-              "expected": "Only the accepted CAD 9,000 continuation is charged and each remaining monthly grant issues once"
+              "action": "Inspect invoices and allowances for both periods",
+              "expected": "Each terms version is invoiced at most once at its own price and each period's allowances issue once"
             }
           ]
         },
         {
           "id": "F-BUILD-04-B",
-          "steps": "Complete pilot without conversion",
+          "steps": "Let the coaching period end without new terms",
           "expected": "No further charge or grant occurs",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Complete a pilot without accepted conversion",
-              "expected": "No continuation charge occurs"
+              "action": "Let the coaching period and renewal date pass without saving new terms",
+              "expected": "No new invoice or charge occurs"
             },
             {
-              "action": "Inspect entitlements after the pilot expires",
+              "action": "Inspect allowances after the coaching period ends",
               "expected": "No further service or AI grant occurs"
             }
           ]
         },
         {
           "id": "F-BUILD-04-C",
-          "steps": "Attempt late standard continuation",
+          "steps": "Attempt to accept an offer after its start date",
           "expected": "It cannot bill missed months or activate without a separately accepted agreement",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Attempt late standard continuation after its acceptance window",
-              "expected": "The standard continuation cannot activate or bill missed months"
+              "action": "Attempt to accept an administrator-prepared offer after its start date",
+              "expected": "The offer cannot activate or bill missed months"
             },
             {
               "action": "Explicitly accept a replacement agreement",
@@ -4063,17 +4063,17 @@
         },
         {
           "id": "F-BUILD-04-D",
-          "steps": "Enroll directly in annual Professional and later renew",
-          "expected": "Direct and renewal phases have exact terms, dates and allowances",
+          "steps": "Save terms with a different length and price, then renew",
+          "expected": "Each terms version has its own exact price, dates and allowances",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Enroll directly in annual Professional",
-              "expected": "The direct phase has exact terms, dates and dated allowances"
+              "action": "Save a student's terms with a different period length and price",
+              "expected": "That version has exactly the administrator-set price, dates and dated allowances"
             },
             {
-              "action": "Later accept a renewal",
-              "expected": "The renewal uses its own correct phase, dates and dated allowances"
+              "action": "Later renew by saving new terms",
+              "expected": "The renewal is its own terms version with its own correct dates and dated allowances"
             }
           ]
         }
