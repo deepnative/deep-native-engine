@@ -12,6 +12,8 @@ Foundation access grants zero live AI and paid-service units and no staff privil
 
 ## Historical terms retained for planning
 
+These fixed packages are parked. Since the owner's 9 November 2026 decision, an administrator sets each coached student's own price, period length, renewal date and allowances, invoiced with no payment processing, and on 10 November the full-MVP browser cases were reworded to describe those per-student terms ([#94](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6767990314)).
+
 All amounts are **integer CAD cents** in code; the table displays CAD. Monthly figures are planned periods, never issued balances.
 
 | Optional coaching hypothesis | Total CAD |                  Periods | Planned monthly allowances                                                                                        | Other boundaries                                                                                                                                                                                                                             |
