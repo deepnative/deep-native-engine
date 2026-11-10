@@ -19,14 +19,14 @@ Each of the 100 cases now also names its mandatory `requiredChecks`: a concrete 
 
 The issue links in each family identify the implementation acceptance areas it exercises. Specific case actions and results are the concrete checks to use when those issues are delivered. Issue text and the immutable source archive remain authoritative for obligations that are not yet implemented; mapping overlap never deletes a case. The following relationships explain intentional cross-source overlap:
 
-| Original concern                   | Expanded/recovery concern                                            | Separate evidence required                                                                                      |
-| ---------------------------------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| ROADMAP-01 member to reviewer      | BUILD-02 private assessment, ECO-01 general learner                  | Human assessment, cross-member denial and noncoding foundation entry each have distinct tests.                  |
-| ROADMAP-03 last slot/unit          | BUILD-03 concurrency                                                 | Race, cancellation and replacement-credit history remain independent assertions.                                |
-| ROADMAP-04 pilot phases            | BUILD-04 late return, BUILD-05 event disorder, ECO-07 optional offer | Original anniversary, late agreement, payment ordering and background/paid-tier separation all remain required. |
-| ROADMAP-05 AI consent/cost         | BUILD-06 failure and injection, ECO-06 general study                 | Consent, budget, grounding, prompt isolation and noncareer study have distinct cases.                           |
-| ROADMAP-06 content versions        | BUILD-07 retired template, ECO-05 contribution                       | Rubric pinning, template support and reviewed member publication are different lifecycles.                      |
-| ROADMAP-09 reconciliation/deletion | BUILD-08 privacy, BUILD-09 commercial truth, ECO-08 separate metrics | Billing exceptions, data deletion and honest metrics require separate evidence.                                 |
+| Original concern                   | Expanded/recovery concern                                                     | Separate evidence required                                                                                                               |
+| ---------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| ROADMAP-01 member to reviewer      | BUILD-02 private assessment, ECO-01 general learner                           | Human assessment, cross-member denial and noncoding foundation entry each have distinct tests.                                           |
+| ROADMAP-03 last slot/unit          | BUILD-03 concurrency                                                          | Race, cancellation and replacement-credit history remain independent assertions.                                                         |
+| ROADMAP-04 coaching terms versions | BUILD-04 lapse and late offer, BUILD-05 event disorder, ECO-07 optional offer | Administrator-set dates, no automatic renewal, late agreement, payment ordering and background/paid-tier separation all remain required. |
+| ROADMAP-05 AI consent/cost         | BUILD-06 failure and injection, ECO-06 general study                          | Consent, budget, grounding, prompt isolation and noncareer study have distinct cases.                                                    |
+| ROADMAP-06 content versions        | BUILD-07 retired template, ECO-05 contribution                                | Rubric pinning, template support and reviewed member publication are different lifecycles.                                               |
+| ROADMAP-09 reconciliation/deletion | BUILD-08 privacy, BUILD-09 commercial truth, ECO-08 separate metrics          | Billing exceptions, data deletion and honest metrics require separate evidence.                                                          |
 
 ## Mapping audit and independent technical decision, 24 September 2026
 
@@ -99,6 +99,19 @@ The formerly ambiguous alternatives are now explicit conjunctions. `F-ROADMAP-01
 The source-to-case comparison found no missing family, duplicate case ID, or justified change to the proposed denominator. The six noncritical IDs are ECO-02-A–C and ECO-03-A–C; all other 94 remain critical. ECO-04's source names QA-004 as well as CTP-005/020/021, so its register issue links now include #18. Overlap between ROADMAP and BUILD cases remains separately countable as described above. The gate protects the **approved mapping** from silent ID removal, substitution, or criticality downgrade; a deliberate scope change needs a new version and reviewed gate update. The independent technical review approved this mapping, while full-MVP browser coverage remains **0/100**. This audit neither runs those journeys nor certifies release readiness.
 
 The source strings, family IDs, case IDs, source links, issue links and critical flags are unchanged by the ECO-04 subcase correction. The approved `full-mvp-v1` mapping digest is `62ea48e50e15d6a60576ba8bbdd5c513f6d345e03a857e3ac695c4d5ce93a33c`, re-approved on 2026-11-09 ([decision](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6749610192)) after the owner's 9 November 2026 hold rule reworded F-BUILD-06-D and the BUILD-06 family summary. The preceding digests `581083999c08f794b3814470a2e2a708f3708ff0ea6dd9785999ce5a1bdf3a45`, `331eb86cf6533d0e09088d75fdaf995d747aedb4aadcda84524fb068b0158935` (the first rewording, sent back for changes), `0345855e5b331e2be1a4403a27f6af0128e0a1c3b83f9d50abaaef7bc623be81` and `14963de159ede2a79d43b963d0d7c974fc124538c7738ea1c36933fb90850631` no longer identify this mapping. After #158 requested changes, a [separate GPT-6 Astra/high reviewer in #163](https://github.com/deepnative/deep-native-engine/issues/163) compared all 206 checks to the three sources and browser evidence rule, then [approved the technical mapping on #94](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526). This records source-to-check approval only. Every full-MVP browser case still needs real, first-attempt execution and substantive assertion review.
+
+## 10 November 2026 rewording: per-student coaching terms
+
+On 9 November 2026 the owner decided that an administrator sets each student's coaching price, period length, renewal date and allowances, with invoices only and no payment processing. On 10 November the owner asked for the full-MVP cases that still described the fixed CAD 3,000 pilot, CAD 9,000 continuation and CAD 12,000 annual Professional offers to be reworded to match ([decision](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6767990314)), with the same independent re-approval as F-BUILD-06-D.
+
+The reworded cases are F-ROADMAP-01-A, F-ROADMAP-04-A/B/C, F-ROADMAP-07-A and F-BUILD-04-A/B/C/D, together with the actor, preconditions, steps and expected summaries of the ROADMAP-01, ROADMAP-04, ROADMAP-07 and BUILD-04 families. Each family's `requirement` and `title` stay the verbatim source text, and the family `expected` says which source terms the per-student terms replace. No case ID, check count, criticality, issue link or browser project changes. The new case splits are:
+
+- ROADMAP-01-A: an administrator saves a student's terms, and the first period shows exactly the allowances set. ROADMAP-01's 30-minute review uses the student's review allowance in place of four pilot units.
+- ROADMAP-04: A first terms version and at most one invoice; B next terms saved before the renewal date, with no duplicate grant or invoice; C nothing renews automatically when the renewal date passes, and a renewal is its own dated version; D payment and refund exceptions (unchanged).
+- ROADMAP-07-A: only the next period's administrator-set allowances become available.
+- BUILD-04: A next terms on time with no gap, overlap or duplicate; B lapsed terms bring no further charge or grant; C an offer accepted after its start date cannot activate or bill missed months; D terms of a different length and price, then a renewal.
+
+The provisional F-BUILD-04-C test already exercises an administrator-prepared offer accepted after its start date, so its assertions match the reworded checks unchanged. The other reworded cases have no browser test yet.
 
 ## Execution and failure rules
 
@@ -191,7 +204,7 @@ Re-measured on 8 November 2026: sixty-five IDs had provisional browser tests. Th
 
 Limits of this evidence:
 
-- The "standard continuation" and "renewal" are administrator-prepared course bundles. The product has no pilot or annual phase, so BUILD-04-C and ROADMAP-07-D show the acceptance rule for those agreements only.
+- The "standard continuation" and "renewal" are administrator-prepared course bundles. The product has no pilot or annual phase, so BUILD-04-C and ROADMAP-07-D show the acceptance rule for those agreements only. Since the 10 November 2026 rewording, F-BUILD-04-C names an administrator-prepared offer directly.
 - BUILD-04-C stands in for time passing by moving the offer's start back in the isolated fixture database, with the terms guard off for that one statement.
 - The "group clinic" is a private invented rehearsal, not a staffed clinic, and the coach minutes are seeded test units.
 - "Training" is the member's own self-assessed starter exercise. Contract outcomes in the product are only the member's own unverified planning records, so ROADMAP-07-D shows that none appear.
