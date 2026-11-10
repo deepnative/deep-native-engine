@@ -322,7 +322,7 @@ it("PRACTICE-AI-06 other members cannot request or read a suggestion, and export
   expect(await practice.suggest?.(owner.token, id, 1)).toBe("ready");
   const exported = await memberExportStore(pool).exportOwned(owner.token);
   if (exported.kind !== "ready") throw Error("Export unavailable");
-  expect(exported.payload.version).toBe("local-member-records-v46");
+  expect(exported.payload.version).toBe("local-member-records-v47");
   const rows = exported.payload.records.practiceAiSuggestions!;
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({

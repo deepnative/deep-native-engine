@@ -5,6 +5,7 @@ import { authorizationStore } from "../support/administrator-fixture.ts";
 import { availabilityStore } from "../../src/availability.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { ledgerReconciliationStore } from "../../src/ledger-reconciliation.ts";
+import { memberExportStore } from "../../src/member-export.ts";
 import { memberSlotHolds } from "../../src/slot-holds.ts";
 import { sampleHoldCancellationStore } from "../../src/sample-hold-cancellations.ts";
 import { testPool } from "../support/database.ts";
@@ -430,4 +431,81 @@ it("STAFFCANCEL-09 refuses on a live site and an invalid reason before reaching 
       "free text",
     ),
   ).toEqual({ kind: "invalid" });
+});
+
+async function download(token: string) {
+  const exporter = memberExportStore(pool);
+  const all: Record<string, Record<string, unknown>[]> = {};
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await exporter.exportOwned(token, cursor);
+    if (page.kind !== "ready") throw Error(`Download ${page.kind}`);
+    for (const [name, rows] of Object.entries(page.payload.records))
+      (all[name] ??= []).push(...rows);
+    if (!page.payload.page.nextCursor)
+      return { version: page.payload.version, all };
+    cursor = page.payload.page.nextCursor;
+  }
+}
+
+it("HOLDCANCEL-EXP-01/02/03 the member's download shows why and when staff cancelled their sample hold, never who, and never another member's", async () => {
+  const { slot, operator } = await world();
+  const mine = await heldBy(await slot());
+  const theirs = await heldBy(await slot());
+  const kept = await heldBy(await slot());
+  const staffRequest = randomUUID();
+  for (const [hold, request, reason] of [
+    [mine, staffRequest, "coach-unavailable"],
+    [theirs, randomUUID(), "scheduling-error"],
+  ] as const)
+    expect(
+      (await cancellations.cancel(operator.token, hold.holdId, request, reason))
+        .kind,
+    ).toBe("applied");
+  const replacement = (
+    await pool.query<{ id: string }>(
+      "SELECT replacement_grant_id AS id FROM sample_hold_staff_cancellations WHERE hold_id=$1",
+      [mine.holdId],
+    )
+  ).rows[0]!.id;
+
+  const { version, all } = await download(mine.owner.token);
+  expect(version).toBe("local-member-records-v47");
+  expect(all.sampleHoldCancellations).toEqual([
+    {
+      sampleHoldId: mine.requestId,
+      reason: "coach-unavailable",
+      cancelledAt: expect.any(Date),
+      originalGrantId: mine.grantId,
+      replacementGrantId: replacement,
+      label: "SAMPLE HOLD · NOT A BOOKING",
+    },
+  ]);
+  // It names the hold as the member's own download already does.
+  expect(all.sampleHolds).toEqual([
+    expect.objectContaining({ id: mine.requestId, state: "cancelled" }),
+  ]);
+  const text = JSON.stringify(all);
+  for (const hidden of [
+    operator.id,
+    staffRequest,
+    theirs.requestId,
+    theirs.grantId,
+    "scheduling-error",
+  ])
+    expect(text).not.toContain(hidden);
+  // A member whose hold was not cancelled has no cancellation row.
+  expect(
+    (await download(kept.owner.token)).all.sampleHoldCancellations,
+  ).toEqual([]);
+  // Baseline: the record goes with the account.
+  await pool.query("DELETE FROM principals WHERE id=$1", [mine.owner.id]);
+  expect(
+    (
+      await pool.query(
+        "SELECT 1 FROM sample_hold_staff_cancellations WHERE member_id=$1",
+        [mine.owner.id],
+      )
+    ).rowCount,
+  ).toBe(0);
 });

@@ -103,7 +103,7 @@ it("returns a versioned complete page only after commit, without internal cursor
   expect(await memberExportStore(fake.pool).exportOwned("x")).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v46",
+      version: "local-member-records-v47",
       profile: { id: "member-1" },
       records: { milestones: [{ milestoneTitle: "Invented milestone" }] },
       page: {
@@ -227,7 +227,7 @@ it("rejects malformed or obsolete authenticated cursor fields before connecting"
     [1, ...valid.slice(1)],
     [2, -1, ...valid.slice(2)],
     // Original indices0..59 remain; appended sections 60..70 are valid.
-    [2, 71, ...valid.slice(2)],
+    [2, 73, ...valid.slice(2)],
     [2, 0.1, ...valid.slice(2)],
     [2, 0, null, 2, valid[4]],
     [2, 0, [], 2, valid[4]],
@@ -281,7 +281,7 @@ it.each([
     expect(result).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v46",
+        version: "local-member-records-v47",
         records: { [name]: [{ record: "Invented owned metadata" }] },
       },
     });
@@ -518,7 +518,7 @@ it("exports member support receipts and visible replies without querying interna
     {
       kind: "ready",
       payload: {
-        version: "local-member-records-v46",
+        version: "local-member-records-v47",
         records: {
           supportRequests: [
             { subject: "Invented subject", body: "Invented request" },
@@ -726,7 +726,7 @@ it("appends owned review accounting at indices 33-35 without moving existing sec
     expect(value).toMatchObject({
       kind: "ready",
       payload: {
-        version: "local-member-records-v46",
+        version: "local-member-records-v47",
         records: { [name]: [{ id: "owned-accounting" }] },
       },
     });
@@ -759,7 +759,7 @@ it("appends safe source-deleted assignment receipts at index36 without moving an
   expect(value).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v46",
+      version: "local-member-records-v47",
       records: { sampleAssignmentOperations: [record] },
     },
   });
@@ -896,7 +896,7 @@ it("CONPUB-04 appends owner-only publication permissions at cursor index46 with 
   expect(result).toMatchObject({
     kind: "ready",
     payload: {
-      version: "local-member-records-v46",
+      version: "local-member-records-v47",
       records: {
         proposalPublications: [{ state: "withdrawn", attribution: null }],
       },
@@ -1102,7 +1102,7 @@ it("EXPCOV-03/04 appends sample holds at index 63 and simulated assessment resul
   const names = Object.keys(result.payload.records);
   expect(names.indexOf("sampleHolds")).toBe(63);
   expect(names.indexOf("contentAssessments")).toBe(64);
-  expect(names).toHaveLength(71);
+  expect(names).toHaveLength(73);
   expect(result.payload.records.sampleHolds).toEqual([
     { id: "hold-b", state: "released" },
   ]);
@@ -1182,4 +1182,67 @@ it("PRACTICE-AI-06 appends practice suggestions at 67, without the request finge
   expect(query).not.toMatch(
     /job_id|request_fingerprint|provider_operation_reference/,
   );
+});
+
+it("HOLDCANCEL-EXP-01 appends staff cancellations of the member's sample holds at 71, without the staff member or staff request", async () => {
+  const row = {
+    sampleHoldId: "request-b",
+    reason: "coach-unavailable",
+    cancelledAt: new Date("2026-11-10T12:00:00Z"),
+    originalGrantId: "grant-a",
+    replacementGrantId: "grant-b",
+    label: "SAMPLE HOLD · NOT A BOOKING",
+  };
+  const fake = fakePool({ id: "member-1" }, (sql) =>
+    sql.includes("FROM sample_hold_staff_cancellations c")
+      ? [{ _key: ["request-b"], ...row }]
+      : [],
+  );
+  const result = await memberExportStore(fake.pool, secret).exportOwned(
+    "owner",
+    signed([2, 71, ["request-a"], 2, Date.now() + 60000]),
+  );
+  if (result.kind !== "ready") throw Error("Expected appended owner cursor");
+  expect(result.payload.version).toBe("local-member-records-v47");
+  const names = Object.keys(result.payload.records);
+  expect(names.indexOf("sampleHoldCancellations")).toBe(71);
+  expect(names).toHaveLength(73);
+  expect(result.payload.records.sampleHoldCancellations).toEqual([row]);
+  const query = fake.statements.find((sql) =>
+    sql.includes("FROM sample_hold_staff_cancellations c"),
+  )!;
+  expect(query).toContain("WHERE c.member_id=$1");
+  expect(query).toContain("r.member_id=c.member_id");
+  expect(query).not.toMatch(/staff_id|c\.request_id|c\.id\b/);
+});
+
+it("EXPCOV-07/08 appends records of files derived from the member's uploads at 72, without the storage key", async () => {
+  const row = {
+    id: "derivative-b",
+    evidenceId: "evidence-a",
+    kind: "text-extract",
+    byteSize: 12,
+    sha256: "a".repeat(64),
+    createdAt: new Date("2026-11-10T12:00:00Z"),
+  };
+  const fake = fakePool({ id: "member-1" }, (sql) =>
+    sql.includes("FROM evidence_derivatives d")
+      ? [{ _key: ["derivative-b"], ...row }]
+      : [],
+  );
+  const result = await memberExportStore(fake.pool, secret).exportOwned(
+    "owner",
+    signed([2, 72, ["derivative-a"], 2, Date.now() + 60000]),
+  );
+  if (result.kind !== "ready") throw Error("Expected appended owner cursor");
+  const names = Object.keys(result.payload.records);
+  expect(names.indexOf("evidenceDerivatives")).toBe(72);
+  expect(names).toHaveLength(73);
+  expect(result.payload.records.evidenceDerivatives).toEqual([row]);
+  const query = fake.statements.find((sql) =>
+    sql.includes("FROM evidence_derivatives d"),
+  )!;
+  expect(query).toContain("e.owner_principal_id=$1");
+  expect(query).toContain("e.quarantine_state<>'deleting'");
+  expect(query).not.toContain("storage_key");
 });
