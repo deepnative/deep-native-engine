@@ -562,3 +562,14 @@ it("INTERVIEW-03 interview comparisons and detail say nothing is predicted, with
   });
   expect(ordinary.pairs[0]!.comparison).not.toContain("interview");
 });
+
+it("F-BUILD-06-B tells only a response of fewer than five words that its evidence is insufficient", async () => {
+  const { sparseNotice } = await import("../../src/practice-sessions.ts");
+  expect(sparseNotice("ok")).toBe(
+    "Insufficient evidence: your response has 1 word, too few to compare with the source. Add what you would do and one detail you checked, then respond again.\n",
+  );
+  expect(sparseNotice("  not  sure \n yet ")).toContain(
+    "your response has 3 words, too few",
+  );
+  expect(sparseNotice("I would check the claim first")).toBe("");
+});

@@ -17,7 +17,13 @@ import { requiredCheck } from "../support/required-check.ts";
 const pool = testPool();
 test.afterAll(async () => pool.end());
 
-const insufficient = "there is insufficient evidence for formal assessment";
+// The sparse-specific line a comparison carries only for a response of fewer
+// than five words. The page's standing "insufficient evidence for formal
+// assessment" sentence is on every session and proves nothing about a response.
+const insufficient =
+  /Insufficient evidence: your response has 1 word, too few to compare with the source\./;
+const fullAnswer =
+  "I would check the invented claim against the source excerpt before relying on it.";
 
 function lessonId() {
   const letters = Array.from(randomBytes(3), (byte) =>
@@ -69,12 +75,15 @@ async function publish(draft: DraftContent) {
   return { ...staff, retire: () => catalog.retire(staff.editor, draft.id) };
 }
 
-async function startSession(page: Page, id: string) {
+async function startSession(
+  page: Page,
+  id: string,
+  purpose: "lesson" | "interview" = "lesson",
+) {
   await page.goto(`/library/${id}/practice-session`);
-  await page.getByLabel("I want to start private sample practice").check();
-  await page
-    .getByRole("button", { name: "Start or return to private session" })
-    .click();
+  const form = page.locator(`form[data-practice-purpose="${purpose}"]`);
+  await form.getByRole("checkbox").check();
+  await form.getByRole("button").click();
   await expect(
     page.getByRole("heading", {
       name: "Private practice session",
@@ -228,10 +237,18 @@ test("[F-BUILD-06-B] a very short response is told the evidence is insufficient"
   await signIn(page, member.token);
   await requiredCheck(1, async () => {
     await startSession(page, source.id);
+    // The feedback for the sparse response itself says so.
     const comparison = await respond(page, "ok");
-    await expect(page.locator("body")).toContainText(insufficient);
+    await expect(comparison).toContainText(insufficient);
     await expect(comparison).toContainText("cannot judge competence");
     await expect(comparison).toContainText("Uncertainty remains");
+    // Contrast: a fuller response in the same session is not told that.
+    const fuller = await respond(page, fullAnswer);
+    await expect(fuller).toContainText(fullAnswer);
+    await expect(fuller).not.toContainText("Insufficient evidence");
+    await expect(
+      page.locator("[data-practice-comparison]").first(),
+    ).toContainText(insufficient);
     await expect(page.locator("body")).not.toContainText(
       /\b(you passed|well done|competent)\b/i,
     );
@@ -258,9 +275,17 @@ test("[F-ROADMAP-05-D] sparse answers, disallowed sources and a spent budget all
   await signIn(page, member.token);
 
   await requiredCheck(1, async () => {
-    await startSession(page, allowed.id);
-    await respond(page, "ok");
-    await expect(page.locator("body")).toContainText(insufficient);
+    // Interview practice: the feedback for the sparse answer says so, and a
+    // full answer in the same interview session does not.
+    await startSession(page, allowed.id, "interview");
+    await expect(page.locator("body")).toContainText(
+      "Purpose: optional interview practice.",
+    );
+    const sparse = await respond(page, "ok");
+    await expect(sparse).toContainText(insufficient);
+    const fuller = await respond(page, fullAnswer);
+    await expect(fuller).toContainText(fullAnswer);
+    await expect(fuller).not.toContainText("Insufficient evidence");
   });
 
   await requiredCheck(2, async () => {
@@ -284,7 +309,7 @@ test("[F-ROADMAP-05-D] sparse answers, disallowed sources and a spent budget all
     await expect(page.getByLabel("Your next sample response")).toHaveCount(0);
 
     // Output for the allowed source holds that source only.
-    await startSession(page, allowed.id);
+    await startSession(page, allowed.id, "interview");
     const comparison = page.locator("[data-practice-comparison]").last();
     await expect(comparison).toContainText(allowed.body);
     await expect(page.locator("body")).not.toContainText(otherGoal.body);
