@@ -81,12 +81,17 @@ it("does not show a request without the right category and shows only escaped ow
   expect(held).toContain(readableTime(receipt.expiresAt));
   expect(held).toContain("Reload this receipt");
   expect(held).not.toContain(grant);
+  // #94: no cancellation or no-show policy; the student asks staff.
+  const policy =
+    'There is no cancellation or no-show policy for sessions. To ask about one, contact <a href="mailto:info@deepnative.io">info@deepnative.io</a>.';
+  expect(held).toContain(policy);
   const expired = sampleHoldReceiptPage(
     { ...receipt, state: "expired", domain: "<script>" },
     "bad/zone",
   );
   expect(expired).toContain("&lt;script&gt;");
   expect(expired).toContain("units stay expired");
+  expect(expired).toContain(policy);
   expect(expired).toContain(readableRange(receipt.startsAt, receipt.endsAt));
   expect(sampleHoldReceiptPage(receipt)).toContain("GMT");
   expect(sampleHoldRecoveryPage(id, "Unknown <private>")).toContain(
