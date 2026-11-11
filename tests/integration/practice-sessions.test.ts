@@ -157,6 +157,11 @@ it("opts all three backgrounds into exact-goal sessions with two durable ordered
       expect(pair.comparison).toContain(f.source.body);
       expect(pair.comparison).toContain("unreviewed");
       expect(pair.comparison).toContain("cannot judge competence");
+      // #94 F-BUILD-06-B: four and three words are too few; the stored
+      // comparison of each response says so, with its own word count.
+      expect(pair.comparison).toContain(
+        `Insufficient evidence: your response has ${pair.sequence === 1 ? 4 : 3} words, too few to compare with the source. Add what you would do and one detail you checked, then respond again.`,
+      );
       expect(pair.sourceExcerpt).toBe(f.source.body);
     }
   }

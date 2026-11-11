@@ -1841,9 +1841,11 @@ it("requires explicit member confirmation and current local AI permission at eve
   expect(fullQueue.text).toContain("Test spending ceiling reached");
   expect(fullQueue.text).toContain("No test request was held");
   // #94 F-ROADMAP-05-D: the stop names where to go next.
-  expect(fullQueue.text).toContain(
+  const ceilingLinks = [
     '<a href="/member/test-units">View your test units</a>',
-  );
+    '<a href="/evidence/local-ai">Return to your AI requests</a>',
+  ];
+  for (const link of ceilingLinks) expect(fullQueue.text).toContain(link);
   // AILIMIT: both queue routes explain the member-wide limit.
   localAiConsent.enqueueMetered.mockResolvedValueOnce({
     kind: "limit_reached",
@@ -1864,6 +1866,8 @@ it("requires explicit member confirmation and current local AI permission at eve
   const fullRun = await post("/evidence/local-ai/job-id/run").expect(409);
   expect(fullRun.text).toContain("Nothing was sent to the provider");
   expect(fullRun.text).toContain("stays reserved");
+  expect(fullRun.text).toContain("Test spending ceiling reached");
+  for (const link of ceilingLinks) expect(fullRun.text).toContain(link);
   await post("/evidence/local-ai/job-id/run").expect(403);
   localAiConsent.run.mockResolvedValueOnce({ kind: "unavailable" });
   const unknown = await post("/evidence/local-ai/job-id/run").expect(409);

@@ -1,8 +1,8 @@
 # Phase B release report
 
-Issue [#44](https://github.com/deepnative/deep-native-engine/issues/44) (CTP-024). Written 11 November 2026 for main `92015e5a` (tree `d528756c`). This report is the only change after that revision; the gate result for the commit that adds it is in the #44 close-out.
+Issue [#44](https://github.com/deepnative/deep-native-engine/issues/44) (CTP-024). Written 11 November 2026 for main `92015e5a`, and brought up to main `f918d421` (tree `d369a530`) the same day, after the fixes for the independent review merged in [PR #827](https://github.com/deepnative/deep-native-engine/pull/827). The gate result for the commit that makes this update is in the #44 note for it.
 
-**Result: Phase B is built and rehearsed as a demo with invented data. It is not accepted as a release, and launch is no-go.** The automated register passes in full. An independent review of the 100 full-MVP browser tests found that six of them do not prove what their case requires. Nothing here was checked with real members, real experts, a real AI provider, payment processing or a signed-in session on the hosted site.
+**Result: Phase B is built and rehearsed as a demo with invented data. It is not accepted as a release, and launch is no-go.** The automated register passes in full. An independent review of the 100 full-MVP browser tests found 37 weaknesses, six of them blocking; all 37 were fixed and the formal run passed again. A read-only re-review confirmed the six blocking fixes and 28 of the 31 weak ones, found no regression, and added 16 weak observations; its follow-up fixes are self-reviewed ([below](#re-review-of-the-fixes)). The owner accepted two remaining gaps as known limits. The owner has not accepted the evidence. Nothing here was checked with real members, real experts, a real AI provider, payment processing or a signed-in session on the hosted site.
 
 ## What this report does not establish
 
@@ -14,29 +14,30 @@ Read these before any number below.
 - **No formal assessment or appeal** ([#648](https://github.com/deepnative/deep-native-engine/issues/648), parked). Feedback is one reviewer's private comment.
 - **No payment processing.** Deep Native Inc. issues invoices; payment is offline and in full, and staff record it by hand. No card or bank is ever charged, and there are no cancellation or refund rules (students write to info@deepnative.io).
 - **No signed-in hosted run.** Workers never sign in on engine.deepnative.io. The hosted demo was checked signed out only, after each deploy. [#97](https://github.com/deepnative/deep-native-engine/issues/97) and [#545](https://github.com/deepnative/deep-native-engine/issues/545) were closed on automated evidence without a signed-in hosted demonstration.
-- **Self-review.** Each change was reviewed by the worker that wrote it. The only independent reviews are of the full-MVP case wording and of the 100 full-MVP tests (below).
+- **Self-review.** Each change was reviewed by the worker that wrote it. The only independent reviews are of the full-MVP case wording, of the 100 full-MVP tests and of the fixes to those tests (below).
 - **Not legally reviewed.** The terms and privacy text is accepted for the demo only ([#12](https://github.com/deepnative/deep-native-engine/issues/12)).
 - **Backups.** The 30-day backup period is decided but not yet applied in Azure. No production restore has been rehearsed ([#45](https://github.com/deepnative/deep-native-engine/issues/45)).
 - **Browsers.** The register runs on desktop Chromium and Pixel 7 (Chromium). Firefox and WebKit run the accessibility spec only.
 
 ## What was run
 
-In the shared Linux gate container (Node 24.21.0, PostgreSQL 18.6, Playwright 1.63.0), first attempt, no retries. Two revisions are named, because one change merged while this report was being written:
+In the shared Linux gate container (Node 24.21.0, PostgreSQL 18.6, Playwright 1.63.0), first attempt, no retries. Three revisions are named, because two changes merged after the counts were taken:
 
 - **Main `49713a7d`** (gated as `5df88b07`, the same tree): the counts in the table.
-- **Main `92015e5a`**, which adds per-student session length and practice-conversation limit ([#823](https://github.com/deepnative/deep-native-engine/issues/823), journey L337). Its full gate passed on `3237a707`, the same tree, in 36m25s ([PR #825](https://github.com/deepnative/deep-native-engine/pull/825)); I did not read that run's raw counts. The formal release run and the walk below were repeated on `92015e5a`. The full gate then runs once more on the commit that adds this report, and its counts are in the #44 close-out.
+- **Main `92015e5a`**, which adds per-student session length and practice-conversation limit ([#823](https://github.com/deepnative/deep-native-engine/issues/823), journey L337). Its full gate passed on `3237a707`, the same tree, in 36m25s ([PR #825](https://github.com/deepnative/deep-native-engine/pull/825)); I did not read that run's raw counts. The formal release run and the walk below were repeated on `92015e5a`. The full gate then ran on the commit that added this report (`4d84c632`, passed).
+- **Main `f918d421`**, which adds the review fixes ([PR #827](https://github.com/deepnative/deep-native-engine/pull/827)): tests, plus the two product changes described below. Its full gate passed on `2b7c7df4`, the same tree, in 36m24s; I did not read that run's raw counts either. The formal release run was repeated on `2b7c7df4`. The walk was not repeated on this revision.
 
-| Check                                                   | Result                                                                                                                                                                                                                                           |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Unit tests with coverage                                | 6223 of 6223 passed. Statements 99.93%, branches 99.76%, functions 99.97%, lines 99.96% (each must be at least 99%)                                                                                                                              |
-| PostgreSQL integration tests                            | 3351 of 3351 passed                                                                                                                                                                                                                              |
-| Local journey register, desktop Chromium and Pixel 7    | 666 of 666 passed: 333 of 333 journeys on both sizes, none skipped or flaky                                                                                                                                                                      |
-| Firefox and WebKit accessibility checks                 | 6 of 6 passed                                                                                                                                                                                                                                    |
-| Full-MVP tests in the ordinary gate (provisional stage) | 200 of 200 passed                                                                                                                                                                                                                                |
-| Formal full-MVP release run (`npm run verify:full-e2e`) | On `92015e5a`: 100 of 100 cases, 94 of 94 critical, 200 executions, nothing uncovered. Run `20b358fd-8579-4317-a84e-a5a011e7524b`, report sha256 `77fc1a2f…04ffa8d1`. The same result on `5df88b07` (run `9b6e6308-fc2d-49a5-93a1-b6680520e413`) |
-| Production build and dependency audit                   | Passed; no high-severity finding in production dependencies. GitHub lists one moderate dependency alert on the repository, not looked into here                                                                                                  |
+| Check                                                   | Result                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit tests with coverage                                | 6223 of 6223 passed. Statements 99.93%, branches 99.76%, functions 99.97%, lines 99.96% (each must be at least 99%)                                                                                                                                                                                                                                      |
+| PostgreSQL integration tests                            | 3351 of 3351 passed                                                                                                                                                                                                                                                                                                                                      |
+| Local journey register, desktop Chromium and Pixel 7    | 666 of 666 passed: 333 of 333 journeys on both sizes, none skipped or flaky                                                                                                                                                                                                                                                                              |
+| Firefox and WebKit accessibility checks                 | 6 of 6 passed                                                                                                                                                                                                                                                                                                                                            |
+| Full-MVP tests in the ordinary gate (provisional stage) | 200 of 200 passed                                                                                                                                                                                                                                                                                                                                        |
+| Formal full-MVP release run (`npm run verify:full-e2e`) | On `2b7c7df4`, with the review fixes: 100 of 100 cases, 94 of 94 critical, 200 executions, nothing uncovered. Run `29a10b9c-299d-4881-b9b1-82271696de91`, report sha256 `6fc8885f…b101266f`. Before the fixes, the same result on `92015e5a` (run `20b358fd-8579-4317-a84e-a5a011e7524b`) and on `5df88b07` (run `9b6e6308-fc2d-49a5-93a1-b6680520e413`) |
+| Production build and dependency audit                   | Passed; no high-severity finding in production dependencies. GitHub lists one moderate dependency alert on the repository, not looked into here                                                                                                                                                                                                          |
 
-The local register had 333 journeys on `49713a7d` and has 334 on `92015e5a`; 321 are critical. The full-MVP register has 100 cases in 27 requirement families, 94 of them critical, under mapping digest `686cb90f…`. Coverage here means distinct passing scenario IDs out of all approved IDs.
+The local register had 333 journeys on `49713a7d` and has 334 on `92015e5a` and on `f918d421`; 321 are critical. The full-MVP register has 100 cases in 27 requirement families, 94 of them critical, under mapping digest `686cb90f…`. Coverage here means distinct passing scenario IDs out of all approved IDs.
 
 "First slice alone fails this gate" holds: the release runner takes no outside report, and it fails if any of the 100 cases is missing, skipped, failed or retried on either browser. Its first run on 11 November failed (196 of 200) for a missing test-clock setting and is recorded in [QA-002](QA-002-JOURNEY-TRACEABILITY.md#first-full-release-runs-11-november-2026-utc).
 
@@ -51,15 +52,59 @@ Ten read-only reviewers read all 100 tests on main `1a641e88` on 11 November 202
 | With a blocking finding | 6     |
 | With weak findings only | 26    |
 
-**The evidence is not yet accepted.** The 100 of 100 run stands as a technical result, but six passing tests do not prove a required check:
+The 100 of 100 run stood as a technical result, but six passing tests did not prove a required check:
 
-- **F-BUILD-01-D:** the unverified demo expert is ineligible for four reasons at once, so the test would still pass if the product stopped requiring verification.
-- **F-BUILD-06-B and F-ROADMAP-05-D:** the "insufficient evidence" sentence the tests look for is fixed text on every practice page. The product has no feedback specific to a sparse answer, so these two cases may be unmet in the product, not only in the test.
-- **F-BUILD-08-C:** no AI-derived record exists when the deletion runs, so the test does not show that deletion removes one.
-- **F-ECO-05-A:** the early publish request is refused for a missing Origin header, before the publication rule runs.
-- **F-ROADMAP-05-B:** the request past the conversation limit is refused as a malformed form, not for the limit.
+- **F-BUILD-01-D:** the unverified demo expert was ineligible for four reasons at once, so the test would still have passed if the product stopped requiring verification.
+- **F-BUILD-06-B and F-ROADMAP-05-D:** the "insufficient evidence" sentence the tests looked for was fixed text on every practice page. The product had no feedback specific to a sparse answer.
+- **F-BUILD-08-C:** no AI-derived record existed when the deletion ran, so the test did not show that deletion removes one.
+- **F-ECO-05-A:** the early publish request was refused for a missing Origin header, before the publication rule ran.
+- **F-ROADMAP-05-B:** the request past the conversation limit was refused as a malformed form, not for the limit.
 
-The fixes, and the tightening of the 26 weak tests, are queued on #94. Until they merge and the run is repeated, the honest count of soundly proven full-MVP cases is 68 of 100, with 26 more proven with reservations. The reviewers did not treat the limits listed at the top as findings.
+The 26 other cases carried 31 weak findings between them. The reviewers did not treat the limits listed at the top as findings.
+
+### Fixes
+
+All 37 findings were checked against the code, found real and fixed in [PR #827](https://github.com/deepnative/deep-native-engine/pull/827) (main `f918d421`). No case wording changed, and the mapping digest is still `686cb90f…`. The detail is in [QA-002](QA-002-JOURNEY-TRACEABILITY.md#11-november-2026-fixes-after-the-independent-review-of-the-100-tests).
+
+- **Six blocking findings:** each test now fails if the product drops the required behaviour.
+- **31 weak findings:** the tests now drive the product through its pages or HTTP where they used store calls, add a positive control or a contrast beside each denial, and assert product output instead of fixed page copy.
+- **Two product changes came out of the review:**
+  - A practice response of fewer than five words now gets an "Insufficient evidence" line in its own comparison. F-BUILD-06-B and F-ROADMAP-05-D assert it against a fuller response, which does not get it.
+  - The "Test spending ceiling reached" page now links to the member's test units and AI requests.
+
+The formal release run passed on the fixed tests: `2b7c7df4`, 100 of 100, run `29a10b9c-299d-4881-b9b1-82271696de91`. The review's 32 lesser notes were not worked through.
+
+### Known limits accepted by the owner
+
+Two gaps were left after the fixes. On 11 November 2026 the owner decided to record both as known limits and not build them ([decision](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6807271423)):
+
+- **F-BUILD-07-D:** a workflow template's supported status is declared by the editor. It is not derived from a failed test record.
+- **F-ROADMAP-08-D:** catalog content has no delivery-role field, so role fit is by the member's goal and background only.
+
+### Re-review of the fixes
+
+Three read-only reviewers re-read the PR #827 fixes on main `f918d421` on 11 November 2026, one each for the BUILD, ECO and ROADMAP families, with the two product changes. **They ran nothing:** their verdicts come from reading the tests and the product code.
+
+|                                | Result                                          |
+| ------------------------------ | ----------------------------------------------- |
+| Blocking findings (6)          | 6 confirmed fixed                               |
+| Weak findings (31)             | 28 confirmed fixed, 2 partly fixed, 1 not fixed |
+| Regressions or new blocking    | None                                            |
+| New weak observations          | 16                                              |
+| First review's 32 lesser notes | Outside the fix scope; mostly not addressed     |
+
+- **Partly fixed:** F-ROADMAP-02-A (a refusal with no positive control) and F-ROADMAP-08-D (an assertion that matched nothing the product shows). Both are fixed in the follow-up below. The role-fit part of F-ROADMAP-08-D is the known limit.
+- **Not fixed:** F-BUILD-07-D, the other known limit.
+
+**Follow-up fixes.** The reviewers listed 13 items to fix. Each was checked against the code: 12 were real and are fixed, and one (F-ECO-05-A) needed no change because the test's split follows where the product records the rights confirmation. Seven more items are recorded without change. The list is in [QA-002](QA-002-JOURNEY-TRACEABILITY.md#11-november-2026-independent-re-review-of-the-fixes).
+
+- One product change: the "Insufficient evidence" line counts an empty response as no words, and the response that fills a conversation is told the conversation is full, not to respond again.
+- A limit of that line, recorded and not fixed: it counts runs of characters between spaces, so five filler words escape it and a sentence in a script without spaces counts as one word.
+- The rest are test changes: positive controls, a contrast for participation measures, page actions in place of store calls and hand-built requests, and waits before two database reads.
+
+**These follow-up fixes are self-reviewed.** The delivery session wrote and reviewed them; no independent reviewer has read them. The full gate and the formal release run on the commit that carries them are reported on [#94](https://github.com/deepnative/deep-native-engine/issues/94) and #44.
+
+**The evidence is not accepted.** The fixes were written by the delivery session. Accepting the full-MVP evidence, with its limits, is the owner's decision and has not been made.
 
 ## Rehearsal walk
 
@@ -107,7 +152,9 @@ The walk is shallow next to the automated register: it opens pages and follows o
 
 No release-blocking product defect is open from the gate, the release run or the walk. Open items:
 
-- **Six full-MVP tests with a blocking finding, and possibly no sparse-answer feedback in the product** (F-BUILD-06-B, F-ROADMAP-05-D). Queued on #94.
+- **Two known limits, accepted by the owner and not built:** a template's supported status is declared by the editor (F-BUILD-07-D), and catalog content has no delivery-role field (F-ROADMAP-08-D).
+- **Follow-up fixes from the re-review are self-reviewed**, and seven recorded observations are left as they are (QA-002).
+- **The five-word rule for a sparse practice response** counts runs of characters between spaces.
 - **Metrics disclosure.** A reviewed production disclosure policy and a repeated-snapshot inference check were never done (QA-004 row M17). No issue is parked for this; it needs the privacy review on #12 before real data.
 - **Nothing checked at all** for AI context injection (QA-004 M11, #783) and the formal review transaction (M22, #648), because neither exists.
 - **Cosmetic, not fixed:** on Pixel 7 the "Local enrollment simulation" note on My courses has no gap under the header line, and the invoice's payment table is wider than the screen and scrolls inside its own box.
@@ -117,18 +164,18 @@ The final state of each risk row is in [QA-004](QA-004-RISK-TEST-MATRIX.md#final
 
 ## Acceptance criteria of #44
 
-| Criterion                                                                                                  | State                                                                                                                                                                                                             |
-| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Run all applicable source journeys plus ECO-01 to ECO-08 for IT, non-IT professional and general learners  | Done with invented data: the full-MVP register covers the ROADMAP, BUILD and ECO families, and the walk used all three starting points. Six cases are not soundly proven (review above).                          |
-| Desktop, mobile and keyboard checks cover complete flows                                                   | Desktop Chromium and Pixel 7 cover every journey. Keyboard is covered only by L53 and the accessibility spec ([QA-005](QA-005-LOCAL-KEYBOARD.md)); the owner excluded wider accessibility work from this release. |
-| Report live, test, manual and disabled state separately; defects and human-coverage gaps explicit          | The tables above.                                                                                                                                                                                                 |
-| First slice alone fails this gate                                                                          | Yes, see above.                                                                                                                                                                                                   |
-| At least 99% journey coverage, 100% critical, all required tests passing, at least 99% on each unit metric | Met by the automated counts above. The review means "passing" is not the same as "proven" for six cases.                                                                                                          |
+| Criterion                                                                                                  | State                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run all applicable source journeys plus ECO-01 to ECO-08 for IT, non-IT professional and general learners  | Done with invented data: the full-MVP register covers the ROADMAP, BUILD and ECO families, and the walk used all three starting points. The six cases the review found unproven are fixed, and the read-only re-review confirmed all six. |
+| Desktop, mobile and keyboard checks cover complete flows                                                   | Desktop Chromium and Pixel 7 cover every journey. Keyboard is covered only by L53 and the accessibility spec ([QA-005](QA-005-LOCAL-KEYBOARD.md)); the owner excluded wider accessibility work from this release.                         |
+| Report live, test, manual and disabled state separately; defects and human-coverage gaps explicit          | The tables above.                                                                                                                                                                                                                         |
+| First slice alone fails this gate                                                                          | Yes, see above.                                                                                                                                                                                                                           |
+| At least 99% journey coverage, 100% critical, all required tests passing, at least 99% on each unit metric | Met by the automated counts above. "Passing" was not the same as "proven" for six cases until the fixes, which the re-review confirmed. Acceptance is the owner's decision.                                                               |
 
 ## What a release would still need
 
-1. Fix the review's blocking findings and re-run ([#94](https://github.com/deepnative/deep-native-engine/issues/94)).
-2. The owner's decision on accepting the full-MVP evidence with its limits (#94).
+1. If the owner wants it, an independent read of the follow-up fixes made after the re-review ([#94](https://github.com/deepnative/deep-native-engine/issues/94)).
+2. The owner's decision on accepting the full-MVP evidence with its limits, including the two known limits (#94).
 3. Launch prerequisites: legal review of the terms, the Azure backup setting, a production restore rehearsal and hosted storage reconciliation (#12, #45).
 4. A signed-in demonstration on the hosted site by someone allowed to sign in there.
 5. Decisions to unpark live AI (#783), real experts (#784) and formal assessment (#648), if they are wanted.

@@ -228,7 +228,7 @@ test("[F-ROADMAP-05-B] the administrator-set AI allowance blocks at its end, a l
         .click();
       const path = new URL(page.url()).pathname;
       const responses = page.locator("[data-practice-response]");
-      for (let sequence = 1; sequence <= 14; sequence++) {
+      const respond = async (sequence: number) => {
         await page
           .getByLabel("Your next sample response")
           .fill(`Invented response ${sequence}: check the source.`);
@@ -241,8 +241,10 @@ test("[F-ROADMAP-05-B] the administrator-set AI allowance blocks at its end, a l
           .getByRole("button", { name: "Save response and compare" })
           .click();
         await expect(responses).toHaveCount(sequence);
-      }
-      // The form the page sends, built by hand. Response 15 is accepted this
+      };
+      for (let sequence = 1; sequence <= 13; sequence++)
+        await respond(sequence);
+      // The form the page sends, built by hand. Response 14 is accepted this
       // way, so the refusal of response 16 below can only be the limit.
       const send = async (sequence: number) =>
         page.request.post(`${j.f.origin}${path}/responses`, {
@@ -255,9 +257,12 @@ test("[F-ROADMAP-05-B] the administrator-set AI allowance blocks at its end, a l
           },
           maxRedirects: 0,
         });
-      expect((await send(15)).status()).toBe(303);
-      // Thirty visible turns: fifteen responses and fifteen comparisons.
+      expect((await send(14)).status()).toBe(303);
       await page.reload();
+      await expect(responses).toHaveCount(14);
+      // The response that reaches the limit is sent with the page's own
+      // button. Thirty visible turns: fifteen responses and comparisons.
+      await respond(15);
       await expect(page.locator("[data-practice-comparison]")).toHaveCount(15);
       await expect(page.getByRole("status")).toContainText(
         "15 pairs / 30 visible turns",

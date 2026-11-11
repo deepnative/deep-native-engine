@@ -38,6 +38,8 @@ type Path = {
     assignmentId: string;
     assignmentTitle: string;
   };
+  // More evidence for check 1, run inside it.
+  alsoInCheck1?: () => Promise<void>;
 };
 
 async function publishPath(path: Path) {
@@ -204,6 +206,7 @@ async function exerciseOwnPath(
     );
     expect(published.rows[0]?.state).toBe("published");
     expect(published.rows[0]?.reviewed_at).not.toBeNull();
+    await path.alsoInCheck1?.();
   });
 
   await requiredCheck(2, async () => {
@@ -350,42 +353,59 @@ test("[F-ECO-02-B] non-IT professional reads and locally submits a noncoding ass
       assignmentId: `ECB-22${n}`,
       assignmentTitle: `Invented technical contrast task ${n}`,
     },
+    // Still inside check 1: the same kind of member reads the reviewed
+    // meeting-actions assignment from the reviewed pack, on a database of its
+    // own. The page marks it as a reviewed assignment and shows that
+    // assignment's own text, which asks for no code.
+    alsoInCheck1: async () => {
+      const f = await reviewedContentFixture(browser, info);
+      try {
+        const actors = await f.publishFixture();
+        expect(
+          await reviewedAssignmentImportStore(f.pool).import(
+            actors.editor.token,
+          ),
+        ).toBe("imported");
+        const pack = await reviewedAssignments();
+        for (const item of pack) {
+          expect(
+            await actors.catalog.submit(actors.editor.token, item.id, 2),
+          ).toBe(true);
+          expect(
+            await actors.catalog.approve(
+              actors.reviewer.token,
+              item.id,
+              2,
+              true,
+            ),
+          ).toBe(true);
+          expect(
+            await actors.catalog.publish(actors.editor.token, item.id, 2),
+          ).toBe(true);
+        }
+        const meetingActions = pack.find((item) => item.id === "ASN-002")!;
+        expect(meetingActions.goals).toContain("work");
+        const member = await f.member("professional", "work");
+        const opened = await member.goto(
+          f.origin + "/library/ASN-002?version=2",
+        );
+        expect(opened!.status()).toBe(200);
+        const reading = member.locator("main");
+        await expect(
+          member.getByRole("heading", { name: meetingActions.title, level: 1 }),
+        ).toBeVisible();
+        await expect(reading.locator("p.eyebrow").first()).toContainText(
+          "REVIEWED ASSIGNMENT",
+        );
+        // Nothing on the assignment asks this member to write or submit code.
+        await expect(reading).not.toContainText(
+          /write (the |some |a )?code|submit (your )?code|pull request|unit tests?/i,
+        );
+      } finally {
+        await f.close();
+      }
+    },
   });
-
-  // The product's own statement that no coding is required shows only on the
-  // reviewed assignment pack, so the same kind of member also reads the
-  // reviewed meeting-actions assignment, on a database of its own.
-  const f = await reviewedContentFixture(browser, info);
-  try {
-    const actors = await f.publishFixture();
-    expect(
-      await reviewedAssignmentImportStore(f.pool).import(actors.editor.token),
-    ).toBe("imported");
-    for (const item of await reviewedAssignments()) {
-      expect(await actors.catalog.submit(actors.editor.token, item.id, 2)).toBe(
-        true,
-      );
-      expect(
-        await actors.catalog.approve(actors.reviewer.token, item.id, 2, true),
-      ).toBe(true);
-      expect(
-        await actors.catalog.publish(actors.editor.token, item.id, 2),
-      ).toBe(true);
-    }
-    const member = await f.member("professional", "work");
-    const opened = await member.goto(f.origin + "/library/ASN-002?version=2");
-    expect(opened!.status()).toBe(200);
-    const reading = member.locator("main");
-    await expect(reading).toContainText(
-      "no formal assessment, coding or paid plan is required.",
-    );
-    // Nothing on the assignment asks this member to write or submit code.
-    await expect(reading).not.toContainText(
-      /write (the |some |a )?code|submit (your )?code|pull request|unit tests?/i,
-    );
-  } finally {
-    await f.close();
-  }
 });
 
 test("[F-ECO-02-C] both audiences retain common preview access and see honest specialist readiness", async ({

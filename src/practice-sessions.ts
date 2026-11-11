@@ -65,13 +65,17 @@ export const exchangeLimitOf = (value: { exchangeLimit?: number }) =>
 /**
  * #94 F-BUILD-06-B / F-ROADMAP-05-D: a response of fewer than five words is
  * told, in its own comparison, that it is too little to compare. A fuller
- * response never gets this line.
+ * response never gets this line. Words are runs of characters between spaces,
+ * so five filler words pass and a sentence in a script without spaces counts
+ * as one word: a known limit, recorded in QA-002. `last` is the response that
+ * fills the conversation, which cannot be told to respond again.
  */
 export const SPARSE_WORDS = 5;
-export function sparseNotice(response: string) {
-  const words = response.trim().split(/\s+/).length;
+export function sparseNotice(response: string, last = false) {
+  const text = response.trim();
+  const words = text ? text.split(/\s+/).length : 0;
   return words < SPARSE_WORDS
-    ? `Insufficient evidence: your response has ${words} word${words === 1 ? "" : "s"}, too few to compare with the source. Add what you would do and one detail you checked, then respond again.\n`
+    ? `Insufficient evidence: your response has ${words} word${words === 1 ? "" : "s"}, too few to compare with the source. ${last ? "This conversation is now full. In a new one, add what you would do and one detail you checked." : "Add what you would do and one detail you checked, then respond again."}\n`
     : "";
 }
 // #200 PRACTICE-AI: a request whose outcome was never recorded is "unknown"
@@ -637,7 +641,10 @@ export function practiceSessionStore(
             const comparison =
               `Simulation — unreviewed local comparison. Your paired words: “${input.response}”\n` +
               `Exact source excerpt (${row.contentId} v${row.contentVersion}): “${sourceExcerpt}”\n` +
-              sparseNotice(input.response) +
+              sparseNotice(
+                input.response,
+                pairs.length + 1 >= exchangeLimitOf(row),
+              ) +
               "Compare the two yourself and identify a detail to verify. This deterministic comparison does not verify accuracy and cannot judge competence. Uncertainty remains; no qualified review has occurred." +
               (row.promptVersion === interviewPromptVersion
                 ? `\n${interviewNotice}`

@@ -37,6 +37,9 @@ export async function queuedSample(
   await page.getByLabel("I created this invented sample").check();
   await page.getByLabel("I explicitly allow this sample").check();
   await page.getByRole("button", { name: "Save private text sample" }).click();
+  // Wait for the saved sample's page, so the reload below is not sent while
+  // the save is still navigating.
+  await expect(page.getByRole("heading", { name })).toBeVisible();
   const source = await pool.query<{ id: string; owner: string }>(
     "SELECT id,owner_principal_id AS owner FROM evidence_objects WHERE original_name=$1",
     [name],

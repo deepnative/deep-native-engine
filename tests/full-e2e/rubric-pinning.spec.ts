@@ -89,7 +89,6 @@ async function publishedAssignment() {
     second,
     editor,
     approver,
-    publishSecond: () => publish(second),
   };
 }
 
@@ -535,7 +534,7 @@ test("[F-BUILD-07-A] a revised rubric does not change a completed result", async
       const heldFeedback = await feedbackRow(work.submissionId);
       const heldExport = await exportedResult();
       expect(heldExport).toHaveLength(1);
-      await work.publishSecond();
+      await publishSecondThroughPages(browser, work);
       expect(await assessment()).toEqual(heldResult);
       // The member still reads the same result, rubric 1 and score text.
       expect(await exportedResult()).toEqual(heldExport);

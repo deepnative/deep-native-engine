@@ -7,6 +7,7 @@ import { authorizationStore } from "../support/administrator-fixture.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { testPool } from "../support/database.ts";
 import { requiredCheck } from "../support/required-check.ts";
+import { grantedReviewer } from "../support/sample-feedback-journey.ts";
 import { browserOrigin as origin } from "../support/browser-origin.ts";
 
 const pool = testPool();
@@ -142,6 +143,36 @@ test("[F-ROADMAP-02-A] guessed workspace, evidence and staff APIs reveal no othe
         .first()
         .inputValue();
       const reviewPath = `/review/evidence/${evidenceId}/feedback`;
+      // Control: member A submits this evidence for review, and a reviewer
+      // with an exact grant for that submission does read it on this route.
+      // So the refusals below are about who asks, not a route closed to all.
+      const submitted = await page.request.post(
+        `/api/evidence/${evidenceId}/review`,
+        { headers: { Origin: origin, "X-CSRF-Token": csrf } },
+      );
+      expect(submitted.status()).toBe(204);
+      const submission = await pool.query<{ id: string }>(
+        "SELECT id FROM evidence_review_submissions WHERE evidence_id=$1",
+        [evidenceId],
+      );
+      expect(submission.rowCount).toBe(1);
+      const reviewer = await grantedReviewer(
+        browser,
+        pool,
+        origin,
+        ownerId,
+        submission.rows[0]!.id,
+        page.viewportSize(),
+      );
+      try {
+        const allowed = await reviewer.page.goto(reviewPath);
+        expect(allowed!.status()).toBe(200);
+        await expect(reviewer.page.locator("details pre")).toHaveText(
+          privateBytes.toString(),
+        );
+      } finally {
+        await reviewer.cleanup();
+      }
       const refusals = [
         await otherPage.request.get(reviewPath),
         await otherPage.request.post(`${reviewPath}/draft`, {
