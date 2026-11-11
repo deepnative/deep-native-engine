@@ -32,6 +32,21 @@ Evidence: DEMOACCT-01..04 in `tests/integration/demo-site-accounts.test.ts` and 
 
 Exact-count wording below describes the earlier contract and is superseded by this section.
 
+## ECO-08 mapping — #121
+
+[#121](https://github.com/deepnative/deep-native-engine/issues/121) delivered the cohort, segment, usefulness and withdrawal measures that the full-MVP journey ECO-08 looks at. This section records which of its cases that work serves. It claims no full-MVP acceptance: ECO-08 stays outstanding in the register.
+
+| ECO-08 case                                     | What #121 supplies                                                                                                                                                                                                                         | Browser cases                                                                 |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| F-ECO-08-A, learning and participation measures | Retained-member learning measures with their own definitions and denominators, kept apart from participation, contribution and conversion; banded enrolled and withdrew counts, with withdrawal a dated event that is not account deletion | L68, L70, L222, L336; provisional `tests/full-e2e/metrics-separation.spec.ts` |
+| F-ECO-08-C, no drill-down into member records   | Coarse bands only, small groups suppressed, forged filters ignored, and members, reviewers, expired or revoked staff refused with no aggregate data                                                                                        | L68, L70, L222, L223; provisional `tests/full-e2e/eco-08.spec.ts`             |
+
+F-ECO-08-B (demo and self-report labels) rests on [#123](https://github.com/deepnative/deep-native-engine/issues/123) and the billing reports, not on #121.
+
+**Register.** ECO-08 in `tests/e2e/scenarios.json` still lists issues 18 and 41. That list is inside the approved full-MVP mapping digest, so adding #121 to it needs an independent re-approval and is left for the next one on [#94](https://github.com/deepnative/deep-native-engine/issues/94).
+
+**Not built, by owner decision (10 November 2026):** segment values captured at the time of each event. Segments use a member's current choices. The qualified privacy review of repeated snapshots stays a pre-launch item on [#12](https://github.com/deepnative/deep-native-engine/issues/12).
+
 ## Readable staff report
 
 Sign in through the existing staff entry form as a current operator or platform administrator, then open **Learning and participation snapshot** from staff tools. `/operator/metrics/report` renders the existing aggregate as readable HTML with its snapshot time, counts, denominators, plain definitions, return window and usefulness suppression. **Reload snapshot** makes a deliberate new read; **View aggregate JSON** opens the unchanged `/operator/metrics` API. No new tracking, calculation, record, export or staff authority is introduced.
