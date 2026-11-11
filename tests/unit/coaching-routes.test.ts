@@ -1012,3 +1012,22 @@ it("RECIPIENT-01/05 shows a submitted company and starts empty without a billing
     'name="email" type="email" autocomplete="email" maxlength="254" value="" required',
   );
 });
+
+it("WALK44-01 an administrator opening a student reference no account has is told so, with the way back", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValueOnce({ kind: "not-found" });
+  const gone = await f.get(`/operator/coaching/${id}`);
+  expect(gone.status).toBe(404);
+  expect(gone.text).toContain("<h1>Student account not found</h1>");
+  expect(gone.text).toContain("No student account has this reference now.");
+  expect(gone.text).toContain("If the student deleted their account");
+  expect(gone.text).toContain('href="/operator/coaching"');
+  expect(gone.text).toContain('href="/operator/invoices"');
+  expect(gone.text).not.toContain("Coaching request not confirmed");
+  expect(gone.text).not.toContain("Set member rate");
+  // A member's own page never takes that branch.
+  f.service.coachingOverview.mockResolvedValueOnce({ kind: "not-found" });
+  const own = await f.get("/account/coaching");
+  expect(own.status).toBe(404);
+  expect(own.text).toContain("Coaching request not confirmed");
+});

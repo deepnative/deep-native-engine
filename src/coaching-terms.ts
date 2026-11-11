@@ -482,7 +482,7 @@ export function courseTermsSection(t: CoachingTerms | null | "unavailable") {
       : t
         ? `<p>Coaching period ${readable(t.startsOn)} to ${readable(t.endsOn)} · Renewal date ${readable(t.renewsOn)} · Price ${money(t.priceCents)}</p><p>Your administrator set these terms. ${NO_AUTOMATIC_RENEWAL} To renew or ask about changes, contact <a href="mailto:${SERVICE_CONTACT}">${SERVICE_CONTACT}</a>.</p>`
         : "<p>Your administrator hasn't set your coaching terms. Your learning and enrollment don't depend on them.</p>";
-  return `<section aria-labelledby="course-coaching"><h2 id="course-coaching">Your coaching</h2><p>Enrolling in a program is free. Coaching is arranged separately and invoiced.</p>${body}<p><a href="/account/coaching">Coaching terms, allowances and hours</a></p></section>`;
+  return `<section class="course-coaching" aria-labelledby="course-coaching"><h2 id="course-coaching">Your coaching</h2><p>Enrolling in a program is free. Coaching is arranged separately and invoiced.</p>${body}<p><a href="/account/coaching">Coaching terms, allowances and hours</a></p></section>`;
 }
 /** TERMS316-01: current terms and the form an administrator saves a new version with. */
 export function adminTermsSection(

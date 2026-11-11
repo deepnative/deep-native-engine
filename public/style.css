@@ -705,6 +705,11 @@ progress {
   padding-left: 44px;
   margin-bottom: 35px;
 }
+/* WALK44-02: the coaching summary on My courses is not a numbered lesson step,
+   so it lines up with the rest of the page. */
+.reading section.course-coaching {
+  padding-left: 0;
+}
 .reading h2 {
   font-size: 22px;
 }
