@@ -15,6 +15,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // prepares from published lesson versions. Sample invoices only: no provider,
 // no money. A course bundle carries prices and terms but no quota, so the
 // quota part of this case is limited to the course list and cadence.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 test("[F-BUILD-09-D] an accepted course bundle's displayed price and terms equal the stored agreement and do not drift", async ({

@@ -13,6 +13,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // billing; a second listener on the same database issues configured billing,
 // whose agreements and invoices are the only "real" ones. Nothing is payable,
 // no provider is called and no money moves. Staff credentials stay out of traces.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;
 

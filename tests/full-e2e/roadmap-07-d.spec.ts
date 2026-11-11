@@ -17,6 +17,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // accepted; the rate is the administrator-set monthly coaching rate; contract
 // outcomes are the member's own private career-planning records. Sample
 // invoices only; no provider, no money, no verified outcome.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 test("[F-ROADMAP-07-D] after training a goal change updates next actions, only an explicit acceptance renews, and no contract or rate increase appears", async ({

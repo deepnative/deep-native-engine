@@ -11,6 +11,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // Signed test events are off by default and refused on any hosted site (#32), so
 // each case runs on its own listener and database with sample invoices and a test
 // key. Staff credentials stay out of traces.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 const key = "invented-provisional-test-provider-key-05";
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;

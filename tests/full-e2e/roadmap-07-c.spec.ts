@@ -14,6 +14,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // an exact grant records the effort. Test minutes only; no paid plan, no
 // qualified support and no promised response time. Staff credentials stay out
 // of traces; every person, request and minute is invented.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 const CATEGORIES = ["support_minutes", "coach_minutes", "review_minutes"];

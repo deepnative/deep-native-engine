@@ -41,6 +41,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // Invoices are paid offline in full; no provider, no payment processing.
 // Signed test events are off by default and refused on any hosted site (#32).
 // Every person, amount and reason is invented.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 const key = "invented-provisional-test-provider-key-94";
 const CONTACT_RULE =

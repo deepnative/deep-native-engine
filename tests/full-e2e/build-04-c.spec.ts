@@ -15,6 +15,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // The "standard continuation" is the agreement the product actually arranges:
 // a monthly course bundle an administrator prepares for one member. Its start
 // date is its acceptance window. Sample invoices only; no provider, no money.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 // Stands in for the acceptance window passing: the offered start moves two

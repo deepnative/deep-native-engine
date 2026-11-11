@@ -14,6 +14,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // whose coach became unavailable: sample holds with test minutes, never real
 // bookings. An operator resolves it on the staff page. Staff credentials stay
 // out of traces; every person, slot and minute is invented.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 async function coachGrants(pool: Pool, memberId: string) {

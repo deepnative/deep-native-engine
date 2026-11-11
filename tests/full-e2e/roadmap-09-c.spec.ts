@@ -32,6 +32,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // issues configured invoices, the only "real" ones. Nothing is payable, no
 // provider is called and no money moves. AI figures are simulated points.
 // Staff credentials stay out of traces; every person and amount is invented.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 const key = "invented-provisional-test-provider-key-09c";
 

@@ -15,6 +15,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // compared by hand with its example output and the date is recorded. No
 // software test or AI call runs. This test reads the same two parts a
 // reviewer compares, on a fixture copy of the reviewed release.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 const CHECK = /^(\d{4}-\d{2}-\d{2}) manual input\/output comparison/;

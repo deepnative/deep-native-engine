@@ -9,6 +9,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // fixed 45-minute call plus 15-minute preparation split. The sessions here are
 // sample holds with test minutes, never real bookings; no real expert is
 // involved. Staff credentials stay out of traces; everything is invented.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 const NO_POLICY =

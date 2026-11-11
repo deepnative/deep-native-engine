@@ -19,6 +19,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // derived data with the retained billing and backup exceptions disclosed (#12
 // D08, owner 10 Nov 2026). Invented data on its own database; nothing is
 // payable. Staff credentials stay out of traces.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;
 

@@ -31,6 +31,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // whose outcome is unknown stays held. The AI step is the local deterministic
 // simulation: no provider, no money. Marked invented text makes it time out;
 // that switch is refused on hosted sites. Staff credentials stay out of traces.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 const DID_NOT_FINISH =

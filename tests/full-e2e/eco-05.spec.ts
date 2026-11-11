@@ -7,6 +7,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // Member contributions are off by default, so each case runs on its own listener
 // and database with them on, as on the hosted site (#40, #115). Staff credentials
 // stay out of traces. Every contribution is invented.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;
 const original =

@@ -26,6 +26,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // service is not offered because there are no real experts (#784); and
 // coaching exists only as terms an administrator sets for one student, with
 // no acceptance step. Sample invoices only; every person is invented.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;

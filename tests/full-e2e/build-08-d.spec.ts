@@ -14,6 +14,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // six-year CRA expiry and the 30-day backup expiry, and claims no total
 // erasure. Invented data on its own database; nothing is payable and no money
 // moves. Staff credentials stay out of traces.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 test("[F-BUILD-08-D] the deletion response names the kept billing records and backups with their expiry instead of claiming total erasure", async ({

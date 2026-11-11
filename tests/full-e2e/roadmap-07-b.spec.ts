@@ -12,6 +12,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // schedules an invented rehearsal, the member registers and permits attendance,
 // and the administrator records an actual observation during the real database
 // window. It is not a staffed clinic. Coach minutes are seeded test units.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 async function coachMinutes(member: Page, origin: string) {

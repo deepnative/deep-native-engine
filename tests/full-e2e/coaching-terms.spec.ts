@@ -26,6 +26,8 @@ import { staffTrace } from "../support/staff-trace.ts";
 // decisions): an administrator sets one student's price, period, renewal date
 // and allowances. Invoices only: no provider, no payment processing, and
 // nothing renews or charges by itself. Every person and amount is invented.
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
 test.use({ trace: staffTrace });
 
 const NOTHING_AUTOMATIC = "Nothing renews or charges automatically.";
