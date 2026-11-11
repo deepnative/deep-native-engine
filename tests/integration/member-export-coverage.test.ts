@@ -217,7 +217,7 @@ it("EXPCOV-03 a member's held and withdrawn sample sessions are in Download my r
   await holds.withdraw(owner.token, withdrawn.requestId);
   const theirs = await heldBy(other, (await slot()).id);
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v49");
+  expect(version).toBe("local-member-records-v50");
   const rows = all.sampleHolds!;
   expect(rows.map((row) => row.id).sort()).toEqual(
     [kept.requestId, withdrawn.requestId].sort(),
@@ -314,7 +314,7 @@ it("EXPCOV-05 how many coaches the member has, and since when, is in Download my
   ).rows[0]!.n;
   expect(coaches).toBeGreaterThanOrEqual(1);
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v49");
+  expect(version).toBe("local-member-records-v50");
   expect(all.coachAssignments).toEqual([
     {
       coaches,
@@ -497,7 +497,7 @@ it("EXPCOV-09/10 moderation decisions on a member's own circle posts and their r
   expect(restored.kind).toBe("ready");
 
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v49");
+  expect(version).toBe("local-member-records-v50");
   expect(all.circleModerationDecisions).toEqual([
     {
       id: expect.anything(),
@@ -617,4 +617,98 @@ it("EXPCOV-11 a member's cohort memberships, current and ended, are in Download 
       )
     ).rows,
   ).toEqual([{ member_id: other.id }]);
+});
+
+it("EXPCOV-12 what happened to a member's own support requests is in Download my records without the staff, grants or private notes, and goes with the account", async () => {
+  const [owner, other] = [await member(), await member()];
+  const [mine, theirs] = [randomUUID(), randomUUID()];
+  const [operator, grant, reply] = [randomUUID(), randomUUID(), randomUUID()];
+  for (const [id, who] of [
+    [mine, owner],
+    [theirs, other],
+  ] as const)
+    await pool.query(
+      `INSERT INTO support_requests(id,member_id,workspace_id,intake_key,subject,body)
+       VALUES($1,$2,$3,$4,'Invented subject','Invented request')`,
+      [id, who.id, who.workspace, randomUUID()],
+    );
+  await pool.query(
+    "INSERT INTO support_request_replies(id,request_id,actor_id,body) VALUES($1,$2,$3,'Invented reply')",
+    [reply, mine, operator],
+  );
+  const shown = [
+    "received",
+    "worklist-read",
+    "detail-read",
+    "acknowledged",
+    "replied",
+    "coverage-reviewed",
+    "resolved",
+  ];
+  const hidden = ["grant-created", "noted", "grant-revoked"];
+  const ids: Record<string, string> = {};
+  for (const action of [...shown, ...hidden]) {
+    ids[action] = randomUUID();
+    await pool.query(
+      `INSERT INTO support_request_events(id,request_id,actor_id,grant_id,action,message_id)
+       VALUES($1,$2,$3,$4,$5,$6)`,
+      [
+        ids[action],
+        mine,
+        action === "received" ? owner.id : operator,
+        action === "received" ? null : grant,
+        action,
+        action === "replied" ? reply : null,
+      ],
+    );
+  }
+  const foreign = randomUUID();
+  await pool.query(
+    "INSERT INTO support_request_events(id,request_id,actor_id,action) VALUES($1,$2,$3,'detail-read')",
+    [foreign, theirs, operator],
+  );
+
+  const { version, all } = await records(owner.token);
+  expect(version).toBe("local-member-records-v50");
+  const rows = all.supportRequestEvents!;
+  expect(rows.map((row) => row.action).sort()).toEqual([...shown].sort());
+  for (const row of rows) {
+    expect(Object.keys(row).sort()).toEqual([
+      "action",
+      "id",
+      "occurredAt",
+      "requestId",
+    ]);
+    expect(row.requestId).toBe(mine);
+    expect(row.id).toBe(ids[String(row.action)]);
+    expect(row.occurredAt).toBeInstanceOf(Date);
+  }
+  const text = JSON.stringify(rows);
+  for (const secret of [
+    operator,
+    grant,
+    reply,
+    foreign,
+    theirs,
+    other.id,
+    ...hidden.map((action) => ids[action]!),
+  ])
+    expect(text).not.toContain(secret);
+  expect((await records(other.token)).all.supportRequestEvents).toEqual([
+    {
+      id: foreign,
+      requestId: theirs,
+      action: "detail-read",
+      occurredAt: expect.any(Date),
+    },
+  ]);
+
+  await members.remove(owner.id);
+  expect(
+    (
+      await pool.query<{ request_id: string }>(
+        "SELECT DISTINCT request_id FROM support_request_events",
+      )
+    ).rows,
+  ).toEqual([{ request_id: theirs }]);
 });
