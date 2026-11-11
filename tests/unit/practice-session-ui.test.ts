@@ -166,6 +166,14 @@ it("offers exact-source opt-in without a write and starts or reopens the same re
   expect(preview.text).toContain('name="goal" value="everyday"');
   expect(preview.text).toContain('name="prompt_version" value="practice-v1"');
   expect(preview.text).toContain("30 visible turns");
+  // LIMITS823-06: a student whose terms set a limit sees it before starting.
+  f.practiceSessions.source.mockResolvedValueOnce({
+    ...source,
+    exchangeLimit: 8,
+  });
+  expect(
+    (await f.get(`/library/${source.contentId}/practice-session`)).text,
+  ).toContain("up to 8 response/comparison pairs, or 16 visible turns");
   expect(f.practiceSessions.start).not.toHaveBeenCalled();
   for (const kind of ["started", "replayed"] as const) {
     f.practiceSessions.start.mockResolvedValueOnce({ kind, sessionId });
@@ -301,7 +309,7 @@ it("rejects invalid response forms and forged fields without invoking an append"
     { expected_sequence: "0" },
     { expected_sequence: "1.5" },
     { expected_sequence: "999999999999999999" },
-    { expected_sequence: "17" },
+    { expected_sequence: "52" },
     { response: undefined },
     { response: ["a", "b"] },
     { response: " \n " },
@@ -417,6 +425,18 @@ it("escapes source, response and stored comparisons while preserving ordering an
   );
   expect(html).toContain("&lt;comparison 2&gt;");
   expect(html).toContain("2 of 15 saved pairs · 4 of 30 visible turns");
+  // LIMITS823-06: the student sees the limit this conversation started with.
+  const limited = practiceSessionPage(
+    { ...detail, exchangeLimit: 3, exchanges: pairs, nextSequence: 3 },
+    "csrf",
+  );
+  expect(limited).toContain("2 of 3 saved pairs · 4 of 6 visible turns");
+  expect(
+    practiceSessionPage(
+      { ...detail, exchangeLimit: 3, availability: "full", nextSequence: null },
+      "csrf",
+    ),
+  ).toContain("Session complete: 3 pairs / 6 visible turns.");
   expect(html).toContain('name="expected_sequence" value="3"');
   for (const availability of [
     "source-unavailable",

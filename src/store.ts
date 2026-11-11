@@ -289,6 +289,7 @@ export async function migrate(pool: Pool) {
       "136-invoice-retention-expiry.sql",
       "137-assignment-consent-versions.sql",
       "138-coaching-agreed-changes.sql",
+      "139-student-session-practice-limits.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

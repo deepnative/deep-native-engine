@@ -13,7 +13,8 @@ export function coachPracticeState(
 ): CoachPracticeState {
   return {
     kind: "ready",
-    // The snapshot already keeps only current grants with 60 free minutes.
+    // The snapshot already keeps only current grants with enough free minutes
+    // for one session of this student (60 unless their terms say otherwise).
     coachMinutes: snapshot.grants.some(
       (grant) => grant.category === "coach_minutes",
     ),
