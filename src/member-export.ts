@@ -697,6 +697,13 @@ const sections = {
     WHERE e.owner_principal_id=$1 AND e.quarantine_state<>'deleting'`,
     "d.id",
   ),
+  // v48 appends #94: changes staff agreed with the member (early release,
+  // refund or another change) and why, never which administrator.
+  coachingAgreedChanges: section(
+    'kind,agreed,reason,created_at AS "recordedAt"',
+    "coaching_agreed_changes WHERE owner_id=$1",
+    "id",
+  ),
 } as const;
 /** Section SQL, shared with the member-authorized operator download (#40). */
 export const MEMBER_EXPORT_SECTIONS = sections;
@@ -712,7 +719,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v47";
+  version: "local-member-records-v48";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -846,7 +853,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v47",
+          version: "local-member-records-v48",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

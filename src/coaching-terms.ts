@@ -262,54 +262,67 @@ async function allowanceBalances(
     : null;
 }
 
+/**
+ * Runs one coaching read or write as the signed-in student, or as a platform
+ * administrator when `admin` is set. Anyone else is denied.
+ */
+export async function coachingRun<T>(
+  pool: Pool,
+  token: string,
+  admin: boolean,
+  use: (tx: PracticeTransaction, actor: string) => Promise<TermsResult<T>>,
+): Promise<TermsResult<T>> {
+  if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token))
+    return fail("denied");
+  try {
+    return await practiceTransaction(pool, async (tx) => {
+      const actor = (
+        await tx.query<{ id: string; kind: string; expires: Date }>(
+          "SELECT id,kind,expires_at AS expires FROM principals WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR UPDATE",
+          [hash(token)],
+        )
+      ).rows[0];
+      if (!actor || actor.kind !== (admin ? "staff" : "member"))
+        throw new PracticeLifetimeFailure("denied");
+      await tx.observe([actor.expires]);
+      if (admin) {
+        const role = (
+          await tx.query<{ role: string }>(
+            "SELECT role FROM authorized_staff_profiles WHERE principal_id=$1 FOR SHARE",
+            [actor.id],
+          )
+        ).rows[0];
+        if (role?.role !== "platform_admin")
+          throw new PracticeLifetimeFailure("denied");
+      }
+      const result = await use(tx, actor.id);
+      await tx.observe([actor.expires]);
+      return result;
+    });
+  } catch (error) {
+    return fail(
+      error instanceof PracticeLifetimeFailure && error.kind === "denied"
+        ? "denied"
+        : "unavailable",
+    );
+  }
+}
+/** Denies unless the ID is a current student whose account isn't being deleted. */
+export async function activeStudent(tx: PracticeTransaction, id: string) {
+  const found = await tx.query(
+    "SELECT 1 FROM principals p JOIN learners l ON l.id=p.id JOIN workspaces w ON w.id=p.id AND w.owner_principal_id=p.id AND w.deleting_at IS NULL WHERE p.id=$1 AND p.kind='member' AND p.revoked_at IS NULL FOR SHARE OF p",
+    [id],
+  );
+  if (!found.rowCount) throw new PracticeLifetimeFailure("denied");
+}
+
 export function coachingTermsStore(pool: Pool) {
-  async function run<T>(
+  const run = <T>(
     token: string,
     admin: boolean,
     use: (tx: PracticeTransaction, actor: string) => Promise<TermsResult<T>>,
-  ): Promise<TermsResult<T>> {
-    if (typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token))
-      return fail("denied");
-    try {
-      return await practiceTransaction(pool, async (tx) => {
-        const actor = (
-          await tx.query<{ id: string; kind: string; expires: Date }>(
-            "SELECT id,kind,expires_at AS expires FROM principals WHERE token_hash=$1 AND revoked_at IS NULL AND expires_at>clock_timestamp() FOR UPDATE",
-            [hash(token)],
-          )
-        ).rows[0];
-        if (!actor || actor.kind !== (admin ? "staff" : "member"))
-          throw new PracticeLifetimeFailure("denied");
-        await tx.observe([actor.expires]);
-        if (admin) {
-          const role = (
-            await tx.query<{ role: string }>(
-              "SELECT role FROM authorized_staff_profiles WHERE principal_id=$1 FOR SHARE",
-              [actor.id],
-            )
-          ).rows[0];
-          if (role?.role !== "platform_admin")
-            throw new PracticeLifetimeFailure("denied");
-        }
-        const result = await use(tx, actor.id);
-        await tx.observe([actor.expires]);
-        return result;
-      });
-    } catch (error) {
-      return fail(
-        error instanceof PracticeLifetimeFailure && error.kind === "denied"
-          ? "denied"
-          : "unavailable",
-      );
-    }
-  }
-  async function student(tx: PracticeTransaction, id: string) {
-    const found = await tx.query(
-      "SELECT 1 FROM principals p JOIN learners l ON l.id=p.id JOIN workspaces w ON w.id=p.id AND w.owner_principal_id=p.id AND w.deleting_at IS NULL WHERE p.id=$1 AND p.kind='member' AND p.revoked_at IS NULL FOR SHARE OF p",
-      [id],
-    );
-    if (!found.rowCount) throw new PracticeLifetimeFailure("denied");
-  }
+  ) => coachingRun<T>(pool, token, admin, use);
+  const student = activeStudent;
   const current = async (tx: PracticeTransaction, ownerId: string) =>
     (
       await tx.query<CoachingTerms>(

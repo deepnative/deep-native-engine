@@ -33,6 +33,13 @@ import {
   TERMS_FIELDS,
   type CoachingTermsStore,
 } from "./coaching-terms.ts";
+import {
+  adminAgreedSection,
+  AGREED_FIELDS,
+  memberAgreedSection,
+  parseAgreedChange,
+  type CoachingAgreedChangesStore,
+} from "./coaching-agreed-changes.ts";
 import type {
   InvoiceFailure,
   SavedCoachingMonth,
@@ -139,6 +146,7 @@ export function mountCoachingRoutes(
     secret: string;
     billingProfiles?: BillingProfileStore;
     coachingTerms?: CoachingTermsStore;
+    agreedChanges?: CoachingAgreedChangesStore;
   },
 ) {
   const token = (res: Response) => res.locals.token as string;
@@ -279,6 +287,21 @@ export function mountCoachingRoutes(
           );
         }
       }
+      // #94 AGREED94-01/03: what staff and the student agreed, append-only.
+      if (options.agreedChanges) {
+        const a = admin
+          ? await options.agreedChanges.forStudent(token(res), v.ownerId)
+          : await options.agreedChanges.own(token(res));
+        if (a.kind !== "ready")
+          return failure(res, a.kind === "invalid" ? "denied" : a.kind, admin);
+        body += admin
+          ? adminAgreedSection(
+              a.value,
+              `${base}/agreed-change`,
+              `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}`,
+            )
+          : memberAgreedSection(a.value);
+      }
       if (admin)
         body += `<h2>Set member rate</h2><form method="post" action="${base}/rate">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.rateVersion)}<label>Effective month<input type="month" name="effectiveMonth" value="${v.month}" required></label><label>Hourly rate (CAD)<input name="rate" inputmode="decimal" required></label><button>Save hourly rate</button></form>`;
       if (e)
@@ -344,6 +367,22 @@ export function mountCoachingRoutes(
     });
     return r.kind === "ready"
       ? res.redirect(303, `${adminPath}/${ownerId}`)
+      : failure(res, r.kind, true);
+  });
+  // #94 AGREED94-01/02/04/05: a platform administrator records an agreed change.
+  app.post(`${adminPath}/:ownerId/agreed-change`, async (req, res) => {
+    if (!valid(req, res, [...AGREED_FIELDS])) return;
+    if (!options.agreedChanges) return failure(res, "unavailable", true);
+    const values = parseAgreedChange(req.body);
+    if (values === null) return failure(res, "invalid", true);
+    const ownerId = (req.params as Record<string, string>).ownerId!;
+    const r = await options.agreedChanges.record(token(res), {
+      ...values,
+      ownerId,
+      operationId: req.body.operationId,
+    });
+    return r.kind === "ready"
+      ? res.redirect(303, `${adminPath}/${ownerId}#agreed-changes`)
       : failure(res, r.kind, true);
   });
   // #318 TERMSINV318-01..06: one invoice for the current terms version.

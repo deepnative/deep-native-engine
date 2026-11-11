@@ -48,9 +48,19 @@ Renewal is the renewal date an administrator set, nothing more. Nothing renews o
 
 No migration and no export change. Tests: RENEW317-01..04 in `tests/unit/coaching-terms.test.ts` and `tests/integration/coaching-terms.test.ts`.
 
+## Agreed changes ([#94](https://github.com/deepnative/deep-native-engine/issues/94))
+
+There are no automatic cancellation or refund rules (owner decisions of 9 and 10 November 2026). A student who wants to end coaching early, get a refund or change something else contacts info@deepnative.io. When staff and the student agree, a platform administrator records it under **Changes agreed with this student** on the student's page: the kind (early release, refund or other change), what was agreed and the reason, each up to 1,000 characters, with a confirmation tick (migration 138, `coaching_agreed_changes`).
+
+- A record is kept as written. It can't be edited or removed, and the same form sent twice is one record.
+- Recording changes nothing else. To end coaching early, the administrator also saves new coaching terms with the agreed end date, which writes off the unused units of the shortened period as described above. To refund, the administrator also records the offline refund on the invoice, where it joins the payment record.
+- The student sees their records, read-only, under **Changes agreed with you** on `/account/coaching`, with the same contact address. They are in Download my records (`coachingAgreedChanges`, export v48) without the administrator, and deleting the account removes them.
+
+Tests: AGREED94-01..06 in `tests/integration/coaching-agreed-changes.test.ts` and `tests/unit/coaching-agreed-changes.test.ts`, the export index in `tests/unit/member-export.test.ts`, and the provisional browser journeys F-ROADMAP-04-D, F-ROADMAP-09-B and F-BUILD-05-C in `tests/full-e2e/coaching-agreed-changes.spec.ts`.
+
 ## What this doesn't do
 
-- The renewal date is shown and listed for administrators, never acted on: no automatic renewal, acceptance, charge, grant or invoice. There is no cancellation flow (#319).
+- The renewal date is shown and listed for administrators, never acted on: no automatic renewal, acceptance, charge, grant or invoice. There is no cancellation flow (#319); an agreed change is a staff record and takes effect only through new terms or a recorded refund.
 - Nothing is invoiced automatically. An administrator issues a terms invoice on the student's page (#318). Monthly coaching hours and their invoices work as before ([MONTHLY-COACHING-INVOICES.md](MONTHLY-COACHING-INVOICES.md)).
 
 Tests: TERMS316-01..07 in `tests/integration/coaching-terms.test.ts`; export index in `tests/unit/member-export.test.ts`. Allowance units: ALLOW27-01..08 in `tests/integration/coaching-allowances.test.ts` and `tests/unit/coaching-allowances.test.ts`; browser journey L330 in `tests/e2e/coaching-invoices.spec.ts`. TERMSINV318-01..06 and -08 in `tests/integration/coaching-terms-invoices.test.ts`, TERMSINV318-07 and -08 in `tests/unit/coaching-terms.test.ts` and browser journey L331 in `tests/e2e/coaching-terms-invoice.spec.ts`. Calendar edges of the period (clock changes, leap day, month end, today and yesterday in Toronto, the renewals list's UTC turnover): TERMDATE42-01..05 in `tests/integration/coaching-term-date-boundaries.test.ts` (QA-004 M15).
