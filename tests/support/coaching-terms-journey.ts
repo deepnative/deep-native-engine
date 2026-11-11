@@ -280,3 +280,120 @@ export async function daysLater(pool: Pool, ownerId: string, days: number) {
 }
 
 export const newOperation = () => randomUUID();
+
+// What staff and the student agreed (#94): append-only records beside the terms.
+export const agreedSection = (page: Page) =>
+  page.locator('section[aria-labelledby="agreed-changes"]');
+
+export interface AgreedForm {
+  kind: "Early release" | "Refund" | "Other change";
+  agreed: string;
+  reason: string;
+}
+/** The administrator records one agreed change on the student's coaching page. */
+export async function recordAgreedChange(
+  admin: Page,
+  origin: string,
+  reference: string,
+  change: AgreedForm,
+) {
+  await admin.goto(`${origin}/operator/coaching/${reference}`);
+  const form = agreedSection(admin).locator("form");
+  await form.getByLabel("Kind of change").selectOption({ label: change.kind });
+  await form.getByLabel("What was agreed").fill(change.agreed);
+  await form.getByLabel("Reason").fill(change.reason);
+  await form
+    .getByRole("checkbox", {
+      name: "This is what the student and staff agreed.",
+    })
+    .check();
+  await form.getByRole("button", { name: "Record agreed change" }).click();
+  await expect(admin).toHaveURL(
+    `${origin}/operator/coaching/${reference}#agreed-changes`,
+  );
+}
+
+/** Every agreed-change record of one student as stored, oldest first. */
+export async function storedAgreed(pool: Pool, ownerId: string) {
+  return (
+    await pool.query<{
+      id: string;
+      kind: string;
+      agreed: string;
+      reason: string;
+      recordedAt: string;
+    }>(
+      `SELECT id,kind,agreed,reason,created_at::text AS "recordedAt"
+       FROM coaching_agreed_changes WHERE owner_id=$1 ORDER BY created_at,id`,
+      [ownerId],
+    )
+  ).rows;
+}
+
+/** One invoice's amounts and its receipt and refund rows as stored, oldest first. */
+export async function invoiceMoney(pool: Pool, invoiceId: string) {
+  return (
+    await pool.query<{
+      paidCents: number;
+      refundedCents: number;
+      rows: string[];
+    }>(
+      `SELECT i.paid_cents::integer AS "paidCents",i.refunded_cents::integer AS "refundedCents",
+        COALESCE(array_agg(p.id||':'||p.kind||':'||p.amount_cents ORDER BY p.recorded_at,p.id)
+          FILTER (WHERE p.id IS NOT NULL),'{}') AS rows
+       FROM simple_invoices i LEFT JOIN simple_invoice_payments p ON p.invoice_id=i.id
+       WHERE i.id=$1 GROUP BY i.id`,
+      [invoiceId],
+    )
+  ).rows[0]!;
+}
+
+/** The administrator records money received offline for one invoice. */
+export async function recordOfflinePayment(
+  admin: Page,
+  origin: string,
+  invoiceId: string,
+  amount: string,
+) {
+  await admin.goto(`${origin}/operator/invoices/${invoiceId}`);
+  const form = admin.locator('form[action$="/payment"]');
+  await form.getByLabel("Amount received (CAD)").fill(amount);
+  await form
+    .getByLabel("Received on", { exact: true })
+    .fill(new Date().toISOString().slice(0, 10));
+  await form.getByLabel("Evidence reference").fill("Invented e-Transfer");
+  await form
+    .getByRole("checkbox", { name: /I verified these funds were received/ })
+    .check();
+  await form.getByRole("button", { name: "Record offline payment" }).click();
+  await expect(
+    admin.getByRole("table", { name: "Recorded receipts and refunds" }),
+  ).toBeVisible();
+}
+
+/** The administrator records a refund that was sent offline for one invoice. */
+export async function recordOfflineRefund(
+  admin: Page,
+  origin: string,
+  invoiceId: string,
+  amount: string,
+) {
+  await admin.goto(`${origin}/operator/invoices/${invoiceId}`);
+  const form = admin.locator('form[action$="/refund"]');
+  await form.getByLabel("Amount refunded (CAD)").fill(amount);
+  await form
+    .getByLabel("Refunded on")
+    .fill(new Date().toISOString().slice(0, 10));
+  await form
+    .getByLabel("Evidence reference")
+    .fill("Invented refund e-Transfer");
+  await form
+    .getByRole("checkbox", { name: /I confirm this refund was sent/ })
+    .check();
+  await form.getByRole("button", { name: "Record offline refund" }).click();
+  await expect(
+    admin
+      .getByRole("table", { name: "Recorded receipts and refunds" })
+      .locator("tbody tr"),
+  ).not.toHaveCount(0);
+}

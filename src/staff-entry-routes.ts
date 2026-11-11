@@ -103,6 +103,7 @@ function links(role: StaffRole, tools: StaffTools) {
       ],
       [tools.experts, "/operator/experts", "Synthetic expert registry"],
       [tools.capacity === true, "/operator/staff-capacity", "Staff capacity"],
+      [tools.capacity === true, "/operator/delivery-cost", "Delivery cost"],
       [
         tools.recordAccess === true,
         "/operator/member-records",

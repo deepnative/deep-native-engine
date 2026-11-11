@@ -254,7 +254,7 @@ it("RECACCESS-07 the member sees each download, without who made it, in their hi
   });
   const exported = await exporter.exportOwned(owner.token);
   if (exported.kind !== "ready") throw Error("Owner export missing");
-  expect(exported.payload.version).toBe("local-member-records-v48");
+  expect(exported.payload.version).toBe("local-member-records-v49");
   expect(exported.payload.records.recordAccess).toEqual([
     expect.objectContaining({
       scope: "billing",
