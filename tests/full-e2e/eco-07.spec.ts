@@ -297,13 +297,18 @@ test("[F-ECO-07-C] cancelling a monthly bundle stops future invoices, the agreem
       await member.goto(f.origin + "/account");
       await member.getByLabel("Your starting point").selectOption("technical");
       await member.getByRole("button", { name: "Save my profile" }).click();
-      const background = (
-        await f.pool.query<{ background: string }>(
-          "SELECT background FROM learners WHERE id=$1",
-          [reference],
+      // Wait for the save itself before comparing anything.
+      await expect
+        .poll(
+          async () =>
+            (
+              await f.pool.query<{ background: string }>(
+                "SELECT background FROM learners WHERE id=$1",
+                [reference],
+              )
+            ).rows[0]!.background,
         )
-      ).rows[0]!.background;
-      expect(background).toBe("technical");
+        .toBe("technical");
       // No agreement, invoice or service allowance appears.
       expect(await storedPlans(f, reference)).toEqual(before.plans);
       expect(await invoiceCycles(f.pool, reference)).toEqual(before.invoices);

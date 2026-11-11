@@ -407,6 +407,13 @@ test("[F-BUILD-08-C] owner deletion removes configured synthetic source and deri
     await page.goto("/evidence/local-ai");
     const summaryText = (await aiItem.innerText()).trim();
     expect(summaryText).toContain(sampleName);
+    // Control for check 2: before the deletion the member's own export does
+    // hold this permission receipt and its AI job.
+    const exportedBefore = await page.request.get("/api/member/export");
+    expect(exportedBefore.status()).toBe(200);
+    const exportedBeforeText = await exportedBefore.text();
+    expect(exportedBeforeText).toContain(receiptIds[0]!);
+    for (const jobId of aiJobIds) expect(exportedBeforeText).toContain(jobId);
     expect(await readFile(path(sourceRow.storage_key))).toEqual(source);
     expect(await readFile(path(derivativeRow.storage_key))).toEqual(derivative);
     const issued = await page.request.post(

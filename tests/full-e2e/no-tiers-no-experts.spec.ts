@@ -360,7 +360,7 @@ test("[F-ECO-07-B] an administrator sets the member's terms version; the member 
       await member.getByLabel("Your starting point").selectOption("technical");
       await member.getByRole("button", { name: "Save my direction" }).click();
       // The change of background really was saved before anything is compared.
-      expect(await background()).toBe("technical");
+      await expect.poll(background).toBe("technical");
       await member.goto(f.origin + "/readiness/offers");
       await expect(member.locator("main")).toContainText(
         "A professional background never assigns the Professional coaching package.",

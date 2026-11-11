@@ -2,7 +2,7 @@
 
 Issue [#44](https://github.com/deepnative/deep-native-engine/issues/44) (CTP-024). Written 11 November 2026 for main `92015e5a`, and brought up to main `f918d421` (tree `d369a530`) the same day, after the fixes for the independent review merged in [PR #827](https://github.com/deepnative/deep-native-engine/pull/827). The gate result for the commit that makes this update is in the #44 note for it.
 
-**Result: Phase B is built and rehearsed as a demo with invented data. It is not accepted as a release, and launch is no-go.** The automated register passes in full. An independent review of the 100 full-MVP browser tests found 37 weaknesses, six of them blocking; all 37 are fixed and the formal run passes again, and the outcome of the re-review of those fixes is [below](#re-review-of-the-fixes). The owner accepted two remaining gaps as known limits. The owner has not accepted the evidence. Nothing here was checked with real members, real experts, a real AI provider, payment processing or a signed-in session on the hosted site.
+**Result: Phase B is built and rehearsed as a demo with invented data. It is not accepted as a release, and launch is no-go.** The automated register passes in full. An independent review of the 100 full-MVP browser tests found 37 weaknesses, six of them blocking; all 37 were fixed and the formal run passed again. A read-only re-review confirmed the six blocking fixes and 28 of the 31 weak ones, found no regression, and added 16 weak observations; its follow-up fixes are self-reviewed ([below](#re-review-of-the-fixes)). The owner accepted two remaining gaps as known limits. The owner has not accepted the evidence. Nothing here was checked with real members, real experts, a real AI provider, payment processing or a signed-in session on the hosted site.
 
 ## What this report does not establish
 
@@ -83,9 +83,26 @@ Two gaps were left after the fixes. On 11 November 2026 the owner decided to rec
 
 ### Re-review of the fixes
 
-<!-- RE-REVIEW OUTCOME: fill from the coordinator's message before merging. -->
+Three read-only reviewers re-read the PR #827 fixes on main `f918d421` on 11 November 2026, one each for the BUILD, ECO and ROADMAP families, with the two product changes. **They ran nothing:** their verdicts come from reading the tests and the product code.
 
-**Pending.** Three independent reviewers are re-reading the PR #827 fixes. Their result is not in yet, so this report does not say whether the fixes hold.
+|                                | Result                                          |
+| ------------------------------ | ----------------------------------------------- |
+| Blocking findings (6)          | 6 confirmed fixed                               |
+| Weak findings (31)             | 28 confirmed fixed, 2 partly fixed, 1 not fixed |
+| Regressions or new blocking    | None                                            |
+| New weak observations          | 16                                              |
+| First review's 32 lesser notes | Outside the fix scope; mostly not addressed     |
+
+- **Partly fixed:** F-ROADMAP-02-A (a refusal with no positive control) and F-ROADMAP-08-D (an assertion that matched nothing the product shows). Both are fixed in the follow-up below. The role-fit part of F-ROADMAP-08-D is the known limit.
+- **Not fixed:** F-BUILD-07-D, the other known limit.
+
+**Follow-up fixes.** The reviewers listed 13 items to fix. Each was checked against the code: 12 were real and are fixed, and one (F-ECO-05-A) needed no change because the test's split follows where the product records the rights confirmation. Seven more items are recorded without change. The list is in [QA-002](QA-002-JOURNEY-TRACEABILITY.md#11-november-2026-independent-re-review-of-the-fixes).
+
+- One product change: the "Insufficient evidence" line counts an empty response as no words, and the response that fills a conversation is told the conversation is full, not to respond again.
+- A limit of that line, recorded and not fixed: it counts runs of characters between spaces, so five filler words escape it and a sentence in a script without spaces counts as one word.
+- The rest are test changes: positive controls, a contrast for participation measures, page actions in place of store calls and hand-built requests, and waits before two database reads.
+
+**These follow-up fixes are self-reviewed.** The delivery session wrote and reviewed them; no independent reviewer has read them. The full gate and the formal release run on the commit that carries them are reported on [#94](https://github.com/deepnative/deep-native-engine/issues/94) and #44.
 
 **The evidence is not accepted.** The fixes were written by the delivery session. Accepting the full-MVP evidence, with its limits, is the owner's decision and has not been made.
 
@@ -136,7 +153,8 @@ The walk is shallow next to the automated register: it opens pages and follows o
 No release-blocking product defect is open from the gate, the release run or the walk. Open items:
 
 - **Two known limits, accepted by the owner and not built:** a template's supported status is declared by the editor (F-BUILD-07-D), and catalog content has no delivery-role field (F-ROADMAP-08-D).
-- **Re-review of the review fixes:** pending, see above.
+- **Follow-up fixes from the re-review are self-reviewed**, and seven recorded observations are left as they are (QA-002).
+- **The five-word rule for a sparse practice response** counts runs of characters between spaces.
 - **Metrics disclosure.** A reviewed production disclosure policy and a repeated-snapshot inference check were never done (QA-004 row M17). No issue is parked for this; it needs the privacy review on #12 before real data.
 - **Nothing checked at all** for AI context injection (QA-004 M11, #783) and the formal review transaction (M22, #648), because neither exists.
 - **Cosmetic, not fixed:** on Pixel 7 the "Local enrollment simulation" note on My courses has no gap under the header line, and the invoice's payment table is wider than the screen and scrolls inside its own box.
@@ -146,17 +164,17 @@ The final state of each risk row is in [QA-004](QA-004-RISK-TEST-MATRIX.md#final
 
 ## Acceptance criteria of #44
 
-| Criterion                                                                                                  | State                                                                                                                                                                                                                             |
-| ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Run all applicable source journeys plus ECO-01 to ECO-08 for IT, non-IT professional and general learners  | Done with invented data: the full-MVP register covers the ROADMAP, BUILD and ECO families, and the walk used all three starting points. The six cases the review found unproven are fixed; the re-review of those fixes is above. |
-| Desktop, mobile and keyboard checks cover complete flows                                                   | Desktop Chromium and Pixel 7 cover every journey. Keyboard is covered only by L53 and the accessibility spec ([QA-005](QA-005-LOCAL-KEYBOARD.md)); the owner excluded wider accessibility work from this release.                 |
-| Report live, test, manual and disabled state separately; defects and human-coverage gaps explicit          | The tables above.                                                                                                                                                                                                                 |
-| First slice alone fails this gate                                                                          | Yes, see above.                                                                                                                                                                                                                   |
-| At least 99% journey coverage, 100% critical, all required tests passing, at least 99% on each unit metric | Met by the automated counts above. "Passing" was not the same as "proven" for six cases until the fixes; whether it now is rests on the re-review above and the owner's acceptance.                                               |
+| Criterion                                                                                                  | State                                                                                                                                                                                                                                     |
+| ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Run all applicable source journeys plus ECO-01 to ECO-08 for IT, non-IT professional and general learners  | Done with invented data: the full-MVP register covers the ROADMAP, BUILD and ECO families, and the walk used all three starting points. The six cases the review found unproven are fixed, and the read-only re-review confirmed all six. |
+| Desktop, mobile and keyboard checks cover complete flows                                                   | Desktop Chromium and Pixel 7 cover every journey. Keyboard is covered only by L53 and the accessibility spec ([QA-005](QA-005-LOCAL-KEYBOARD.md)); the owner excluded wider accessibility work from this release.                         |
+| Report live, test, manual and disabled state separately; defects and human-coverage gaps explicit          | The tables above.                                                                                                                                                                                                                         |
+| First slice alone fails this gate                                                                          | Yes, see above.                                                                                                                                                                                                                           |
+| At least 99% journey coverage, 100% critical, all required tests passing, at least 99% on each unit metric | Met by the automated counts above. "Passing" was not the same as "proven" for six cases until the fixes, which the re-review confirmed. Acceptance is the owner's decision.                                                               |
 
 ## What a release would still need
 
-1. The re-review of the review fixes, with any defect it finds fixed and re-run ([#94](https://github.com/deepnative/deep-native-engine/issues/94)).
+1. If the owner wants it, an independent read of the follow-up fixes made after the re-review ([#94](https://github.com/deepnative/deep-native-engine/issues/94)).
 2. The owner's decision on accepting the full-MVP evidence with its limits, including the two known limits (#94).
 3. Launch prerequisites: legal review of the terms, the Azure backup setting, a production restore rehearsal and hosted storage reconciliation (#12, #45).
 4. A signed-in demonstration on the hosted site by someone allowed to sign in there.

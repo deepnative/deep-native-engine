@@ -36,6 +36,12 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
   const assignmentTitle = `Invented delivery risk register ${n}`;
   const rubric =
     "Check scope, dependencies, risks, named owners and next actions against the invented delivery brief; no code or software implementation is requested.";
+  // A coding assignment for the same audience, as a contrast: its rubric is
+  // the one this member's noncoding attempt must not be given.
+  const codingId = `PMR-22${n}`;
+  const codingTitle = `Invented delivery script task ${n}`;
+  const codingRubric =
+    "Check that the invented script runs, its functions are tested and the code review comments are resolved.";
   const response =
     "For the invented launch, I would name a scope owner, log the design dependency, assign the schedule risk to Sam and ask Alex to confirm the next action.";
   const auth = authorizationStore(pool);
@@ -74,6 +80,15 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
       title: assignmentTitle,
       body: "Write a noncoding risk register for the invented project. Identify owners, dependencies and next actions.",
       rubric,
+      rubricVersion: 1,
+    },
+    {
+      ...base,
+      id: codingId,
+      kind: "assignment" as const,
+      title: codingTitle,
+      body: "Write a short script that totals the invented delivery estimates, with tests.",
+      rubric: codingRubric,
       rubricVersion: 1,
     },
   ] satisfies DraftContent[]) {
@@ -121,6 +136,21 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
       page.getByRole("heading", { name: "Versioned rubric 1" }),
     ).toBeVisible();
     await expect(page.locator("pre.content-text").last()).toContainText(rubric);
+    await expect(page.locator("main")).not.toContainText(codingRubric);
+    // Control: the coding assignment is offered too, and its own page does
+    // show the coding rubric, so its absence below means something.
+    await page.goto("/learn");
+    await choices
+      .getByRole("listitem")
+      .filter({ hasText: codingTitle })
+      .getByRole("link", { name: "Read sample" })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: codingTitle }),
+    ).toBeVisible();
+    await expect(page.locator("pre.content-text").last()).toContainText(
+      codingRubric,
+    );
     await page.goto("/learn");
     await choices
       .getByRole("button", { name: `Choose ${assignmentTitle}` })
@@ -140,8 +170,8 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
     await expect(
       page.getByText("NO FORMAL REVIEW", { exact: false }),
     ).toBeVisible();
-    // The submitted attempt itself shows this assignment's own rubric, and no
-    // coding assessment.
+    // The submitted attempt itself shows this assignment's own rubric, and
+    // not the coding assignment's.
     const expectOwnRubric = async () => {
       const shown = page.getByRole("region", {
         name: "Original assignment rubric",
@@ -149,9 +179,7 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
       });
       await expect(shown).toContainText("Original rubric version 1");
       await expect(shown.locator("pre.content-text")).toHaveText(rubric);
-      await expect(page.locator("main")).not.toContainText(
-        /code review|coding rubric|unit tests/i,
-      );
+      await expect(page.locator("main")).not.toContainText(codingRubric);
     };
     await expectOwnRubric();
     const saved = await pool.query(

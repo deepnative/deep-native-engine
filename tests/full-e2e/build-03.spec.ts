@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { authorizationStore } from "../support/administrator-fixture.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 import { requiredCheck } from "../support/required-check.ts";
 import { testPool } from "../support/database.ts";
 import { signIn } from "../support/local-ai-journey.ts";
@@ -16,6 +17,9 @@ import {
 
 const pool = testPool();
 test.afterAll(async () => pool.end());
+// An operator signs in here, so traces are off except in a full-release run,
+// which needs one per execution: see ../support/staff-trace.ts.
+test.use({ trace: staffTrace });
 
 const lockSlot =
   "SELECT 1 FROM expert_availability_slots WHERE id=$1 FOR UPDATE";
@@ -170,7 +174,7 @@ test("[F-BUILD-03-B] two attempts race for one member's final credit and exactly
   }
 });
 
-test("[F-BUILD-03-D] the race loser can recover and the withdrawn winner's history stays auditable", async ({
+test("[F-BUILD-03-D] the race loser can recover and the staff-cancelled winner's history stays auditable", async ({
   browser,
 }, info) => {
   test.setTimeout(60_000);

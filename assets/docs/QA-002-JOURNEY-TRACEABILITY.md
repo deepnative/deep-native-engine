@@ -258,7 +258,43 @@ Ten read-only reviewers judged each full-MVP browser test against its required c
 
 The formal release run passed on the fixed tests: `npm run verify:full-e2e` on `2b7c7df4`, 100 of 100 cases, 94 of 94 critical, 200 executions, run `29a10b9c-299d-4881-b9b1-82271696de91`. The fixes merged in [PR #827](https://github.com/deepnative/deep-native-engine/pull/827) as main `f918d421`.
 
-These fixes were written by the delivery session, with the review's findings as the standard. The outcome of their independent re-review is in the [Phase B release report](CTP-024-PHASE-B-RELEASE-REPORT.md#re-review-of-the-fixes).
+These fixes were written by the delivery session, with the review's findings as the standard. Their independent re-review is the next section.
+
+## 11 November 2026: independent re-review of the fixes
+
+Three read-only reviewers re-read the PR #827 fixes on main `f918d421`, one each for the BUILD, ECO and ROADMAP families, with the two product changes. They ran nothing; their verdicts come from reading the tests and the product code. The full result is kept outside the repository in `deep-native-engine-evidence/full-mvp-fix-rereview-2026-11-11.md`.
+
+- **Blocking findings:** 6 of 6 confirmed fixed.
+- **Weak findings:** 28 of 31 confirmed fixed, 2 partly fixed (F-ROADMAP-02-A, F-ROADMAP-08-D) and 1 not fixed (F-BUILD-07-D). F-BUILD-07-D and the role-fit part of F-ROADMAP-08-D are the two known limits above.
+- No regression, no weakened or removed assertion, no wrong check number and no new blocking finding. The first review's 32 lesser notes were outside the fix scope and mostly stand.
+- **16 new weak observations.** The reviewers listed 13 items to fix and 7 to record only; both lists include the partly fixed and unfixed findings above.
+
+**Follow-up fixes.** Each of the 13 was checked against the code. Twelve were real and are fixed; one needed no change. These follow-up fixes were written and reviewed by the same delivery session and have not been reviewed independently. No case wording changed.
+
+- **F-ROADMAP-02-A check 3:** member A now submits the evidence for review, and a reviewer with an exact grant reads it on the staff feedback route before member B is refused there. The refusal is no longer a route closed to everyone.
+- **F-ROADMAP-08-D:** a coding assignment with its own rubric is published for the same audience. The member's noncoding attempt shows its own rubric and not the coding one, which the coding assignment's page does show. Role fit stays the known limit.
+- **Sparse practice response (product):** an empty response counts as no words, not one. The response that fills a conversation is told the conversation is full, not to respond again. Unit tests cover four against five words, the empty response and the stored comparison; an integration test reads the line from the stored comparison.
+- **"Test spending ceiling reached" page:** the unit test checks both links on both routes that show it.
+- **F-BUILD-08-C:** before the deletion, the member's export is shown to hold the permission receipt and the AI job, so their absence afterwards means something.
+- **F-BUILD-07-A:** the second rubric version is published through the editor pages, not by a store call.
+- **F-BUILD-03-C and F-BUILD-03-D:** both files follow the staff trace rule (`tests/support/staff-trace.ts`). The F-BUILD-03-D test title now says "staff-cancelled"; the title is not part of the mapping.
+- **F-ECO-02-B:** the reviewed meeting-actions assignment is read inside check 1. It asserts the page's reviewed-assignment mark and that assignment's own title, not a sentence every reviewed assignment carries.
+- **F-ECO-08-A:** the learning contrast moved into check 1. Check 2 gains its own: five members join a circle, both participation measures show "5-19", and the learning and contribution figures do not move.
+- **F-BUILD-09-C, F-ROADMAP-08-C, F-ECO-07-B and F-ECO-07-C:** the two reads of a saved background now wait for the save.
+- **F-ROADMAP-05-B:** the response that reaches the limit is sent with the page's own button. The hand-built form is proved on response 14.
+- **No change, F-ECO-05-A:** the product records the rights confirmation when the member submits, which is check 2's action. Check 1 proves the saved sources and rights notes and that the draft is not curated, so the split follows the product.
+
+**Recorded, not changed.** The first two come from the follow-up fixes; the rest are the reviewers' record-only items.
+
+- The five-word rule counts runs of characters between spaces. Five filler words escape it, and a sentence in a script written without spaces counts as one word.
+- F-ECO-08-A never shows a contribution count: a group needs 20 contributing owners, which the test does not create.
+- F-ECO-02-C sets up coverage by writing `expert_registry` rows directly and leaves three staff accounts behind.
+- F-ROADMAP-09-C asserts no discrepancy across the whole database. On a shared database it could fail; it could not pass wrongly.
+- F-ROADMAP-05-D check 3 changes the database-wide spending ceiling, which is safe only with one worker, as `playwright.full.config.ts` sets.
+- F-BUILD-10-A measures the narrow width for the reviewer controls only, and its keyboard pass stops at a saved draft.
+- F-ROADMAP-06-A: the "Draft not saved" heading is the same for every invalid draft.
+- F-ROADMAP-09-D has no positive control for the billing scope.
+- F-BUILD-07-D: the case text still says the status "matches the observed result". Changing it needs a re-approved mapping digest, so it is left, and the known limit above is recorded here only.
 
 ## November 2026 provisional tranche: BUILD-03-C
 

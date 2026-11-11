@@ -572,4 +572,51 @@ it("F-BUILD-06-B tells only a response of fewer than five words that its evidenc
     "your response has 3 words, too few",
   );
   expect(sparseNotice("I would check the claim first")).toBe("");
+  // The boundary: four words get the line, five do not.
+  expect(sparseNotice("I would check first")).toContain(
+    "your response has 4 words, too few",
+  );
+  expect(sparseNotice("I would check that first")).toBe("");
+  // Nothing at all is no words, not one.
+  for (const empty of ["", " \n\t "])
+    expect(sparseNotice(empty)).toContain("your response has 0 words, too few");
+  // The response that fills the conversation is not told to respond again.
+  const last = sparseNotice("ok", true);
+  expect(last).toBe(
+    "Insufficient evidence: your response has 1 word, too few to compare with the source. This conversation is now full. In a new one, add what you would do and one detail you checked.\n",
+  );
+  expect(sparseNotice("I would check the claim first", true)).toBe("");
+});
+it("F-BUILD-06-B saves the insufficient-evidence line in the sparse response's own comparison", async () => {
+  const respondAgain = "then respond again.";
+  const sparse = fixture();
+  expect(
+    await sparse.store.append("token", id, {
+      expectedSequence: 1,
+      response: "Not sure",
+    }),
+  ).toBe("saved");
+  expect(sparse.pairs[0]!.comparison).toContain(
+    "Insufficient evidence: your response has 2 words, too few",
+  );
+  expect(sparse.pairs[0]!.comparison).toContain(respondAgain);
+  const fuller = fixture();
+  await fuller.store.append("token", id, {
+    expectedSequence: 1,
+    response: "I would check the claim first",
+  });
+  expect(fuller.pairs[0]!.comparison).not.toContain("Insufficient evidence");
+  // The response that reaches the conversation's limit is told it is full.
+  const full = fixture({ row: { exchangeLimit: 2 }, pairs: [pair()] });
+  expect(
+    await full.store.append("token", id, {
+      expectedSequence: 2,
+      response: "Not sure",
+    }),
+  ).toBe("saved");
+  expect(full.pairs[1]!.comparison).toContain(
+    "Insufficient evidence: your response has 2 words, too few",
+  );
+  expect(full.pairs[1]!.comparison).toContain("This conversation is now full.");
+  expect(full.pairs[1]!.comparison).not.toContain(respondAgain);
 });
