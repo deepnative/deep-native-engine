@@ -102,7 +102,7 @@ async function allPages(credential: string) {
       MAX_MEMBER_EXPORT_BYTES,
     );
     expect(payload.page.recordCount).toBeLessThanOrEqual(100);
-    expect(payload.version).toBe("local-member-records-v47");
+    expect(payload.version).toBe("local-member-records-v48");
     for (const [name, rows] of Object.entries(payload.records))
       (records[name] ??= []).push(...rows);
     pages.push(payload);
