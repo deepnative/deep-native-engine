@@ -734,6 +734,16 @@ const sections = {
     "coaching_agreed_changes WHERE owner_id=$1",
     "id",
   ),
+  // v50 appends #40: what happened to the member's own support requests and
+  // when, including each time staff opened or listed one. Never the staff
+  // member, the grant, the reply reference, a private note or a grant change.
+  supportRequestEvents: section(
+    'e.id,e.request_id AS "requestId",e.action,e.occurred_at AS "occurredAt"',
+    `support_request_events e JOIN support_requests r ON r.id=e.request_id
+    WHERE r.member_id=$1 AND e.action IN ('received','acknowledged','replied',
+      'resolved','withdrawn','coverage-reviewed','detail-read','worklist-read')`,
+    "e.id",
+  ),
 } as const;
 /** Section SQL, shared with the member-authorized operator download (#40). */
 export const MEMBER_EXPORT_SECTIONS = sections;
@@ -749,7 +759,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v49";
+  version: "local-member-records-v50";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -883,7 +893,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v49",
+          version: "local-member-records-v50",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

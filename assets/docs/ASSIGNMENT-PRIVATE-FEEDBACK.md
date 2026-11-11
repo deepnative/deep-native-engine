@@ -55,4 +55,14 @@ If saving cannot be confirmed, the page retains the original request. **Inspect 
 | Copy, attempt and account deletion remove the consent record (#125)     | CONSENT125-04; versions integration test                                               |
 | `/terms` states the retention and that there is no appeal (#125)        | TERMS-09; demo-terms unit test                                                         |
 
+## What is not done (#125 close-out, 11 November 2026)
+
+The owner decided on 11 November 2026 to close #125 with its buildable parts delivered. These parts are not built or not shown:
+
+- **Appeal and formal assessment.** There is no appeal path and no formal, qualified or certified assessment. Both stay with parked [#648](https://github.com/deepnative/deep-native-engine/issues/648). Feedback here is one reviewer's private comment.
+- **Real reviewers.** Reviewer accounts in tests are invented. No real reviewer roster or response time exists ([#784](https://github.com/deepnative/deep-native-engine/issues/784), parked).
+- **Signed-in hosted demonstration.** The journey was never walked signed in on the hosted demo; workers don't sign in there. The evidence is the local tests with invented data.
+- **Privacy or legal review** of the consent wording and retention. The wording is the owner's decision of 10 November 2026, not a reviewed legal text ([#12](https://github.com/deepnative/deep-native-engine/issues/12)).
+- **External or hosted storage copies.** Deleting a copy is proven against the local database and storage only; the 30-day period for hosted backups is decided but not yet applied in Azure.
+
 The register extends the existing 213 approved journeys to 218, retaining every prior journey and full-MVP requirement. Desktop and mobile cases use invented data in isolated test runtimes. Actual test results, exact revisions, CI, deployment and the separate milestone demonstration belong in the issue closeout; this guide alone establishes none of those results.
