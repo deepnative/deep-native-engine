@@ -250,11 +250,15 @@ Ten read-only reviewers judged each full-MVP browser test against its required c
 - **Blocking, all six real and fixed:** F-BUILD-01-D, F-BUILD-06-B, F-BUILD-08-C, F-ECO-05-A, F-ROADMAP-05-B and F-ROADMAP-05-D. Two needed a product change: a practice response of fewer than five words now gets an "Insufficient evidence" line in its own comparison, which F-BUILD-06-B and F-ROADMAP-05-D assert against a fuller response. A third product change came from a weak finding: the "Test spending ceiling reached" page now links to the member's test units and AI requests (F-ROADMAP-05-D check 3).
 - **Weak, tightened:** the tests now drive the product through its pages or HTTP where they used store calls, add a positive control or a contrast beside each denial, and assert product output instead of fixed page copy.
 - **F-ECO-08-A** now also runs above the 20-member floor: with 25 accounts, the fifth self-assessed lesson makes the learning measures show "5-19" while the circle and contribution measures stay withheld. **F-ECO-02-B** also has the non-IT member read the reviewed meeting-actions assignment, where the product itself says no coding is required.
-- **Still open after the fixes:**
-  - F-BUILD-07-D: a workflow's supported status is declared by the editor and is not derived from a failed test record. The test now proves the download carries the failed record and the unverified state together; closing the gap needs a product rule or a note in the case register.
-  - F-ROADMAP-08-D: catalog content has no delivery-role field, so the assignment is tied to the member's goal and background only.
+- **Known limits, accepted by the owner on 11 November 2026** ([decision](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6807271423)). The fixes left two gaps. The owner decided that neither is built; both stay as limits of this evidence:
+  - F-BUILD-07-D: a workflow template's supported status is declared by the editor and is not derived from a failed test record. The test proves that the download carries the failed record and the unverified state together.
+  - F-ROADMAP-08-D: catalog content has no delivery-role field, so role fit is by the member's goal and background only.
 
-These fixes were written by the delivery session, with the review's findings as the standard. They have not been re-reviewed independently.
+  Neither case is reworded, and the mapping digest `686cb90f…` is unchanged. Recording these limits is not acceptance of the evidence.
+
+The formal release run passed on the fixed tests: `npm run verify:full-e2e` on `2b7c7df4`, 100 of 100 cases, 94 of 94 critical, 200 executions, run `29a10b9c-299d-4881-b9b1-82271696de91`. The fixes merged in [PR #827](https://github.com/deepnative/deep-native-engine/pull/827) as main `f918d421`.
+
+These fixes were written by the delivery session, with the review's findings as the standard. The outcome of their independent re-review is in the [Phase B release report](CTP-024-PHASE-B-RELEASE-REPORT.md#re-review-of-the-fixes).
 
 ## November 2026 provisional tranche: BUILD-03-C
 
