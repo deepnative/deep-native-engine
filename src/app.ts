@@ -1,4 +1,5 @@
 import type { CoachingTermsStore } from "./coaching-terms.ts";
+import type { CoachingAgreedChangesStore } from "./coaching-agreed-changes.ts";
 import { termsPage } from "./demo-terms.ts";
 import { mountAdministratorDiagnostics } from "./administrator-diagnostics-routes.ts";
 import { OUTSIDE_MARKET_MESSAGE, servedCountry } from "./customer-market.ts";
@@ -490,6 +491,7 @@ export function app(
     programs?: ProgramStore;
     simpleInvoices?: SimpleInvoiceStore;
     coachingTerms?: CoachingTermsStore;
+    agreedChanges?: CoachingAgreedChangesStore;
     invoiceRetention?: Pick<InvoiceRetention, "retainedUntil">;
     testProviderEvents?: TestProviderEvents;
     billingProfiles?: BillingProfileStore;

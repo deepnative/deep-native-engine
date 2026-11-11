@@ -4,7 +4,9 @@ import { app } from "../../src/app.ts";
 import type { ApplicationMode } from "../../src/adapters.ts";
 import {
   capacityGroup,
+  decodeAiUsage,
   decodeReviewTime,
+  decodeSupportTime,
   disabledStaffCapacityStore,
   type StaffCapacityStore,
 } from "../../src/staff-capacity.ts";
@@ -49,6 +51,25 @@ const token = "a".repeat(64),
       reviewMinutes: "0",
       preparationMinutes: "0",
     }),
+    supportTime: decodeSupportTime({
+      open: 1,
+      openMinutes: "20",
+      granted: 1,
+      grantedMinutes: "20",
+      operators: 1,
+      waiting: 0,
+      waitingMinutes: "0",
+      completed: 0,
+      supportMinutes: "0",
+      preparationMinutes: "0",
+    }),
+    aiUsage: decodeAiUsage({
+      estimated: 2,
+      estimatedPoints: "7",
+      settled: 1,
+      settledPoints: "3",
+      settledEstimatePoints: "4",
+    }),
   };
 const members = {
   session: vi.fn(async () => ({ kind: "none" })),
@@ -81,6 +102,8 @@ it("CAP-03 shows declared, committed and available minutes from the snapshot", a
   expect(r.headers["cache-control"]).toBe("no-store");
   expect(r.text).toMatch(/data-field="formal-review.available">120 min/);
   expect(r.text).toMatch(/data-field="coaching.available">Not recorded/);
+  // SUPCAP-03: support time is on the same page.
+  expect(r.text).toMatch(/data-field="support.open">20 min/);
 });
 
 it("CAP-08 live mode refuses before reading anything", async () => {
@@ -110,4 +133,35 @@ it("CAP-10 an unconfirmed snapshot shows no figures", async () => {
   const r = await read(application(disabledStaffCapacityStore()));
   expect(r.status).toBe(503);
   expect(r.text).toContain("could not be confirmed");
+});
+
+// #94 COST-01..03: the delivery cost page reads the same snapshot.
+it("COST-01/03 shows staff minutes and labelled AI estimates, and is refused like staff capacity", async () => {
+  const snapshot = vi.fn(async () => ({ kind: "ready" as const, value }));
+  const cost = "/operator/delivery-cost";
+  const r = await read(application({ snapshot }), cost);
+  expect(r.status).toBe(200);
+  expect(r.headers["cache-control"]).toBe("no-store");
+  expect(snapshot).toHaveBeenCalledWith(token);
+  expect(r.text).toContain("<h1>Delivery cost</h1>");
+  expect(r.text).toMatch(
+    /data-field="cost.aiEstimated">7 simulated cost points · estimate/,
+  );
+  expect((await read(application({ snapshot }, "live"), cost)).status).toBe(
+    404,
+  );
+  expect((await read(application({ snapshot }), cost + "?x=1")).status).toBe(
+    400,
+  );
+  for (const [kind, status] of [
+    ["denied", 403],
+    ["unavailable", 503],
+  ] as const) {
+    const refused = await read(
+      application({ snapshot: vi.fn(async () => ({ kind })) }),
+      cost,
+    );
+    expect(refused.status).toBe(status);
+    expect(refused.text).not.toMatch(/\d+ (min|simulated)/);
+  }
 });

@@ -405,7 +405,7 @@ test("[L105] all three audiences export ordered session pairs and withdraw all t
     await respond(page, second);
     const csrf = await page.locator('input[name="csrf"]').first().inputValue();
     const before = await exported(page);
-    expect(before.version).toBe("local-member-records-v48");
+    expect(before.version).toBe("local-member-records-v49");
     expect(before.records.practiceSessions).toEqual([
       expect.objectContaining({
         id: sessionId,

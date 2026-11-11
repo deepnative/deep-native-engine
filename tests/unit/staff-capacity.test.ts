@@ -2,8 +2,10 @@ import type { Pool } from "pg";
 import { expect, it, vi } from "vitest";
 import {
   capacityGroup,
+  decodeAiUsage,
   decodeReviewTime,
   decodeRosterFact,
+  decodeSupportTime,
   disabledStaffCapacityStore,
   readStaffCapacity,
   recordRoom,
@@ -12,6 +14,7 @@ import {
   type RosterFact,
 } from "../../src/staff-capacity.ts";
 import {
+  deliveryCostPage,
   staffCapacityPage,
   staffCapacityUnavailablePage,
 } from "../../src/staff-capacity-views.ts";
@@ -43,6 +46,25 @@ const reviewRow = {
   completed: 0,
   reviewMinutes: "0",
   preparationMinutes: "0",
+};
+const supportRow = {
+  open: 0,
+  openMinutes: "0",
+  granted: 0,
+  grantedMinutes: "0",
+  operators: 0,
+  waiting: 0,
+  waitingMinutes: "0",
+  completed: 0,
+  supportMinutes: "0",
+  preparationMinutes: "0",
+};
+const aiRow = {
+  estimated: 0,
+  estimatedPoints: "0",
+  settled: 0,
+  settledPoints: "0",
+  settledEstimatePoints: "0",
 };
 const rosterRow = {
   service: "coaching",
@@ -198,6 +220,8 @@ const asOf = new Date("2026-11-08T12:00:00Z");
 function respond(rows: {
   roster?: unknown[];
   review?: unknown[];
+  support?: unknown[];
+  ai?: unknown[];
   asOf?: unknown[];
   allowed?: unknown[];
 }) {
@@ -206,6 +230,10 @@ function respond(rows: {
       return { rows: rows.allowed ?? [{}] };
     if (sql.includes("WITH grants"))
       return { rows: rows.review ?? [reviewRow] };
+    if (sql.includes("FROM ai_usage_estimates"))
+      return { rows: rows.ai ?? [aiRow] };
+    if (sql.includes("FROM support_time_allocations"))
+      return { rows: rows.support ?? [supportRow] };
     if (sql.includes("FROM expert_registry e"))
       return { rows: rows.roster ?? [] };
     if (sql.includes('now() AS "asOf"'))
@@ -241,6 +269,7 @@ it("CAP-01/09 reads one snapshot, rolls back and releases cleanly", async () => 
         { service: "formal-review", status: "empty" },
       ],
       reviewTime: { status: "empty" },
+      supportTime: { status: "empty", open: 0 },
     },
   });
   expect(f.queries[0]).toBe("BEGIN ISOLATION LEVEL REPEATABLE READ");
@@ -330,9 +359,226 @@ it("CAP-02/09 the page labels unverified minutes and names no one", async () => 
     asOf,
     groups: [capacityGroup("coaching", []), capacityGroup("formal-review", [])],
     reviewTime: decodeReviewTime(reviewRow),
+    supportTime: decodeSupportTime(supportRow),
+    aiUsage: decodeAiUsage(aiRow),
   });
   expect(empty).toMatch(/data-field="coaching.available">Not recorded/);
   expect(empty).toContain("No review time to compare.");
+  expect(empty).toContain("No support time to show.");
   for (const kind of ["denied", "unavailable", "live", "query"] as const)
     expect(staffCapacityUnavailablePage(kind)).not.toMatch(/\d+ min/);
+});
+
+// #94 SUPCAP-01..03: support time members allocated, beside the roster.
+it("SUPCAP-01/02 decodes support time as whole numbers and marks it empty or recorded", () => {
+  expect(decodeSupportTime(supportRow)).toEqual({
+    status: "empty",
+    open: 0,
+    openMinutes: 0,
+    granted: 0,
+    grantedMinutes: 0,
+    operators: 0,
+    waiting: 0,
+    waitingMinutes: 0,
+    completed: 0,
+    supportMinutes: 0,
+    preparationMinutes: 0,
+  });
+  expect(
+    decodeSupportTime({ ...supportRow, open: 2, openMinutes: "40" }),
+  ).toMatchObject({ status: "recorded", open: 2, openMinutes: 40 });
+  expect(
+    decodeSupportTime({ ...supportRow, completed: 1, supportMinutes: "15" }),
+  ).toMatchObject({ status: "recorded", supportMinutes: 15 });
+  expect(() => decodeSupportTime(undefined)).toThrow("row missing");
+  expect(() =>
+    decodeSupportTime({ ...supportRow, openMinutes: "1.5" }),
+  ).toThrow("whole number");
+  expect(() => decodeSupportTime({ ...supportRow, operators: -1 })).toThrow(
+    "whole number",
+  );
+});
+
+it("SUPCAP-01/02 one statement reads open allocations once each, with current grants only, and completed entries", async () => {
+  const statements: string[] = [];
+  const value = await readStaffCapacity({
+    query: (async (sql: string) => {
+      statements.push(sql);
+      return respond({
+        support: [
+          {
+            ...supportRow,
+            open: 2,
+            openMinutes: "40",
+            granted: 1,
+            grantedMinutes: "20",
+            operators: 1,
+            waiting: 1,
+            waitingMinutes: "20",
+            completed: 1,
+            supportMinutes: "15",
+            preparationMinutes: "5",
+          },
+        ],
+      })(sql);
+    }) as never,
+  });
+  expect(value.supportTime).toEqual({
+    status: "recorded",
+    open: 2,
+    openMinutes: 40,
+    granted: 1,
+    grantedMinutes: 20,
+    operators: 1,
+    waiting: 1,
+    waitingMinutes: 20,
+    completed: 1,
+    supportMinutes: 15,
+    preparationMinutes: 5,
+  });
+  const sql = statements.find((text) =>
+    text.includes("FROM support_time_allocations"),
+  )!;
+  expect(sql).toContain(
+    "a.state IN ('allocated','begun','needs_reconciliation')",
+  );
+  expect(sql).toContain(
+    "g.revoked_at IS NULL AND g.starts_at<=now() AND g.expires_at>now()",
+  );
+  expect(sql).toContain("count(DISTINCT g.staff_id)");
+  expect(sql).not.toMatch(/member_id|request_id|staff_role/);
+});
+
+it("SUPCAP-03 the page shows support time apart, says it has no roster and names no one", async () => {
+  const value = await readStaffCapacity({
+    query: (async (sql: string) =>
+      respond({
+        support: [
+          {
+            ...supportRow,
+            open: 1,
+            openMinutes: "20",
+            waiting: 1,
+            waitingMinutes: "20",
+            completed: 2,
+            supportMinutes: "30",
+            preparationMinutes: "10",
+          },
+        ],
+      })(sql)) as never,
+  });
+  const html = staffCapacityPage(value);
+  expect(html).toContain("<h2>Support time · Test data</h2>");
+  expect(html).toMatch(
+    /Open support time \(1\)<\/dt><dd data-field="support.open">20 min/,
+  );
+  expect(html).toMatch(
+    /Granted to an operator \(0\)<\/dt><dd data-field="support.granted">0 min/,
+  );
+  expect(html).toMatch(/data-field="support.operators">0</);
+  expect(html).toMatch(
+    /Waiting for an operator \(1\)<\/dt><dd data-field="support.waiting">20 min/,
+  );
+  expect(html).toMatch(/data-field="support.completed">2</);
+  expect(html).toMatch(/data-field="support.used">30 min/);
+  expect(html).toMatch(/data-field="support.preparation">10 min/);
+  expect(html).toContain(
+    "Open support time stays held from the member's support test minutes until an operator settles it or the member cancels.",
+  );
+  expect(html).toContain(
+    "Support has no roster: nobody declares support capacity, so open support time is shown on its own and is compared with nothing.",
+  );
+  expect(html).toMatch(/data-support-time>.*data-capacity-status="recorded"/s);
+});
+
+// #94 COST-01..03 (F-ROADMAP-09-C): delivery cost from existing records only.
+it("COST-01 decodes AI usage as whole numbers and refuses anything else", () => {
+  expect(decodeAiUsage(aiRow)).toEqual({
+    estimated: 0,
+    estimatedPoints: 0,
+    settled: 0,
+    settledPoints: 0,
+    settledEstimatePoints: 0,
+  });
+  expect(() => decodeAiUsage(undefined)).toThrow("row missing");
+  expect(() => decodeAiUsage({ ...aiRow, settledPoints: "0.5" })).toThrow(
+    "whole number",
+  );
+});
+
+it("COST-01/02/03 the page counts preparation once, labels every AI figure as an estimate and shows no money", async () => {
+  const statements: string[] = [];
+  const value = await readStaffCapacity({
+    query: (async (sql: string) => {
+      statements.push(sql);
+      return respond({
+        review: [
+          {
+            ...reviewRow,
+            completed: 2,
+            reviewMinutes: "50",
+            preparationMinutes: "10",
+          },
+        ],
+        support: [
+          {
+            ...supportRow,
+            open: 1,
+            openMinutes: "20",
+            completed: 1,
+            supportMinutes: "10",
+            preparationMinutes: "5",
+          },
+        ],
+        ai: [
+          {
+            estimated: 3,
+            estimatedPoints: "12",
+            settled: 1,
+            settledPoints: "1",
+            settledEstimatePoints: "4",
+          },
+        ],
+      })(sql);
+    }) as never,
+  });
+  expect(value.aiUsage).toEqual({
+    estimated: 3,
+    estimatedPoints: 12,
+    settled: 1,
+    settledPoints: 1,
+    settledEstimatePoints: 4,
+  });
+  const ai = statements.find((sql) => sql.includes("FROM ai_usage_estimates"))!;
+  expect(ai).toContain("JOIN ai_usage_settlements s ON s.job_id=e.job_id");
+  expect(ai).not.toMatch(/member_id|tokens/);
+  const html = deliveryCostPage(value);
+  expect(html).toContain("<h1>Delivery cost</h1>");
+  expect(html).toMatch(/data-field="cost.reviews">2</);
+  expect(html).toMatch(/data-field="cost.review">50 min/);
+  expect(html).toMatch(
+    /Review preparation minutes, counted once<\/dt><dd data-field="cost.reviewPreparation">10 min/,
+  );
+  expect(html).toMatch(/data-field="cost.supports">1</);
+  expect(html).toMatch(/data-field="cost.support">10 min/);
+  expect(html).toMatch(
+    /Support preparation minutes, counted once<\/dt><dd data-field="cost.supportPreparation">5 min/,
+  );
+  // 50 + 10 + 10 + 5; the open 20-minute booking is not a cost yet.
+  expect(html).toMatch(/data-field="cost.staffMinutes">75 min/);
+  expect(html).toContain("ESTIMATE · SIMULATED · NO MONEY CHARGED.");
+  expect(html).toMatch(/data-field="cost.aiRequests">3</);
+  expect(html).toMatch(
+    /data-field="cost.aiEstimated">12 simulated cost points · estimate/,
+  );
+  expect(html).toMatch(/data-field="cost.aiSettled">1</);
+  expect(html).toMatch(
+    /data-field="cost.aiSettledPoints">1 simulated cost point · estimate/,
+  );
+  expect(html).toMatch(
+    /data-field="cost.aiSettledEstimate">4 simulated cost points · estimate/,
+  );
+  expect(html).toContain("No cost in money.");
+  expect(html).not.toMatch(/CAD|\$\d/);
+  expect(staffCapacityPage(value)).toContain('href="/operator/delivery-cost"');
 });

@@ -4,6 +4,7 @@ import {
   RETENTION_SWEEP_INTERVAL_MS,
 } from "./invoice-retention.ts";
 import { coachingTermsStore } from "./coaching-terms.ts";
+import { coachingAgreedChangesStore } from "./coaching-agreed-changes.ts";
 import { billingProfileStore } from "./billing-profile.ts";
 import { workflowTestRoot } from "./workflow-registry.ts";
 import { administratorEntry } from "./administrator-entry.ts";
@@ -163,6 +164,7 @@ export async function start(env: NodeJS.ProcessEnv) {
       invoiceRetention: retention,
       simpleInvoices: invoices,
       coachingTerms: coachingTermsStore(pool),
+      agreedChanges: coachingAgreedChangesStore(pool),
       testProviderEvents: testEventKey
         ? { key: testEventKey, store: testProviderEventStore(pool) }
         : undefined,
