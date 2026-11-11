@@ -195,12 +195,12 @@ it("binds the tracked mapping approval to the independent technical decision", (
   expect(trackedApproval).toEqual({
     status: "approved",
     version: "full-mvp-v1",
-    sha256: "7b96c321d0bb84615c792d9bbae6a8f9fdb4260aa865801e1cc77a1c33204b27",
+    sha256: "686cb90f153b4c9644f0d598e2c30f1fb254ce3bfec6081914e84671598f6cdb",
     reviewer:
-      "Claude Code independent reviewer session (Claude Opus 5.5), owner-chosen 9 Nov 2026",
+      "Claude Code independent reviewer session (Claude Fable 5.2), owner-chosen 9 Nov 2026",
     decisionUrl:
-      "https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6770911430",
-    decidedAt: "2026-11-10T15:07:33Z",
+      "https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6786445154",
+    decidedAt: "2026-11-11T03:48:51Z",
   });
   expect(assertMappingApproval(proposal, trackedApproval)).toBe(
     trackedApproval.sha256,
@@ -227,6 +227,7 @@ it("rejects preceding mapping digests and every post-approval check change", () 
     "331eb86cf6533d0e09088d75fdaf995d747aedb4aadcda84524fb068b0158935",
     "62ea48e50e15d6a60576ba8bbdd5c513f6d345e03a857e3ac695c4d5ce93a33c",
     "1e8f27789ee9a5ef6843205c20ac3de28a1527763ddcb3e65e86cc6d319bb8c6",
+    "7b96c321d0bb84615c792d9bbae6a8f9fdb4260aa865801e1cc77a1c33204b27",
   ]) {
     expect(() =>
       assertMappingApproval(proposal, { ...oldApproval, sha256: digest }),
