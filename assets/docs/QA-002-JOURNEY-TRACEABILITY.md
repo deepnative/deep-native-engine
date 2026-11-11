@@ -1,6 +1,6 @@
 # QA-002: browser journey traceability and release gate
 
-Prepared 2026-09-23 for [QA-002 #17](https://github.com/deepnative/deep-native-engine/issues/17), with independent technical mapping approval recorded on [#94](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526) on 24 September and re-approved after the F-BUILD-06-D hold-rule rewording on [9 November](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6749610192) and after the per-student coaching rewording and the offline-billing rewording on [10 November](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6768169270) ([second decision](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6770911430)), and after the rewording of the last seven cases that contradicted owner decisions on [11 November (UTC)](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6786445154). The `full-mvp-v1` source-to-case mapping is approved; every case now has a browser test, and the complete full-MVP release run first passed on 11 November 2026 (UTC); see [the release runs](#first-full-release-runs-11-november-2026-utc). That run is technical evidence, not acceptance. This does not certify that the full MVP exists or that a release test has passed.
+Prepared 2026-09-23 for [QA-002 #17](https://github.com/deepnative/deep-native-engine/issues/17), with independent technical mapping approval recorded on [#94](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-5820945526) on 24 September and re-approved after the F-BUILD-06-D hold-rule rewording on [9 November](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6749610192) and after the per-student coaching rewording and the offline-billing rewording on [10 November](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6768169270) ([second decision](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6770911430)), and after the rewording of the last seven cases that contradicted owner decisions on [11 November (UTC)](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6786445154). The `full-mvp-v1` source-to-case mapping is approved; every case now has a browser test, and the complete full-MVP release run first passed on 11 November 2026 (UTC); see [the release runs](#first-full-release-runs-11-november-2026-utc). That run is technical evidence. On 11 November 2026 the owner accepted the 100-test coverage as demo evidence with its stated limits; see [the owner's acceptance](#11-november-2026-owner-acceptance-as-demo-evidence). That is not a release or launch approval. This does not certify that the full MVP exists or that a release test has passed.
 
 ## Two denominators
 
@@ -173,7 +173,7 @@ To let the runner have its trace per execution, the 21 tests that sign staff in 
 
 **What a passing run establishes, and what it doesn't.** It shows that the approved mapping's 100 browser tests pass together on one clean revision. It does not show that the tests are the right tests: the mapping wording was independently reviewed, but the browser tests were written and reviewed by the sessions that wrote them. Every test runs on invented data, with the limits listed under each tranche below: sample holds that are not bookings, invoices nobody pays, a simulated AI step, and time passing stood in for by moving dates in the test database. It is not qualified content or legal review, and it is not a launch decision.
 
-**What acceptance still needs.** An independent review of the browser tests against each case's required checks; the owner's decision to accept the evidence, with the limits above; and, separately, qualified review and the owner's launch decision. Launch remains no-go.
+**What acceptance still needed when these runs were recorded.** An independent review of the browser tests against each case's required checks; the owner's decision to accept the evidence, with the limits above; and, separately, qualified review and the owner's launch decision. The review, its fixes and the re-review are recorded [below](#11-november-2026-fixes-after-the-independent-review-of-the-100-tests), and the owner accepted the coverage as demo evidence on 11 November 2026 ([below](#11-november-2026-owner-acceptance-as-demo-evidence)). Qualified review and the launch decision have not happened. Launch remains no-go.
 
 ## November 2026 provisional tranche: the last eight cases
 
@@ -254,7 +254,7 @@ Ten read-only reviewers judged each full-MVP browser test against its required c
   - F-BUILD-07-D: a workflow template's supported status is declared by the editor and is not derived from a failed test record. The test proves that the download carries the failed record and the unverified state together.
   - F-ROADMAP-08-D: catalog content has no delivery-role field, so role fit is by the member's goal and background only.
 
-  Neither case is reworded, and the mapping digest `686cb90f…` is unchanged. Recording these limits is not acceptance of the evidence.
+  Neither case is reworded, and the mapping digest `686cb90f…` is unchanged. Recording these limits was not acceptance of the evidence; the owner's acceptance came later the same day and is recorded [below](#11-november-2026-owner-acceptance-as-demo-evidence).
 
 The formal release run passed on the fixed tests: `npm run verify:full-e2e` on `2b7c7df4`, 100 of 100 cases, 94 of 94 critical, 200 executions, run `29a10b9c-299d-4881-b9b1-82271696de91`. The fixes merged in [PR #827](https://github.com/deepnative/deep-native-engine/pull/827) as main `f918d421`.
 
@@ -296,6 +296,20 @@ Three read-only reviewers re-read the PR #827 fixes on main `f918d421`, one each
 - F-ROADMAP-06-A: the "Draft not saved" heading is the same for every invalid draft.
 - F-ROADMAP-09-D has no positive control for the billing scope.
 - F-BUILD-07-D: the case text still says the status "matches the observed result". Changing it needs a re-approved mapping digest, so it is left, and the known limit above is recorded here only.
+
+## 11 November 2026: owner acceptance as demo evidence
+
+The owner accepted the full-MVP coverage on 11 November 2026, in these words: "accept the 100-test coverage (#94) as demo evidence with its stated limits". The record is on [#94](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6809159129), which is closed. It names main `c9030536` ([PR #828](https://github.com/deepnative/deep-native-engine/pull/828)) and the formal run on `2d66ddab`: 100 of 100 cases, 94 of 94 critical, 200 executions on desktop Chromium and Pixel 7, run `4abb5f68-c614-4416-a272-893723b80f02`, mapping digest `686cb90f…` unchanged.
+
+The limits the acceptance carries, quoted from the record:
+
+- Demo conditions: invented data, simulated AI, no real experts, no payment processing, no signed-in run on the hosted site.
+- Known limits accepted by the owner: F-BUILD-07-D (workflow status is editor-declared) and F-ROADMAP-08-D (role fit by goal and background only).
+- The "Insufficient evidence" line counts words by whitespace.
+- The 12 follow-up fixes in PR #828 are self-reviewed; the re-review ran nothing.
+- This is not a launch decision. Launch stays no-go.
+
+This is acceptance of demo evidence only. It is not a release approval, qualified content or legal review, or a launch decision. Nothing in the register changed: the 100 entries keep their `outstanding` status, which `make verify` requires and still reports as 0/100, the table under [Two denominators](#two-denominators) still counts that status, and the mapping digest and the approval file are untouched. The tranche records below that say accepted release evidence "stays at 0/100" are dated records and are left as written.
 
 ## November 2026 provisional tranche: BUILD-03-C
 
