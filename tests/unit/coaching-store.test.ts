@@ -100,11 +100,14 @@ function fixture(
     } | null;
     settings?: InvoiceSettings;
     dashboard?: { summary: unknown; rows: unknown[] };
+    studentGone?: boolean;
   } = {},
 ) {
   const query = vi.fn(async (sql: string, _args?: unknown[]) => {
     let rows: unknown[] = [];
-    if (sql.includes("FROM principals WHERE token_hash"))
+    if (sql.includes("AS student_present"))
+      rows = o.studentGone ? [] : [{ student_present: true }];
+    else if (sql.includes("FROM principals WHERE token_hash"))
       rows = [
         {
           id,
@@ -735,4 +738,22 @@ it("RECIPIENT-03/05 a saved draft keeps an optional company, updates the reusabl
   expect(
     JSON.parse(sql(j, "INSERT INTO simple_invoices")![1]![2] as string),
   ).not.toHaveProperty("billedToCompany");
+});
+
+it("WALK44-01 an administrator's overview of a student reference no account has is not-found, before any coaching read", async () => {
+  const f = fixture({ admin: true, studentGone: true });
+  expect(await f.service.coachingOverview(token, month, id)).toEqual({
+    kind: "not-found",
+  });
+  const statements = f.query.mock.calls.map(([sql]) => sql);
+  expect(statements.some((sql) => sql.includes("AS student_present"))).toBe(
+    true,
+  );
+  expect(statements.some((sql) => sql.includes("coaching_"))).toBe(false);
+  // A member's own overview never asks.
+  const own = fixture();
+  expect((await own.service.coachingOverview(token)).kind).toBe("ready");
+  expect(
+    own.query.mock.calls.some(([sql]) => sql.includes("AS student_present")),
+  ).toBe(false);
 });

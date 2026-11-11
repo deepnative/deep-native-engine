@@ -407,3 +407,37 @@ it("RENEW317-03 the student sees their renewal date and that nothing renews auto
     "Nothing renews or charges automatically. To renew, contact info@deepnative.io.",
   );
 });
+
+it("WALK44-01 an administrator opening a deleted student's coaching page is told the account is gone, and nobody else learns anything", async () => {
+  const admin = await staff(),
+    reviewer = await staff("reviewer"),
+    student = await member(),
+    other = await member();
+  ready(await terms.save(admin, input(student.id)));
+  const path = `/operator/coaching/${student.id}`;
+  expect((await get(path, admin)).status).toBe(200);
+  await members.remove(student.id);
+
+  const gone = await get(path, admin);
+  expect(gone.status).toBe(404);
+  const words = text(gone.text);
+  expect(words).toContain("Student account not found");
+  expect(words).toContain(
+    "If the student deleted their account, their coaching terms, hours and allowances were removed with it.",
+  );
+  expect(words).not.toContain("Coaching request not confirmed");
+  expect(gone.text).toContain('href="/operator/coaching"');
+  expect(await versions(student.id)).toBe(0);
+  // A reference that never was an account reads the same, so the page confirms nothing more.
+  expect(
+    text((await get(`/operator/coaching/${randomUUID()}`, admin)).text),
+  ).toBe(words);
+  // Staff without the administrator role and members are refused as before.
+  for (const token of [reviewer, other.token]) {
+    const refused = await get(path, token);
+    expect(refused.status).toBe(403);
+    expect(refused.text).not.toContain("Student account not found");
+  }
+  // A current student still opens normally.
+  expect((await get(`/operator/coaching/${other.id}`, admin)).status).toBe(200);
+});

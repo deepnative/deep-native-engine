@@ -541,6 +541,10 @@ it("COURSETERMS557-01 shows the student's own admin-set coaching terms beside a 
     const page = (await request(server).get("/my-courses").expect(200)).text;
     expect(own).toHaveBeenCalledWith(bearer);
     expect(page).toContain("Your coaching");
+    // WALK44-02: not styled as a numbered lesson step.
+    expect(page).toContain(
+      '<section class="course-coaching" aria-labelledby="course-coaching">',
+    );
     expect(page).toContain("CAD 1,250.00");
     expect(page).toContain("November 1, 2026 to January 31, 2027");
     expect(page).toContain("Renewal date February 1, 2027");
