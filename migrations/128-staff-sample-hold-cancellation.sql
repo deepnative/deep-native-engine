@@ -62,6 +62,11 @@ CREATE TRIGGER sample_hold_staff_cancellations_immutable
 -- without authority). DN004: the hold is no longer held (stale form).
 -- DN005: this request ID already cancelled something else. DN006: the
 -- reserved credit's own period has ended, so it cannot be replaced.
+-- Every migration re-runs at each start; 139 (#823) replaces this function so a
+-- hold keeps its own minutes, and a restart must not put the fixed 60 back.
+DO $guard$ BEGIN
+IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=139) THEN
+EXECUTE $create$
 CREATE OR REPLACE FUNCTION staff_cancel_sample_hold(
  p_token text,p_hold uuid,p_request uuid,p_reason text,
  OUT cancellation_id uuid,OUT replayed boolean
@@ -167,6 +172,9 @@ BEGIN
  VALUES(v_id,p_request,p_hold,v_hold.member_id,v_staff,p_reason,v_hold.grant_id,v_replacement,v_now);
  cancellation_id := v_id;
  replayed := false;
-END $$;
+END $$
+$create$;
+END IF;
+END $guard$;
 INSERT INTO schema_migrations(version) VALUES(128) ON CONFLICT DO NOTHING;
 COMMIT;

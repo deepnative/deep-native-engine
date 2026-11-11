@@ -14,6 +14,11 @@ IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=46) THEN
 END IF;
 END $$;
 
+-- Every migration re-runs at each start; 139 (#823) replaces this function so a
+-- hold keeps its own minutes, and a restart must not put the fixed 60 back.
+DO $guard$ BEGIN
+IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=139) THEN
+EXECUTE $create$
 CREATE OR REPLACE FUNCTION withdraw_member_sample_hold(p_token text,p_request uuid)
 RETURNS uuid LANGUAGE plpgsql AS $$
 DECLARE
@@ -79,5 +84,8 @@ BEGIN
  VALUES(gen_random_uuid(),v_hold.member_id,v_hold.grant_id,v_hold.reservation_id,
         'release',60,v_key,encode(sha256(v_key::bytea),'hex'),v_hold.id);
  RETURN p_request;
-END $$;
+END $$
+$create$;
+END IF;
+END $guard$;
 COMMIT;

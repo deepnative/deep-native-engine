@@ -37,6 +37,10 @@ export interface CoachingTermsValues {
   reviewMinutes: number;
   coachingSessions: number;
   aiRequests: number;
+  /** #823: minutes one session hold reserves; 60 when the terms don't say. */
+  sessionMinutes?: number;
+  /** #823: exchanges one practice conversation can have; 15 when not said. */
+  practiceExchanges?: number;
 }
 export interface AllowanceBalance {
   left: number;
@@ -76,12 +80,32 @@ export const TERMS_FIELDS = [
   "reviewMinutes",
   "coachingSessions",
   "aiRequests",
+  "sessionMinutes",
+  "practiceExchanges",
 ] as const;
 const LIMITS = {
   reviewMinutes: 100000,
   coachingSessions: 1000,
   aiRequests: 1000000,
 };
+// #823 owner decision of 11 November 2026: each student's session length and
+// practice-conversation limit are part of their terms. A session fits an
+// expert's one-hour time slot. A hold or a conversation keeps the value it
+// started with, so new terms apply to new ones only.
+export const SESSION_MINUTES = { min: 15, max: 60, standard: 60 };
+export const PRACTICE_EXCHANGES = { min: 1, max: 50, standard: 15 };
+export const TERMS_BOUNDS = `session length (${SESSION_MINUTES.min} to ${SESSION_MINUTES.max} minutes) and practice-conversation limit (${PRACTICE_EXCHANGES.min} to ${PRACTICE_EXCHANGES.max} exchanges)`;
+const within = (value: unknown, range: { min: number; max: number }) =>
+  Number.isSafeInteger(value) &&
+  Number(value) >= range.min &&
+  Number(value) <= range.max;
+/** The two #823 values of saved terms, with the standard ones filled in. */
+export const sessionLimits = (
+  t: Pick<CoachingTermsValues, "sessionMinutes" | "practiceExchanges">,
+) => ({
+  sessionMinutes: t.sessionMinutes ?? SESSION_MINUTES.standard,
+  practiceExchanges: t.practiceExchanges ?? PRACTICE_EXCHANGES.standard,
+});
 
 function whole(value: unknown, maximum: number): number | null {
   if (typeof value !== "string" || !/^(0|[1-9]\d{0,6})$/.test(value))
@@ -102,6 +126,15 @@ export function parseCoachingTerms(
     reviewMinutes: whole(form.reviewMinutes, LIMITS.reviewMinutes),
     coachingSessions: whole(form.coachingSessions, LIMITS.coachingSessions),
     aiRequests: whole(form.aiRequests, LIMITS.aiRequests),
+    // A form that doesn't send them keeps the standard values.
+    sessionMinutes:
+      form.sessionMinutes === undefined
+        ? SESSION_MINUTES.standard
+        : whole(form.sessionMinutes, SESSION_MINUTES.max),
+    practiceExchanges:
+      form.practiceExchanges === undefined
+        ? PRACTICE_EXCHANGES.standard
+        : whole(form.practiceExchanges, PRACTICE_EXCHANGES.max),
   };
   return validTerms(values) ? values : null;
 }
@@ -122,11 +155,15 @@ function validTerms(
         Number.isSafeInteger(value[key]) &&
         Number(value[key]) >= 0 &&
         Number(value[key]) <= LIMITS[key],
-    )
+    ) &&
+    (value.sessionMinutes === undefined ||
+      within(value.sessionMinutes, SESSION_MINUTES)) &&
+    (value.practiceExchanges === undefined ||
+      within(value.practiceExchanges, PRACTICE_EXCHANGES))
   );
 }
 
-const columns = `version,price_cents AS "priceCents",to_char(starts_on,'YYYY-MM-DD') AS "startsOn",to_char(ends_on,'YYYY-MM-DD') AS "endsOn",to_char(renews_on,'YYYY-MM-DD') AS "renewsOn",review_minutes AS "reviewMinutes",coaching_sessions AS "coachingSessions",ai_requests AS "aiRequests",created_at AS "savedAt"`;
+const columns = `version,price_cents AS "priceCents",to_char(starts_on,'YYYY-MM-DD') AS "startsOn",to_char(ends_on,'YYYY-MM-DD') AS "endsOn",to_char(renews_on,'YYYY-MM-DD') AS "renewsOn",review_minutes AS "reviewMinutes",coaching_sessions AS "coachingSessions",ai_requests AS "aiRequests",session_minutes AS "sessionMinutes",practice_exchanges AS "practiceExchanges",created_at AS "savedAt"`;
 
 // #27: the ledger categories two of the allowances draw from. Review-time
 // allocations reserve review_minutes; metered AI requests reserve study_requests.
@@ -393,6 +430,7 @@ export function coachingTermsStore(pool: Pool) {
         reviewMinutes: input.reviewMinutes,
         coachingSessions: input.coachingSessions,
         aiRequests: input.aiRequests,
+        ...sessionLimits(input),
       };
       const digest = invoiceDigest({
         ownerId: input.ownerId,
@@ -419,7 +457,7 @@ export function coachingTermsStore(pool: Pool) {
         if (version !== input.expectedVersion) return fail("conflict");
         const termsId = randomUUID();
         await tx.query(
-          "INSERT INTO coaching_terms(id,owner_id,version,price_cents,starts_on,ends_on,renews_on,review_minutes,coaching_sessions,ai_requests,actor_id,operation_id,digest) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+          "INSERT INTO coaching_terms(id,owner_id,version,price_cents,starts_on,ends_on,renews_on,review_minutes,coaching_sessions,ai_requests,session_minutes,practice_exchanges,actor_id,operation_id,digest) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)",
           [
             termsId,
             input.ownerId,
@@ -431,6 +469,8 @@ export function coachingTermsStore(pool: Pool) {
             terms.reviewMinutes,
             terms.coachingSessions,
             terms.aiRequests,
+            terms.sessionMinutes,
+            terms.practiceExchanges,
             actor,
             input.operationId,
             digest,
@@ -469,7 +509,8 @@ export function renewalsSection(rows: RenewalDue[], path: string) {
   return `<section class="portal-card" aria-labelledby="renewals-due"><h2 id="renewals-due">Renewals due</h2><p>Students whose renewal date has passed or is within ${RENEWAL_WINDOW_DAYS} days. ${NO_AUTOMATIC_RENEWAL} To renew, open the student and save new terms.</p><ul class="portal-list">${rows.map((r) => `<li><a href="${path}/${escape(r.ownerId)}">${escape(r.displayName ?? "Name needed")}</a> · renewal date ${readable(r.renewsOn)} · ${renewalState(r.days)}</li>`).join("") || `<li>No renewal dates have passed or fall within the next ${RENEWAL_WINDOW_DAYS} days.</li>`}</ul>${rows.length >= 200 ? "<p>Showing the first 200 students.</p>" : ""}</section>`;
 }
 function termsList(t: CoachingTerms) {
-  return `<dl class="coaching-terms"><dt>Price</dt><dd>${money(t.priceCents)}</dd><dt>Coaching period</dt><dd>${readable(t.startsOn)} to ${readable(t.endsOn)}</dd><dt>Renewal date</dt><dd>${readable(t.renewsOn)}</dd><dt>Expert review time</dt><dd>${t.reviewMinutes} minutes</dd><dt>Coaching sessions</dt><dd>${t.coachingSessions}</dd><dt>AI requests</dt><dd>${t.aiRequests}</dd></dl>`;
+  const limits = sessionLimits(t);
+  return `<dl class="coaching-terms"><dt>Price</dt><dd>${money(t.priceCents)}</dd><dt>Coaching period</dt><dd>${readable(t.startsOn)} to ${readable(t.endsOn)}</dd><dt>Renewal date</dt><dd>${readable(t.renewsOn)}</dd><dt>Expert review time</dt><dd>${t.reviewMinutes} minutes</dd><dt>Coaching sessions</dt><dd>${t.coachingSessions}</dd><dt>AI requests</dt><dd>${t.aiRequests}</dd><dt>Session length</dt><dd>${limits.sessionMinutes} minutes</dd><dt>Practice conversation limit</dt><dd>${limits.practiceExchanges} exchange${limits.practiceExchanges === 1 ? "" : "s"}</dd></dl>`;
 }
 /** ALLOW27-07: the period's units, for the student and the administrator. */
 function balanceList(t: CoachingTerms, admin: boolean) {
@@ -485,7 +526,7 @@ function balanceList(t: CoachingTerms, admin: boolean) {
 }
 /** TERMS316-06: what the student sees, read-only. */
 export function memberTermsSection(t: CoachingTerms | null) {
-  return `<section class="portal-card" aria-labelledby="coaching-terms"><h2 id="coaching-terms">Your coaching terms</h2>${t ? `${termsList(t)}${balanceList(t, false)}<p>Your administrator set these terms. Your coaching price covers these allowances.</p><p>${NO_AUTOMATIC_RENEWAL} To renew, contact <a href="mailto:${SERVICE_CONTACT}">${SERVICE_CONTACT}</a>.</p>` : "<p>Your administrator hasn't set your coaching terms yet.</p>"}<p>${NO_CANCELLATION}</p></section>`;
+  return `<section class="portal-card" aria-labelledby="coaching-terms"><h2 id="coaching-terms">Your coaching terms</h2>${t ? `${termsList(t)}${balanceList(t, false)}<p>Your administrator set these terms. Your coaching price covers these allowances. A session you hold reserves your session length, and a practice conversation ends at your limit; a change applies to new holds and new conversations only.</p><p>${NO_AUTOMATIC_RENEWAL} To renew, contact <a href="mailto:${SERVICE_CONTACT}">${SERVICE_CONTACT}</a>.</p>` : "<p>Your administrator hasn't set your coaching terms yet.</p>"}<p>${NO_CANCELLATION}</p></section>`;
 }
 /** COURSETERMS557-01/02: the student's coaching terms in brief, on My courses. */
 export function courseTermsSection(t: CoachingTerms | null | "unavailable") {
@@ -503,14 +544,17 @@ export function adminTermsSection(
   action: string,
   hiddenFields: string,
 ) {
+  const limits = sessionLimits(t ?? {});
   const value = (key: keyof CoachingTermsValues) =>
-    t
-      ? escape(
-          key === "priceCents"
-            ? (t.priceCents / 100).toFixed(2)
-            : String(t[key]),
-        )
-      : "";
+    key === "sessionMinutes" || key === "practiceExchanges"
+      ? String(limits[key])
+      : t
+        ? escape(
+            key === "priceCents"
+              ? (t.priceCents / 100).toFixed(2)
+              : String(t[key]),
+          )
+        : "";
   const field = (
     name: (typeof TERMS_FIELDS)[number],
     label: string,
@@ -518,7 +562,7 @@ export function adminTermsSection(
     key: keyof CoachingTermsValues,
   ) =>
     `<label>${label}<input name="${name}" ${attributes} value="${value(key)}" required></label>`;
-  return `<section class="portal-card" aria-labelledby="coaching-terms"><h2 id="coaching-terms">Coaching terms</h2>${t ? `<p>Current terms, version ${t.version}:</p>${termsList(t)}${balanceList(t, true)}<p>${NO_AUTOMATIC_RENEWAL} To renew, save new terms with the next renewal date.</p>` : "<p>No coaching terms are set for this student.</p>"}<p>The student's coaching price covers these allowances. ${NO_CANCELLATION}</p><h3>Set coaching terms</h3><p>Saving creates a new version. Earlier versions are kept.</p><form method="post" action="${action}">${hiddenFields}${field("price", "Price (CAD)", 'inputmode="decimal"', "priceCents")}${field("startsOn", "Start date", 'type="date"', "startsOn")}${field("endsOn", "End date", 'type="date"', "endsOn")}${field("renewsOn", "Renewal date", 'type="date"', "renewsOn")}${field("reviewMinutes", "Expert review minutes", 'type="number" min="0" max="100000" step="1"', "reviewMinutes")}${field("coachingSessions", "Coaching sessions", 'type="number" min="0" max="1000" step="1"', "coachingSessions")}${field("aiRequests", "AI requests", 'type="number" min="0" max="1000000" step="1"', "aiRequests")}<button>Save coaching terms</button></form></section>`;
+  return `<section class="portal-card" aria-labelledby="coaching-terms"><h2 id="coaching-terms">Coaching terms</h2>${t ? `<p>Current terms, version ${t.version}:</p>${termsList(t)}${balanceList(t, true)}<p>${NO_AUTOMATIC_RENEWAL} To renew, save new terms with the next renewal date.</p>` : "<p>No coaching terms are set for this student.</p>"}<p>The student's coaching price covers these allowances. ${NO_CANCELLATION}</p><h3>Set coaching terms</h3><p>Saving creates a new version. Earlier versions are kept.</p><form method="post" action="${action}">${hiddenFields}${field("price", "Price (CAD)", 'inputmode="decimal"', "priceCents")}${field("startsOn", "Start date", 'type="date"', "startsOn")}${field("endsOn", "End date", 'type="date"', "endsOn")}${field("renewsOn", "Renewal date", 'type="date"', "renewsOn")}${field("reviewMinutes", "Expert review minutes", 'type="number" min="0" max="100000" step="1"', "reviewMinutes")}${field("coachingSessions", "Coaching sessions", 'type="number" min="0" max="1000" step="1"', "coachingSessions")}${field("aiRequests", "AI requests", 'type="number" min="0" max="1000000" step="1"', "aiRequests")}${field("sessionMinutes", "Session length (minutes)", `type="number" min="${SESSION_MINUTES.min}" max="${SESSION_MINUTES.max}" step="1"`, "sessionMinutes")}${field("practiceExchanges", "Practice conversation limit (exchanges)", `type="number" min="${PRACTICE_EXCHANGES.min}" max="${PRACTICE_EXCHANGES.max}" step="1"`, "practiceExchanges")}<p>Session length is ${SESSION_MINUTES.min} to ${SESSION_MINUTES.max} minutes, because an expert's time slot is one hour. A practice conversation can have ${PRACTICE_EXCHANGES.min} to ${PRACTICE_EXCHANGES.max} exchanges. New values apply to new session holds and new practice conversations only.</p><button>Save coaching terms</button></form></section>`;
 }
 
 /**

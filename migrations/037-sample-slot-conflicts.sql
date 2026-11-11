@@ -15,6 +15,11 @@ CREATE OR REPLACE FUNCTION sample_slot_conflicts(
  );
 $$;
 
+-- Every migration re-runs at each start; 139 (#823) replaces this function so a
+-- hold keeps its own minutes, and a restart must not put the fixed 60 back.
+DO $guard$ BEGIN
+IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=139) THEN
+EXECUTE $create$
 CREATE OR REPLACE FUNCTION synthetic_hold_slot(
  p_member uuid,p_slot uuid,p_grant uuid,p_key text,p_fingerprint text,
  p_deadline timestamptz,p_now timestamptz
@@ -111,7 +116,10 @@ BEGIN
  VALUES(gen_random_uuid(),p_member,p_grant,v_reservation,'reserve',60,
         p_key,p_fingerprint,v_hold);
  RETURN v_hold;
-END $$;
+END $$
+$create$;
+END IF;
+END $guard$;
 
 INSERT INTO schema_migrations(version) VALUES(37) ON CONFLICT DO NOTHING;
 COMMIT;

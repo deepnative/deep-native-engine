@@ -31,6 +31,7 @@ import {
   parseCoachingTerms,
   renewalsSection,
   TERMS_FIELDS,
+  TERMS_BOUNDS,
   type CoachingTermsStore,
 } from "./coaching-terms.ts";
 import {
@@ -56,6 +57,7 @@ function failure(
   kind: InvoiceFailure["kind"],
   admin: boolean,
   key?: string,
+  detail?: string,
 ) {
   return res
     .status(
@@ -70,7 +72,7 @@ function failure(
     .send(
       page(
         "Coaching request not confirmed",
-        `<h1>Coaching request not confirmed</h1><p role="alert">${kind === "unavailable" ? "The outcome is uncertain. Inspect the original operation before another action." : kind === "conflict" ? "This form is out of date or the current state does not allow this action. Reopen the month and review its rate, revision and invoice status." : "The request was not accepted. Check the month, whole hours and minutes, recipient and explicit amounts using the current form."}</p>${key ? `<p><a href="${admin ? "/operator/invoices" : "/account/purchases"}/operations/${escape(key)}">Inspect original operation</a></p>` : ""}<p><a href="${admin ? adminPath : memberPath}">Return to monthly coaching</a></p>`,
+        `<h1>Coaching request not confirmed</h1><p role="alert">${kind === "unavailable" ? "The outcome is uncertain. Inspect the original operation before another action." : kind === "conflict" ? "This form is out of date or the current state does not allow this action. Reopen the month and review its rate, revision and invoice status." : (detail ?? "The request was not accepted. Check the month, whole hours and minutes, recipient and explicit amounts using the current form.")}</p>${key ? `<p><a href="${admin ? "/operator/invoices" : "/account/purchases"}/operations/${escape(key)}">Inspect original operation</a></p>` : ""}<p><a href="${admin ? adminPath : memberPath}">Return to monthly coaching</a></p>`,
       ),
     );
 }
@@ -371,7 +373,13 @@ export function mountCoachingRoutes(
       values === null ||
       !/^(0|[1-9]\d{0,8})$/.test(String(req.body.revision))
     )
-      return failure(res, "invalid", true);
+      return failure(
+        res,
+        "invalid",
+        true,
+        undefined,
+        `The coaching terms were not saved. Check the price, dates and whole-number allowances, and that ${TERMS_BOUNDS} are within their bounds.`,
+      );
     const ownerId = (req.params as Record<string, string>).ownerId!;
     const r = await options.coachingTerms.save(token(res), {
       ...values,

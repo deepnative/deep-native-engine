@@ -3794,7 +3794,7 @@ export function app(
       typeof fields.expected_sequence !== "string" ||
       !/^[1-9][0-9]*$/.test(fields.expected_sequence) ||
       !Number.isSafeInteger(expectedSequence) ||
-      expectedSequence > 16 ||
+      expectedSequence > 51 ||
       typeof fields.response !== "string" ||
       !fields.response.trim() ||
       fields.response.length > 1000 ||

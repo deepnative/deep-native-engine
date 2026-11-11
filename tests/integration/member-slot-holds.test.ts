@@ -109,6 +109,7 @@ it("requires an explicit current allowance for every background and returns a pr
     expect(await memberHolds.snapshot(owner.token)).toEqual({
       grants: [],
       receipts: [],
+      sessionMinutes: 60,
     });
     await expect(
       memberHolds.request(
@@ -1291,6 +1292,7 @@ it.each(["held", "due", "released"] as const)(
     expect(await memberHolds.snapshot(other.token)).toEqual({
       grants: [],
       receipts: [],
+      sessionMinutes: 60,
     });
     expect(await retainedHoldRows(owner.id)).toEqual(before);
   },
@@ -1612,6 +1614,7 @@ it("withholds receipts and grants for unavailable owners and never returns an ou
   expect(await memberHolds.snapshot(other.token)).toEqual({
     grants: [],
     receipts: [],
+    sessionMinutes: 60,
   });
   for (const token of ["forged", f.admin.token]) {
     expect(await memberHolds.get(token, f.requestId)).toBeNull();
@@ -1903,6 +1906,7 @@ it.each(
       expect(await memberHolds.snapshot(other.token)).toEqual({
         grants: [],
         receipts: [],
+        sessionMinutes: 60,
       });
     } finally {
       resume();
@@ -1997,6 +2001,7 @@ it.each(
       expect(await memberHolds.snapshot(other.token)).toEqual({
         grants: [],
         receipts: [],
+        sessionMinutes: 60,
       });
     } finally {
       await Promise.allSettled([reading, ...(changing ? [changing] : [])]);

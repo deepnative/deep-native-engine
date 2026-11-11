@@ -210,7 +210,7 @@ it("rejects malformed keys and response boundaries before acquiring a connection
     ["bad", 1, "sample"],
     [id, 0, "sample"],
     [id, 1.5, "sample"],
-    [id, 17, "sample"],
+    [id, 52, "sample"],
     [id, 1, ""],
     [id, 1, " \n\t"],
     [id, 1, "x".repeat(1001)],
@@ -261,15 +261,31 @@ it("returns retained detail with the correct availability and never regenerates 
     [{ source: false }, "source-unavailable"],
     [{ sourceGoal: "work" }, "source-unavailable"],
     [{ pairs: Array.from({ length: 15 }, (_, i) => pair(i + 1)) }, "full"],
+    // LIMITS823-06: a conversation is full at the limit it started with.
+    [{ row: { exchangeLimit: 1 } }, "full"],
+    [
+      {
+        row: { exchangeLimit: 20 },
+        pairs: Array.from({ length: 15 }, (_, i) => pair(i + 1)),
+      },
+      "available",
+    ],
   ] as const) {
     const f = fixture({ pairs: [pair()], ...options });
     const result = await f.store.detail("token", id);
     expect(result).toMatchObject({
       availability,
-      nextSequence: availability === "available" ? 2 : null,
+      nextSequence:
+        availability === "available"
+          ? ("pairs" in options ? options.pairs.length : 1) + 1
+          : null,
     });
     expect(result!.exchanges).toHaveLength(
-      availability === "withdrawn" ? 0 : availability === "full" ? 15 : 1,
+      availability === "withdrawn"
+        ? 0
+        : "pairs" in options
+          ? options.pairs.length
+          : 1,
     );
     if (availability !== "withdrawn")
       expect(result!.exchanges[0]!.comparison).toBe(
@@ -357,6 +373,19 @@ it("checks withdrawal and live eligibility before replay, and replay before the 
       response: "New",
     }),
   ).toBe("full");
+  // LIMITS823-06: the conversation's own limit decides, lower or higher.
+  expect(
+    await fixture({
+      row: { exchangeLimit: 1 },
+      pairs: [pair()],
+    }).store.append("token", id, { expectedSequence: 2, response: "New" }),
+  ).toBe("full");
+  expect(
+    await fixture({
+      row: { exchangeLimit: 20 },
+      pairs: Array.from({ length: 15 }, (_, i) => pair(i + 1)),
+    }).store.append("token", id, { expectedSequence: 16, response: "New" }),
+  ).toBe("saved");
 });
 it("withdraws exact owned history regardless of source/template eligibility", async () => {
   const f = fixture({ row: { promptVersion: "unknown" }, source: false });
