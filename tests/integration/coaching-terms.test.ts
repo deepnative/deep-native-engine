@@ -309,8 +309,15 @@ it("TERMS316-07 the student's download has every version without the administrat
   expect(
     rows.map(({ savedAt, ...row }) => (expect(savedAt).toBeTruthy(), row)),
   ).toEqual([
-    { version: 1, ...agreed },
-    { version: 2, ...agreed, aiRequests: 300 },
+    // #823: terms saved without them carry the standard 60 and 15.
+    { version: 1, ...agreed, sessionMinutes: 60, practiceExchanges: 15 },
+    {
+      version: 2,
+      ...agreed,
+      aiRequests: 300,
+      sessionMinutes: 60,
+      practiceExchanges: 15,
+    },
   ]);
   expect(JSON.stringify(rows)).not.toMatch(/actor|operation|digest/);
   await pool.query("DELETE FROM principals WHERE id=$1", [m.id]);

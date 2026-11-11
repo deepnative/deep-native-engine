@@ -175,7 +175,7 @@ it("PRACTICE-AI-07 refuses malformed requests, or a store without suggestions, b
   for (const [session, sequence] of [
     ["not-a-uuid", 1],
     [id, 0],
-    [id, 16],
+    [id, 51],
     [id, 1.5],
   ] as const)
     expect(await f.store.suggest!("token", session, sequence)).toBe(

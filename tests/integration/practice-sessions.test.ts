@@ -353,6 +353,8 @@ it("atomically removes every response-derived byte, preserves only metadata, and
       "prompt_version",
       "created_at",
       "withdrawn_at",
+      // #823: the limit the conversation started with; not response-derived.
+      "exchange_limit",
     ].sort(),
   );
   await db.remove(f.owner.id);

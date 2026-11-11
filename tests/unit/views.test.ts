@@ -644,6 +644,21 @@ it("keeps optional availability labelled, escaped and timezone-explicit", () => 
   expect(availabilityPage([slot], undefined, "Private <failure>")).toContain(
     "Private &lt;failure&gt;",
   );
+  // LIMITS823-04: a student sees the minutes their own session hold reserves.
+  const own = availabilityPage([slot], "America/Toronto", undefined, {
+    csrf: "csrf",
+    requestIds: { slot: "request" },
+    snapshot: { grants: [], receipts: [], sessionMinutes: 45 },
+  });
+  expect(own).toContain(
+    "A sample hold reserves 45 explicitly seeded test minutes",
+  );
+  expect(own).toContain(
+    "No matching current test allowance has 45 available minutes.",
+  );
+  expect(shown).toContain(
+    "A sample hold reserves 60 explicitly seeded test minutes",
+  );
 });
 it("does not call a surviving second evidence version an original", () => {
   const parentId = "11111111-1111-4111-8111-111111111111";

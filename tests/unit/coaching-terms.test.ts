@@ -45,6 +45,7 @@ const values = {
   coachingSessions: 6,
   aiRequests: 200,
 };
+const standard = { sessionMinutes: 60, practiceExchanges: 15 };
 const saved: CoachingTerms = {
   ...values,
   version: 1,
@@ -122,8 +123,24 @@ const input = (over: Record<string, unknown> = {}) => ({
 beforeEach(() => vi.clearAllMocks());
 
 it("TERMS316-04 parses whole, bounded form values and refuses anything else", () => {
-  expect(parseCoachingTerms(form)).toEqual(values);
+  // LIMITS823-03: a form without the two #823 values keeps 60 and 15.
+  expect(parseCoachingTerms(form)).toEqual({ ...values, ...standard });
+  // LIMITS823-01/02: both are whole numbers within their bounds.
+  expect(
+    parseCoachingTerms({
+      ...form,
+      sessionMinutes: "15",
+      practiceExchanges: "50",
+    }),
+  ).toEqual({ ...values, sessionMinutes: 15, practiceExchanges: 50 });
   for (const wrong of [
+    { sessionMinutes: "14" },
+    { sessionMinutes: "61" },
+    { sessionMinutes: "" },
+    { sessionMinutes: 45 },
+    { practiceExchanges: "0" },
+    { practiceExchanges: "51" },
+    { practiceExchanges: "1.5" },
     { price: "" },
     { price: "0" },
     { price: "-1" },
@@ -171,7 +188,7 @@ it("TERMS316-01/03 saves a new version, replays the same operation and refuses s
   const digest = invoiceDigest({
     ownerId: id,
     expectedVersion: 0,
-    terms: values,
+    terms: { ...values, ...standard },
   });
   f = fixture({ earlier: { digest, version: 1 }, current: saved });
   expect(await f.terms.save(token, input())).toEqual({
@@ -260,6 +277,34 @@ it("TERMS316-06 a student reads only their own terms; an administrator reads one
   );
 });
 
+it("LIMITS823-01/02 the store saves the student's session length and practice limit, and refuses values out of bounds", async () => {
+  const f = fixture();
+  expect(
+    await f.terms.save(
+      token,
+      input({ sessionMinutes: 45, practiceExchanges: 3 }),
+    ),
+  ).toEqual({ kind: "ready", value: { version: 1 } });
+  const insert = f.query.mock.calls.find(([sql]) =>
+    String(sql).startsWith("INSERT INTO coaching_terms"),
+  )!;
+  expect(String(insert[0])).toContain("session_minutes,practice_exchanges");
+  expect((insert[1] as unknown[]).slice(9, 12)).toEqual([200, 45, 3]);
+  for (const wrong of [
+    { sessionMinutes: 14 },
+    { sessionMinutes: 61 },
+    { sessionMinutes: 45.5 },
+    { practiceExchanges: 0 },
+    { practiceExchanges: 51 },
+  ])
+    expect(
+      await f.terms.save(token, input(wrong)),
+      JSON.stringify(wrong),
+    ).toEqual({
+      kind: "invalid",
+    });
+});
+
 it("TERMS316-01/06 show the terms read-only to the student and with a prefilled form to an administrator", () => {
   const member = text(memberTermsSection(saved));
   for (const shown of [
@@ -289,7 +334,34 @@ it("TERMS316-01/06 show the terms read-only to the student and with a prefilled 
   expect(admin).toContain(
     'name="aiRequests" type="number" min="0" max="1000000" step="1" value="200" required',
   );
+  // LIMITS823-01/02/03: both people see the two #823 values; the form starts
+  // from the saved or standard ones and explains the bounds.
+  expect(member).toContain("Session length 60 minutes");
+  expect(member).toContain("Practice conversation limit 15 exchanges");
+  expect(member).toContain(
+    "a change applies to new holds and new conversations only.",
+  );
+  const own = { ...saved, sessionMinutes: 45, practiceExchanges: 1 };
+  expect(text(memberTermsSection(own))).toContain(
+    "Session length 45 minutes Practice conversation limit 1 exchange ",
+  );
+  const set = adminTermsSection(own, "/a", "");
+  expect(set).toContain(
+    'name="sessionMinutes" type="number" min="15" max="60" step="1" value="45" required',
+  );
+  expect(set).toContain(
+    'name="practiceExchanges" type="number" min="1" max="50" step="1" value="1" required',
+  );
+  expect(text(set)).toContain(
+    "Session length is 15 to 60 minutes, because an expert's time slot is one hour. A practice conversation can have 1 to 50 exchanges. New values apply to new session holds and new practice conversations only.",
+  );
   const empty = adminTermsSection(null, "/a", "");
+  expect(empty).toContain(
+    'name="sessionMinutes" type="number" min="15" max="60" step="1" value="60" required',
+  );
+  expect(empty).toContain(
+    'name="practiceExchanges" type="number" min="1" max="50" step="1" value="15" required',
+  );
   expect(text(empty)).toContain("No coaching terms are set for this student.");
   expect(empty).toContain('name="price" inputmode="decimal" value="" required');
 });
@@ -407,11 +479,18 @@ it("TERMS316-01/05/06 routes show the sections, save through the store and map e
   expect(ok.headers.location).toBe(`/operator/coaching/${id}`);
   expect(store.save).toHaveBeenCalledWith(token, {
     ...values,
+    ...standard,
     ownerId: id,
     expectedVersion: 0,
     operationId: key,
   });
   expect((await r.post({ price: "nope" })).status).toBe(422);
+  // LIMITS823-02: the refusal names the bounds.
+  const bounds = await r.post({ sessionMinutes: "61" });
+  expect(bounds.status).toBe(422);
+  expect(text(bounds.text)).toContain(
+    "The coaching terms were not saved. Check the price, dates and whole-number allowances, and that session length (15 to 60 minutes) and practice-conversation limit (1 to 50 exchanges) are within their bounds.",
+  );
   expect((await r.post({ revision: "-1" })).status).toBe(422);
   expect((await r.post({ sponsor: "x" })).status).toBe(403);
   store.save.mockResolvedValueOnce({ kind: "conflict" });

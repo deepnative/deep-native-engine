@@ -658,12 +658,14 @@ const sections = {
     "a.id",
   ),
   // v45 appends #316: every version of the coaching terms an administrator set
-  // for the member, never which administrator.
+  // for the member, never which administrator. #823 adds the session length and
+  // practice-conversation limit to each version; the section list is unchanged.
   coachingTerms: section(
     `version,price_cents AS "priceCents",to_char(starts_on,'YYYY-MM-DD') AS "startsOn",
     to_char(ends_on,'YYYY-MM-DD') AS "endsOn",to_char(renews_on,'YYYY-MM-DD') AS "renewsOn",
     review_minutes AS "reviewMinutes",coaching_sessions AS "coachingSessions",
-    ai_requests AS "aiRequests",created_at AS "savedAt"`,
+    ai_requests AS "aiRequests",session_minutes AS "sessionMinutes",
+    practice_exchanges AS "practiceExchanges",created_at AS "savedAt"`,
     "coaching_terms WHERE owner_id=$1",
     "version",
   ),

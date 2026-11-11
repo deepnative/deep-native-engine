@@ -3000,6 +3000,15 @@
       "expected": "The withdrawal is dated and shown on My courses; no second withdrawal is offered; the receipt and its download remain and carry the withdrawal date; nothing about the account is deleted",
       "issues": [121],
       "critical": true
+    },
+    {
+      "id": "L337",
+      "actor": "Student and platform administrator",
+      "preconditions": "Dedicated synthetic PostgreSQL database dropped afterwards, local staff entry, two invented published lessons, invented student and amounts, port0 server; desktop/mobile Chromium",
+      "steps": "LIMITS823-01/02/06: the student registers and sees the standard 60-minute session hold and 15-exchange practice conversation; the administrator sets coaching terms with a 45-minute session length and a 2-exchange practice-conversation limit; the student reads their coaching terms, session availability and the practice start page, then saves two responses; the administrator raises the limit to 3 and then tries a 90-minute session length",
+      "expected": "The form starts from 60 and 15 and explains the bounds; both people see 45 minutes and 2 exchanges; the conversation is complete at 2 pairs and stays complete after the limit is raised, while a new conversation offers 3; the 90-minute value is refused with the bounds and version 2 is unchanged",
+      "issues": [823],
+      "critical": false
     }
   ],
   "fullMvp": [

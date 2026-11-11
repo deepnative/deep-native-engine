@@ -43,6 +43,8 @@ export interface PracticeSessionSource {
   sourceExcerpt: string;
   // Optional, member-chosen interview practice for the same exact source.
   interview: { promptVersion: string; prompt: string };
+  /** #823: the limit a conversation started now would get. */
+  exchangeLimit?: number;
 }
 export interface PracticeSessionSummary {
   id: string;
@@ -52,7 +54,14 @@ export interface PracticeSessionSummary {
   promptVersion: string;
   createdAt: Date;
   withdrawnAt: Date | null;
+  /** #823: the student's limit when this conversation started. */
+  exchangeLimit?: number;
 }
+/** #823: the standard limit, and the most any student's terms can set. */
+export const STANDARD_EXCHANGES = 15;
+const MOST_EXCHANGES = 50;
+export const exchangeLimitOf = (value: { exchangeLimit?: number }) =>
+  value.exchangeLimit ?? STANDARD_EXCHANGES;
 // #200 PRACTICE-AI: a request whose outcome was never recorded is "unknown"
 // and is never retried.
 export interface PracticeSuggestionView {
@@ -182,7 +191,7 @@ const idPattern = /^[A-Z]{2,5}-[0-9]{3}$/;
 const uuidPattern =
   /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const summaryColumns = `s.id,s.content_id AS "contentId",s.content_version AS "contentVersion",
- s.goal_at_start AS goal,s.prompt_version AS "promptVersion",s.created_at AS "createdAt",s.withdrawn_at AS "withdrawnAt"`;
+ s.goal_at_start AS goal,s.prompt_version AS "promptVersion",s.created_at AS "createdAt",s.withdrawn_at AS "withdrawnAt",s.exchange_limit AS "exchangeLimit"`;
 type SessionRow = PracticeSessionSummary & { title: string };
 type SourceRow = {
   contentId: string;
@@ -190,6 +199,7 @@ type SourceRow = {
   title: string;
   body: string;
   goal: Goal;
+  exchangeLimit?: number;
 };
 function prompt(version: string, goal: Goal): string | null {
   return Object.hasOwn(templates, version) &&
@@ -322,7 +332,8 @@ export function practiceSessionStore(
     return (
       (
         await client.query<SourceRow>(
-          `SELECT cv.id AS "contentId",cv.version AS "contentVersion",cv.title,cv.body,l.goal
+          `SELECT cv.id AS "contentId",cv.version AS "contentVersion",cv.title,cv.body,l.goal,
+        student_practice_exchanges(l.id) AS "exchangeLimit"
        FROM learners l JOIN content_versions cv ON cv.kind='lesson' AND cv.origin='curated'
        AND cv.state='published' AND NOT cv.requires_qualified_signoff
        AND member_content_eligible(l.id,cv.id,cv.version)
@@ -371,7 +382,7 @@ export function practiceSessionStore(
        LEFT JOIN practice_ai_suggestions g ON g.session_id=e.session_id AND g.sequence=e.sequence
        LEFT JOIN local_ai_hold_test_decisions d ON d.job_id=g.job_id AND d.member_id=g.member_id
         AND g.state='requested'
-       WHERE e.session_id=$1 ORDER BY e.sequence LIMIT 15`,
+       WHERE e.session_id=$1 ORDER BY e.sequence LIMIT ${MOST_EXCHANGES}`,
         [id],
       )
     ).rows;
@@ -422,6 +433,7 @@ export function practiceSessionStore(
           promptVersion: currentPrompt,
           prompt: prompt(currentPrompt, row.goal)!,
           sourceExcerpt: excerpt(row.body),
+          exchangeLimit: exchangeLimitOf(row),
           interview: {
             promptVersion: interviewPromptVersion,
             prompt: prompt(interviewPromptVersion, row.goal)!,
@@ -471,8 +483,8 @@ export function practiceSessionStore(
             if (options.allowance && !unit) return { kind: "allowance-needed" };
             const id = randomUUID();
             await client.query(
-              `INSERT INTO private_practice_sessions(id,member_id,content_id,content_version,goal_at_start,prompt_version)
-          VALUES($1,$2,$3,$4,$5,$6)`,
+              `INSERT INTO private_practice_sessions(id,member_id,content_id,content_version,goal_at_start,prompt_version,exchange_limit)
+          VALUES($1,$2,$3,$4,$5,$6,student_practice_exchanges($2))`,
               [
                 id,
                 memberId,
@@ -545,7 +557,7 @@ export function practiceSessionStore(
             ? "unknown-template"
             : !current || current.goal !== row.goal
               ? "source-unavailable"
-              : pairs.length === 15
+              : pairs.length >= exchangeLimitOf(row)
                 ? "full"
                 : "available";
         const paused =
@@ -573,7 +585,7 @@ export function practiceSessionStore(
         !uuidPattern.test(id) ||
         !Number.isInteger(input.expectedSequence) ||
         input.expectedSequence < 1 ||
-        input.expectedSequence > 16 ||
+        input.expectedSequence > MOST_EXCHANGES + 1 ||
         typeof input.response !== "string" ||
         input.response.trim().length === 0 ||
         input.response.length > 1000
@@ -607,7 +619,7 @@ export function practiceSessionStore(
               return previous.response === input.response
                 ? "replayed"
                 : "conflict";
-            if (pairs.length === 15) return "full";
+            if (pairs.length >= exchangeLimitOf(row)) return "full";
             if (input.expectedSequence !== pairs.length + 1) return "conflict";
             const sourceExcerpt = excerpt(current.body);
             const comparison =
@@ -662,7 +674,7 @@ export function practiceSessionStore(
         !uuidPattern.test(id) ||
         !Number.isInteger(sequence) ||
         sequence < 1 ||
-        sequence > 15
+        sequence > MOST_EXCHANGES
       )
         return "unavailable";
       const provider =

@@ -15,6 +15,11 @@ CREATE TABLE IF NOT EXISTS synthetic_slot_holds (
 CREATE UNIQUE INDEX IF NOT EXISTS synthetic_slot_one_active_hold
  ON synthetic_slot_holds(slot_id) WHERE state='held';
 
+-- Every migration re-runs at each start; 139 (#823) replaces this function so a
+-- hold keeps its own minutes, and a restart must not put the fixed 60 back.
+DO $guard$ BEGIN
+IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=139) THEN
+EXECUTE $create$
 CREATE OR REPLACE FUNCTION synthetic_hold_slot(
  p_member uuid,p_slot uuid,p_grant uuid,p_key text,p_fingerprint text,
  p_deadline timestamptz,p_now timestamptz
@@ -109,8 +114,16 @@ BEGIN
  VALUES(gen_random_uuid(),p_member,p_grant,v_reservation,'reserve',60,
         p_key,p_fingerprint,v_hold);
  RETURN v_hold;
-END $$;
+END $$
+$create$;
+END IF;
+END $guard$;
 
+-- Every migration re-runs at each start; 139 (#823) replaces this function so a
+-- hold keeps its own minutes, and a restart must not put the fixed 60 back.
+DO $guard$ BEGIN
+IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=139) THEN
+EXECUTE $create$
 CREATE OR REPLACE FUNCTION synthetic_expire_slot_hold(
  p_hold uuid,p_key text,p_fingerprint text,p_now timestamptz
 ) RETURNS uuid LANGUAGE plpgsql AS $$
@@ -174,7 +187,10 @@ BEGIN
  VALUES(gen_random_uuid(),v_hold.member_id,v_hold.grant_id,v_hold.reservation_id,
         'release',60,p_key,p_fingerprint,p_hold);
  RETURN p_hold;
-END $$;
+END $$
+$create$;
+END IF;
+END $guard$;
 
 INSERT INTO schema_migrations(version) VALUES(28) ON CONFLICT DO NOTHING;
 COMMIT;

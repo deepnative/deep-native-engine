@@ -6,11 +6,28 @@ There is no fixed coaching offer. A platform administrator sets each student's t
 
 - price (CAD), which is the student's own coaching price and covers their allowances;
 - start and end date of the coaching period, and the renewal date;
-- allowances: expert review minutes, coaching sessions and AI requests.
+- allowances: expert review minutes, coaching sessions and AI requests;
+- session length in minutes and practice-conversation limit in exchanges (#823, below).
 
 Each save is a new version (migration 126, `coaching_terms`). Earlier versions can't be changed or deleted. A form opened before someone else saved is refused as out of date (409), and the same operation replayed returns the same version. Saves need a platform administrator, the page's CSRF token and the site's own origin.
 
 The student sees their current terms, read-only, on **Monthly coaching hours** (`/account/coaching`), with: "There are no cancellation or refund rules. To ask about changes, contact info@deepnative.io." Every version is in Download my records (`coachingTerms`, export v45), without the administrator. Deleting the account removes them.
+
+## Session length and practice-conversation limit (#823)
+
+Owner decision of 11 November 2026: these two values are set per student, with the rest of the terms. Until then every session hold reserved 60 minutes and every practice conversation ended at 15 exchanges.
+
+- **Session length** is 15 to 60 minutes. The upper bound is an expert's time slot, which is still one hour. A session hold reserves this many minutes from the student's allowance, and withdrawing it, its deadline passing or a staff cancellation returns exactly what it reserved.
+- **Practice-conversation limit** is 1 to 50 exchanges (response and comparison pairs).
+- Terms saved without them, and students with no terms, keep 60 and 15. The form starts from the saved values and explains the bounds; a value outside them is refused with the bounds (422) and the database refuses it too.
+- A hold keeps the minutes it reserved and a conversation keeps the limit it started with, so new terms apply to new holds and new conversations only.
+- The student sees both values on their coaching terms, on **Optional service availability** (the minutes a hold reserves) and on the practice pages (the limit before starting, and the count while in a conversation). Both are in each `coachingTerms` version in Download my records.
+
+Migration 139 adds `coaching_terms.session_minutes` and `practice_exchanges`, `private_practice_sessions.exchange_limit`, and replaces the four hold functions so they use the hold's own minutes; the earlier definitions in migrations 028, 037, 046 and 128 no longer run once 139 has, because every migration re-runs at each start.
+
+Not done: a session longer than the one-hour slot, a different length per kind of slot (a coaching and a formal-review hold both use the student's session length), and the conversation's own limit in the practice sections of Download my records.
+
+Tests: LIMITS823-01..07 in `tests/integration/coaching-session-practice-limits.test.ts`, with unit cases in `tests/unit/coaching-terms.test.ts`, `practice-sessions.test.ts` and `practice-session-ui.test.ts`; browser journey L337 in `tests/e2e/coaching-session-practice-limits.spec.ts`.
 
 ## Allowance units (#27)
 

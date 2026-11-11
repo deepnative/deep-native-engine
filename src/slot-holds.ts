@@ -81,6 +81,8 @@ export function syntheticSlotHolds(
         memberId,
         slotId,
         grantId,
+        // A fixed part of this request's fingerprint since #28. The minutes
+        // actually reserved are the student's session length (#823).
         quantity: 60,
         deadline: deadline.toISOString(),
       };
@@ -154,6 +156,8 @@ export interface SampleHoldGrant {
 export interface MemberHoldSnapshot {
   grants: SampleHoldGrant[];
   receipts: SampleHoldReceipt[];
+  /** #823: the minutes a new hold reserves for this student. */
+  sessionMinutes?: number;
 }
 export interface MemberSlotHolds {
   withdraw(token: string, requestId: string): Promise<string>;
@@ -192,7 +196,7 @@ export function memberSlotHolds(pool: Pool): MemberSlotHolds {
     return client.query<SampleHoldReceipt>(
       `SELECT r.request_id AS id,r.slot_id AS "slotId",r.domain,
         r.service_type AS "serviceType",r.starts_at AS "startsAt",
-        r.ends_at AS "endsAt",h.expires_at AS "expiresAt",h.state,60 AS quantity,
+        r.ends_at AS "endsAt",h.expires_at AS "expiresAt",h.state,q.quantity,
         CASE WHEN c.id IS NULL THEN NULL ELSE json_build_object(
           'reason',c.reason,'cancelledAt',${utc("c.cancelled_at")},
           'replacementMinutes',g.quantity,
@@ -200,6 +204,7 @@ export function memberSlotHolds(pool: Pool): MemberSlotHolds {
           'replacementExpiresAt',${utc("g.expires_at")}) END AS cancellation
        FROM synthetic_member_hold_receipts r
        JOIN synthetic_slot_holds h ON h.id=r.hold_id
+       JOIN synthetic_entitlement_reservations q ON q.id=h.reservation_id
        LEFT JOIN sample_hold_staff_cancellations c ON c.hold_id=h.id AND c.member_id=r.member_id
        LEFT JOIN synthetic_entitlement_grants g ON g.id=c.replacement_grant_id AND g.member_id=r.member_id
        JOIN principals p ON p.id=r.member_id
@@ -362,8 +367,13 @@ export function memberSlotHolds(pool: Pool): MemberSlotHolds {
         await query("SELECT set_config('transaction_timeout',$1,true)", [
           `${Math.max(1, Math.floor(operationDeadline - performance.now()))}ms`,
         ]);
-        const member = await query<{ id: string; expiresAt: string }>(
-          `SELECT p.id,p.expires_at::text AS "expiresAt"
+        const member = await query<{
+          id: string;
+          expiresAt: string;
+          sessionMinutes: number;
+        }>(
+          `SELECT p.id,p.expires_at::text AS "expiresAt",
+             student_session_minutes(p.id) AS "sessionMinutes"
            FROM principals p JOIN learners l ON l.id=p.id
            WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
              AND p.expires_at>clock_timestamp() FOR SHARE OF p`,
@@ -390,7 +400,7 @@ export function memberSlotHolds(pool: Pool): MemberSlotHolds {
                WHERE p.token_hash=$1 AND p.kind='member' AND p.revoked_at IS NULL
                  AND p.expires_at>clock_timestamp() AND g.starts_at<=clock_timestamp()
                  AND g.expires_at>clock_timestamp() AND g.expired_at IS NULL
-                 AND g.available>=60 AND g.category IN ('coach_minutes','review_minutes')
+                 AND g.available>=student_session_minutes(p.id) AND g.category IN ('coach_minutes','review_minutes')
                ORDER BY g.expires_at,g.id`,
                 [hash(token)],
               )
@@ -399,7 +409,11 @@ export function memberSlotHolds(pool: Pool): MemberSlotHolds {
         commitIssued = true;
         await query("COMMIT");
         transactionOpen = false;
-        result = { grants: grants.rows, receipts: own.rows };
+        result = {
+          grants: grants.rows,
+          receipts: own.rows,
+          sessionMinutes: member.rows[0].sessionMinutes,
+        };
       }
     } catch (error) {
       if (
