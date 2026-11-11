@@ -79,11 +79,23 @@ export interface SupportTimeCommitments {
   supportMinutes: number;
   preparationMinutes: number;
 }
+/** COST-01: simulated AI usage, as estimated before a request and as settled after. */
+export interface AiUsageFigures {
+  /** Requests with an estimate. */
+  estimated: number;
+  estimatedPoints: number;
+  /** Requests whose actual simulated use was recorded. */
+  settled: number;
+  settledPoints: number;
+  /** The estimates of those settled requests, to compare like with like. */
+  settledEstimatePoints: number;
+}
 export interface StaffCapacitySnapshot {
   asOf: Date;
   groups: [CapacityGroup, CapacityGroup];
   reviewTime: ReviewTimeCommitments;
   supportTime: SupportTimeCommitments;
+  aiUsage: AiUsageFigures;
 }
 export type StaffCapacityResult =
   | { kind: "ready"; value: StaffCapacitySnapshot }
@@ -264,6 +276,13 @@ const supportTimeSql = `WITH current AS (
    (SELECT COALESCE(sum(t.preparation_minutes),0) FROM support_time_allocations a JOIN support_time_entries t ON t.allocation_id=a.id
      WHERE a.state='completed')::text AS "preparationMinutes"`;
 
+// COST-01: every recorded estimate and settlement, in simulated cost points.
+const aiUsageSql = `SELECT (SELECT count(*) FROM ai_usage_estimates)::integer AS estimated,
+   (SELECT COALESCE(sum(cost_points),0) FROM ai_usage_estimates)::text AS "estimatedPoints",
+   (SELECT count(*) FROM ai_usage_settlements)::integer AS settled,
+   (SELECT COALESCE(sum(cost_points),0) FROM ai_usage_settlements)::text AS "settledPoints",
+   (SELECT COALESCE(sum(e.cost_points),0) FROM ai_usage_estimates e JOIN ai_usage_settlements s ON s.job_id=e.job_id)::text AS "settledEstimatePoints"`;
+
 const whole = (value: unknown) => {
   const number = typeof value === "string" ? Number(value) : value;
   if (typeof number !== "number" || !Number.isSafeInteger(number) || number < 0)
@@ -340,6 +359,21 @@ export function decodeSupportTime(
     ...facts,
   };
 }
+const aiKeys = [
+  "estimated",
+  "estimatedPoints",
+  "settled",
+  "settledPoints",
+  "settledEstimatePoints",
+] as const;
+export function decodeAiUsage(
+  row: Record<string, unknown> | undefined,
+): AiUsageFigures {
+  if (!row) throw new Error("Capacity report row missing");
+  return Object.fromEntries(
+    aiKeys.map((key) => [key, whole(row[key])]),
+  ) as unknown as AiUsageFigures;
+}
 /** Reads every source inside the caller's one snapshot. */
 export async function readStaffCapacity(
   client: Pick<PoolClient, "query">,
@@ -349,6 +383,7 @@ export async function readStaffCapacity(
       .rows[0],
     support = (await client.query<Record<string, unknown>>(supportTimeSql))
       .rows[0],
+    ai = (await client.query<Record<string, unknown>>(aiUsageSql)).rows[0],
     asOf = (await client.query<{ asOf: Date }>('SELECT now() AS "asOf"'))
       .rows[0];
   if (!asOf || !(asOf.asOf instanceof Date))
@@ -362,6 +397,7 @@ export async function readStaffCapacity(
     ],
     reviewTime: decodeReviewTime(review),
     supportTime: decodeSupportTime(support),
+    aiUsage: decodeAiUsage(ai),
   };
 }
 class AccessDenied extends Error {}

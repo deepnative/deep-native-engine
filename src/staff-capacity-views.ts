@@ -160,7 +160,7 @@ export function staffCapacityPage(snapshot: StaffCapacitySnapshot) {
         ["/operator/experts", "Expert coverage registry"],
         ["/operator", "Administration console"],
       ],
-    )}${snapshot.groups.map(groupSection).join("")}${reviewTimeSection(snapshot.reviewTime)}${supportTimeSection(snapshot.supportTime)}<h2>What this report cannot establish</h2><ul><li>Support has no roster: nobody declares support capacity, so open support time is shown on its own and is compared with nothing.</li><li>A roster record is not proof of qualification. Unverified records are never counted as available coverage.</li><li>Declared capacity and commitments are what staff typed into the registry. No timesheet, calendar or contract is compared.</li><li>Coach assignments to members use a member sign-in, not the staff identity the roster uses, so they can't be matched to roster records and aren't shown.</li><li>No staff cost, forecast, booked service or revenue is shown.</li><li>No staff names, identifiers or qualification, agreement or conflict references are shown. Nothing is corrected or stored.</li></ul><p><a href="/operator/staff-capacity">Read a fresh snapshot</a></p></article>`,
+    )}${snapshot.groups.map(groupSection).join("")}${reviewTimeSection(snapshot.reviewTime)}${supportTimeSection(snapshot.supportTime)}<h2>What this report cannot establish</h2><ul><li>Support has no roster: nobody declares support capacity, so open support time is shown on its own and is compared with nothing.</li><li>A roster record is not proof of qualification. Unverified records are never counted as available coverage.</li><li>Declared capacity and commitments are what staff typed into the registry. No timesheet, calendar or contract is compared.</li><li>Coach assignments to members use a member sign-in, not the staff identity the roster uses, so they can't be matched to roster records and aren't shown.</li><li>No staff cost, forecast, booked service or revenue is shown.</li><li>No staff names, identifiers or qualification, agreement or conflict references are shown. Nothing is corrected or stored.</li></ul><p><a href="/operator/staff-capacity">Read a fresh snapshot</a> · <a href="/operator/delivery-cost">Delivery cost</a></p></article>`,
   );
 }
 export function staffCapacityUnavailablePage(
@@ -182,5 +182,84 @@ export function staffCapacityUnavailablePage(
         ["/operator", "Administration console"],
       ],
     )}</section>`,
+  );
+}
+
+/**
+ * COST-01..03 (#94, F-ROADMAP-09-C): what delivery has used so far, from
+ * existing records only. Staff time is in minutes, with preparation counted
+ * once per completed review or support booking. AI is in simulated cost
+ * points and every figure is labelled as an estimate. No money is shown.
+ */
+export function deliveryCostPage(snapshot: StaffCapacitySnapshot) {
+  const review = snapshot.reviewTime,
+    support = snapshot.supportTime,
+    ai = snapshot.aiUsage;
+  const staffMinutes =
+    review.reviewMinutes +
+    review.preparationMinutes +
+    support.supportMinutes +
+    support.preparationMinutes;
+  const points = (value: number) =>
+    `${value} simulated cost point${value === 1 ? "" : "s"} · estimate`;
+  return page(
+    "Delivery cost",
+    `<article class="reading"><p class="eyebrow">STAFF · ${hostingText("PREVIEW RECORDS", "TEST DATA")} · NOT A LIVE FIGURE</p><h1>Delivery cost</h1><p>One read-only snapshot of what delivery has used: recorded staff minutes and estimated AI use. No money is shown, because no staff pay rate or AI price has been set.</p><p>As of <time datetime="${escape(snapshot.asOf.toISOString())}">${readableTime(snapshot.asOf)}</time>. A later read may differ.</p>${portalActions(
+      [
+        ["/operator/staff-capacity", "Staff capacity"],
+        ["/operator/invoice-reconciliation", "Invoice reconciliation"],
+        ["/staff", "Staff tools"],
+      ],
+    )}<section class="portal-card" data-delivery-staff><h2>Staff time used · Test data</h2><p>Minutes staff recorded on completed reviews and completed support bookings. Each completed review or booking has one record, so its preparation is counted once, however many staff held a grant on it. Open and cancelled work is not counted.</p>${fields(
+      [
+        ["cost.reviews", "Completed reviews", String(review.completed)],
+        ["cost.review", "Review minutes", minutes(review.reviewMinutes)],
+        [
+          "cost.reviewPreparation",
+          "Review preparation minutes, counted once",
+          minutes(review.preparationMinutes),
+        ],
+        [
+          "cost.supports",
+          "Completed support bookings",
+          String(support.completed),
+        ],
+        ["cost.support", "Support minutes", minutes(support.supportMinutes)],
+        [
+          "cost.supportPreparation",
+          "Support preparation minutes, counted once",
+          minutes(support.preparationMinutes),
+        ],
+        ["cost.staffMinutes", "All staff minutes used", minutes(staffMinutes)],
+      ],
+    )}</section><section class="portal-card" data-delivery-ai><h2>AI use · Estimate</h2><p><strong>ESTIMATE · SIMULATED · NO MONEY CHARGED.</strong> AI figures are simulated cost points at test rates. They are estimates, not a provider's bill, and no AI provider is connected.</p>${fields(
+      [
+        [
+          "cost.aiRequests",
+          "AI requests with an estimate",
+          String(ai.estimated),
+        ],
+        [
+          "cost.aiEstimated",
+          "Estimated before the requests ran",
+          points(ai.estimatedPoints),
+        ],
+        [
+          "cost.aiSettled",
+          "Requests with recorded simulated use",
+          String(ai.settled),
+        ],
+        [
+          "cost.aiSettledPoints",
+          "Recorded simulated use of those requests",
+          points(ai.settledPoints),
+        ],
+        [
+          "cost.aiSettledEstimate",
+          "What those requests were estimated at",
+          points(ai.settledEstimatePoints),
+        ],
+      ],
+    )}</section><h2>What this report cannot establish</h2><ul><li>No cost in money. Staff pay rates and AI prices aren't set, so minutes and points are not converted.</li><li>Minutes are what staff typed when they recorded a review or support booking. No timesheet or calendar is compared.</li><li>Coaching sessions aren't recorded as minutes, so they aren't here.</li><li>Invoices and payments are on <a href="/operator/invoice-reconciliation">Invoice reconciliation</a>, where sample and test entries stay apart from real ones.</li><li>No member, staff member or request is named. Nothing is corrected or stored.</li></ul><p><a href="/operator/delivery-cost">Read a fresh snapshot</a></p></article>`,
   );
 }

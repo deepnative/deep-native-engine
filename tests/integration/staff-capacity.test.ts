@@ -700,3 +700,57 @@ it("SUPCAP-03 the page shows support time to operators and administrators only, 
     value: { state: "allocated", ceiling: 20, held: 20 },
   });
 });
+
+// #94 COST-01..03 (F-ROADMAP-09-C): delivery cost from the same snapshot. Real
+// AI estimates and settlements are exercised in tests/full-e2e/roadmap-09-c.spec.ts.
+it("COST-01/02/03 delivery cost shows used staff minutes with preparation once, zero AI use when none is recorded, to the same staff only", async () => {
+  const admin = await staff("platform_admin"),
+    first = await staff("operator"),
+    second = await staff("operator"),
+    reviewer = await staff("reviewer");
+  expect(ready(await report.snapshot(admin.token)).aiUsage).toEqual({
+    estimated: 0,
+    estimatedPoints: 0,
+    settled: 0,
+    settledPoints: 0,
+    settledEstimatePoints: 0,
+  });
+  const m = await supportMember(40);
+  const settledBooking = await booking(m.token),
+    open = await booking(m.token);
+  const grantId = await supportGrant(admin.token, settledBooking, first.id);
+  await supportGrant(admin.token, settledBooking, second.id);
+  const scope = { ...settledBooking, grantId };
+  await support.time!.begin(first.token, scope, randomUUID());
+  const start = new Date(Date.now() - hour),
+    end = new Date(+start + 10 * 60_000);
+  await support.time!.record(first.token, scope, randomUUID(), {
+    supportStart: start,
+    supportEnd: end,
+    preparationStart: end,
+    preparationEnd: new Date(+end + 5 * 60_000),
+  });
+  const cost = "/operator/delivery-cost";
+  for (const token of [admin.token, first.token]) {
+    const page = await get(cost, token);
+    expect(page.status).toBe(200);
+    expect(page.text).toContain("<h1>Delivery cost</h1>");
+    expect(page.text).toMatch(/data-field="cost.supports">1</);
+    expect(page.text).toMatch(/data-field="cost.support">10 min/);
+    expect(page.text).toMatch(/data-field="cost.supportPreparation">5 min/);
+    // The open 20-minute booking is not a cost yet.
+    expect(page.text).toMatch(/data-field="cost.staffMinutes">15 min/);
+    expect(page.text).toMatch(
+      /data-field="cost.aiEstimated">0 simulated cost points · estimate/,
+    );
+    expect(page.text).not.toMatch(/CAD/);
+    for (const secret of [m.id, open.requestId, first.id, second.id])
+      expect(page.text).not.toContain(secret);
+  }
+  for (const token of [reviewer.token, m.token, undefined]) {
+    const refused = await get(cost, token);
+    expect(refused.status).toBe(403);
+    expect(refused.text).not.toMatch(/\d+ (min|simulated)/);
+  }
+  expect((await get(cost + "?x=1", admin.token)).status).toBe(400);
+});
