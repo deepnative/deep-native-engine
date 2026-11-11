@@ -6,13 +6,16 @@ import {
   memberReference,
   prepareBundle,
 } from "../support/course-bundle-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // Staff measures and their demo separation (ECO-08-A/B, BUILD-09-A). Each case
 // runs on its own database. The main listener issues sample (demo) course
 // billing; a second listener on the same database issues configured billing,
 // whose agreements and invoices are the only "real" ones. Nothing is payable,
 // no provider is called and no money moves. Staff credentials stay out of traces.
-test.use({ trace: "off" });
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
+test.use({ trace: staffTrace });
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;
 
 const field = (page: Page, group: string, name: string) =>

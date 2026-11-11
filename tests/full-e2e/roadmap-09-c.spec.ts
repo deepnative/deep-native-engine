@@ -24,6 +24,7 @@ import {
   torontoDay,
   type TermsForm,
 } from "../support/coaching-terms-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // Operator reconciliation and the delivery cost report, from existing records
 // only. The main listener issues sample (demo) invoices and accepts this
@@ -31,7 +32,9 @@ import {
 // issues configured invoices, the only "real" ones. Nothing is payable, no
 // provider is called and no money moves. AI figures are simulated points.
 // Staff credentials stay out of traces; every person and amount is invented.
-test.use({ trace: "off" });
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
+test.use({ trace: staffTrace });
 const key = "invented-provisional-test-provider-key-09c";
 
 const cash = (page: Page, group: string, name: string) =>

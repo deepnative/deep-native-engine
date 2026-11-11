@@ -10,12 +10,15 @@ import {
   prepareBundle,
   storedPlans,
 } from "../support/course-bundle-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // Optional services here are what the product actually arranges: course-billing
 // agreements an administrator prepares and monthly coaching hours at a rate the
 // administrator sets. Sample invoices only; no provider, no money. The historical
 // coaching plans stay hypotheses and cannot be bought.
-test.use({ trace: "off" });
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
+test.use({ trace: staffTrace });
 // Hosted pages say "Not available"; this local listener names the state.
 const unavailable = /Not available|· hypothesis$/;
 

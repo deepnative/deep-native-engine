@@ -7,13 +7,16 @@ import {
   expectBillingRetained,
   issuedInvoiceWithPayment,
 } from "../support/billing-retention-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // #12 D08 (owner, 10 Nov 2026): after a member with an issued, paid invoice
 // deletes their account, the response names the billing exception with its
 // six-year CRA expiry and the 30-day backup expiry, and claims no total
 // erasure. Invented data on its own database; nothing is payable and no money
 // moves. Staff credentials stay out of traces.
-test.use({ trace: "off" });
+// Staff sign in here, so traces are off except in a full-release run, which
+// needs one per execution: see ../support/staff-trace.ts.
+test.use({ trace: staffTrace });
 
 test("[F-BUILD-08-D] the deletion response names the kept billing records and backups with their expiry instead of claiming total erasure", async ({
   browser,
