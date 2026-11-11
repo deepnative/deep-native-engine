@@ -63,10 +63,27 @@ export interface ReviewTimeCommitments {
   reviewMinutes: number;
   preparationMinutes: number;
 }
+/** SUPCAP-01: support time members have allocated from their support test minutes. */
+export interface SupportTimeCommitments {
+  status: "empty" | "recorded";
+  /** Allocated, begun or awaiting reconciliation: still held, not yet settled. */
+  open: number;
+  openMinutes: number;
+  /** Open allocations an operator holds a current grant on. */
+  granted: number;
+  grantedMinutes: number;
+  operators: number;
+  waiting: number;
+  waitingMinutes: number;
+  completed: number;
+  supportMinutes: number;
+  preparationMinutes: number;
+}
 export interface StaffCapacitySnapshot {
   asOf: Date;
   groups: [CapacityGroup, CapacityGroup];
   reviewTime: ReviewTimeCommitments;
+  supportTime: SupportTimeCommitments;
 }
 export type StaffCapacityResult =
   | { kind: "ready"; value: StaffCapacitySnapshot }
@@ -224,6 +241,29 @@ const reviewTimeSql = `WITH grants AS (
    (SELECT COALESCE(sum(t.preparation_minutes),0) FROM review_time_allocations a JOIN review_time_entries t ON t.allocation_id=a.id
      WHERE a.state='completed')::text AS "preparationMinutes"`;
 
+// SUPCAP-01/02: an open allocation counts once at its ceiling, however many
+// operators hold a current grant on it. Cancelled allocations count nowhere.
+const supportTimeSql = `WITH current AS (
+   SELECT g.allocation_id,g.staff_id FROM support_time_grants g
+   WHERE g.revoked_at IS NULL AND g.starts_at<=now() AND g.expires_at>now()
+ ),held AS (
+   SELECT a.id,a.ceiling,EXISTS(SELECT 1 FROM current g WHERE g.allocation_id=a.id) AS granted
+   FROM support_time_allocations a WHERE a.state IN ('allocated','begun','needs_reconciliation')
+ )
+ SELECT (SELECT count(*) FROM held)::integer AS open,
+   (SELECT COALESCE(sum(ceiling),0) FROM held)::text AS "openMinutes",
+   (SELECT count(*) FROM held WHERE granted)::integer AS granted,
+   (SELECT COALESCE(sum(ceiling),0) FROM held WHERE granted)::text AS "grantedMinutes",
+   (SELECT count(DISTINCT g.staff_id) FROM current g JOIN held h ON h.id=g.allocation_id)::integer AS operators,
+   (SELECT count(*) FROM held WHERE NOT granted)::integer AS waiting,
+   (SELECT COALESCE(sum(ceiling),0) FROM held WHERE NOT granted)::text AS "waitingMinutes",
+   (SELECT count(*) FROM support_time_allocations a JOIN support_time_entries t ON t.allocation_id=a.id
+     WHERE a.state='completed')::integer AS completed,
+   (SELECT COALESCE(sum(t.support_minutes),0) FROM support_time_allocations a JOIN support_time_entries t ON t.allocation_id=a.id
+     WHERE a.state='completed')::text AS "supportMinutes",
+   (SELECT COALESCE(sum(t.preparation_minutes),0) FROM support_time_allocations a JOIN support_time_entries t ON t.allocation_id=a.id
+     WHERE a.state='completed')::text AS "preparationMinutes"`;
+
 const whole = (value: unknown) => {
   const number = typeof value === "string" ? Number(value) : value;
   if (typeof number !== "number" || !Number.isSafeInteger(number) || number < 0)
@@ -276,12 +316,38 @@ export function decodeReviewTime(
     >,
   );
 }
+const supportKeys = [
+  "open",
+  "openMinutes",
+  "granted",
+  "grantedMinutes",
+  "operators",
+  "waiting",
+  "waitingMinutes",
+  "completed",
+  "supportMinutes",
+  "preparationMinutes",
+] as const;
+export function decodeSupportTime(
+  row: Record<string, unknown> | undefined,
+): SupportTimeCommitments {
+  if (!row) throw new Error("Capacity report row missing");
+  const facts = Object.fromEntries(
+    supportKeys.map((key) => [key, whole(row[key])]),
+  ) as Omit<SupportTimeCommitments, "status">;
+  return {
+    status: !facts.open && !facts.completed ? "empty" : "recorded",
+    ...facts,
+  };
+}
 /** Reads every source inside the caller's one snapshot. */
 export async function readStaffCapacity(
   client: Pick<PoolClient, "query">,
 ): Promise<StaffCapacitySnapshot> {
   const roster = (await client.query<Record<string, unknown>>(rosterSql)).rows,
     review = (await client.query<Record<string, unknown>>(reviewTimeSql))
+      .rows[0],
+    support = (await client.query<Record<string, unknown>>(supportTimeSql))
       .rows[0],
     asOf = (await client.query<{ asOf: Date }>('SELECT now() AS "asOf"'))
       .rows[0];
@@ -295,6 +361,7 @@ export async function readStaffCapacity(
       capacityGroup("formal-review", facts),
     ],
     reviewTime: decodeReviewTime(review),
+    supportTime: decodeSupportTime(support),
   };
 }
 class AccessDenied extends Error {}

@@ -5,6 +5,7 @@ import type { ApplicationMode } from "../../src/adapters.ts";
 import {
   capacityGroup,
   decodeReviewTime,
+  decodeSupportTime,
   disabledStaffCapacityStore,
   type StaffCapacityStore,
 } from "../../src/staff-capacity.ts";
@@ -49,6 +50,18 @@ const token = "a".repeat(64),
       reviewMinutes: "0",
       preparationMinutes: "0",
     }),
+    supportTime: decodeSupportTime({
+      open: 1,
+      openMinutes: "20",
+      granted: 1,
+      grantedMinutes: "20",
+      operators: 1,
+      waiting: 0,
+      waitingMinutes: "0",
+      completed: 0,
+      supportMinutes: "0",
+      preparationMinutes: "0",
+    }),
   };
 const members = {
   session: vi.fn(async () => ({ kind: "none" })),
@@ -81,6 +94,8 @@ it("CAP-03 shows declared, committed and available minutes from the snapshot", a
   expect(r.headers["cache-control"]).toBe("no-store");
   expect(r.text).toMatch(/data-field="formal-review.available">120 min/);
   expect(r.text).toMatch(/data-field="coaching.available">Not recorded/);
+  // SUPCAP-03: support time is on the same page.
+  expect(r.text).toMatch(/data-field="support.open">20 min/);
 });
 
 it("CAP-08 live mode refuses before reading anything", async () => {

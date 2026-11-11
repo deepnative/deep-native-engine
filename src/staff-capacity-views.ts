@@ -5,6 +5,7 @@ import type {
   CapacityGroup,
   ReviewTimeCommitments,
   StaffCapacitySnapshot,
+  SupportTimeCommitments,
 } from "./staff-capacity.ts";
 import { escape, page } from "./views.ts";
 
@@ -116,15 +117,50 @@ function reviewTimeSection(row: ReviewTimeCommitments) {
     ],
   )}</section>`;
 }
+// SUPCAP-01/03: support time members allocated, beside the roster and never added to it.
+function supportTimeSection(row: SupportTimeCommitments) {
+  const statusText = {
+    empty: "No support time to show.",
+    recorded:
+      "Open support time stays held from the member's support test minutes until an operator settles it or the member cancels.",
+  }[row.status];
+  return `<section class="portal-card" data-support-time><h2>Support time · Test data</h2><p>Invented support time from the support-time test records. Each open allocation is counted once at the minutes the member held for it. It is shown beside the roster and never added to coaching or review.</p><p role="status" data-capacity-status="${row.status}">${statusText}</p>${fields(
+    [
+      [
+        "support.open",
+        `Open support time (${row.open})`,
+        minutes(row.openMinutes),
+      ],
+      [
+        "support.granted",
+        `Granted to an operator (${row.granted})`,
+        minutes(row.grantedMinutes),
+      ],
+      ["support.operators", "Operators holding grants", String(row.operators)],
+      [
+        "support.waiting",
+        `Waiting for an operator (${row.waiting})`,
+        minutes(row.waitingMinutes),
+      ],
+      ["support.completed", "Completed support", String(row.completed)],
+      ["support.used", "Support minutes used", minutes(row.supportMinutes)],
+      [
+        "support.preparation",
+        "Preparation minutes used, counted once",
+        minutes(row.preparationMinutes),
+      ],
+    ],
+  )}</section>`;
+}
 export function staffCapacityPage(snapshot: StaffCapacitySnapshot) {
   return page(
     "Staff capacity",
-    `<article class="reading"><p class="eyebrow">STAFF · ${hostingText("PREVIEW RECORDS", "TEST DATA")} · NOT A LIVE FIGURE</p><h1>Staff capacity</h1><p>One read-only snapshot comparing the expert registry's declared capacity with its open slots and recorded review time. Coaching and formal review are shown apart and are never added together.</p><p>As of <time datetime="${escape(snapshot.asOf.toISOString())}">${readableTime(snapshot.asOf)}</time>. A later read may differ.</p>${portalActions(
+    `<article class="reading"><p class="eyebrow">STAFF · ${hostingText("PREVIEW RECORDS", "TEST DATA")} · NOT A LIVE FIGURE</p><h1>Staff capacity</h1><p>One read-only snapshot comparing the expert registry's declared capacity with its open slots and recorded review time, with support time shown beside them. Coaching, formal review and support are shown apart and are never added together.</p><p>As of <time datetime="${escape(snapshot.asOf.toISOString())}">${readableTime(snapshot.asOf)}</time>. A later read may differ.</p>${portalActions(
       [
         ["/operator/experts", "Expert coverage registry"],
         ["/operator", "Administration console"],
       ],
-    )}${snapshot.groups.map(groupSection).join("")}${reviewTimeSection(snapshot.reviewTime)}<h2>What this report cannot establish</h2><ul><li>A roster record is not proof of qualification. Unverified records are never counted as available coverage.</li><li>Declared capacity and commitments are what staff typed into the registry. No timesheet, calendar or contract is compared.</li><li>Coach assignments to members use a member sign-in, not the staff identity the roster uses, so they can't be matched to roster records and aren't shown.</li><li>No staff cost, forecast, booked service or revenue is shown.</li><li>No staff names, identifiers or qualification, agreement or conflict references are shown. Nothing is corrected or stored.</li></ul><p><a href="/operator/staff-capacity">Read a fresh snapshot</a></p></article>`,
+    )}${snapshot.groups.map(groupSection).join("")}${reviewTimeSection(snapshot.reviewTime)}${supportTimeSection(snapshot.supportTime)}<h2>What this report cannot establish</h2><ul><li>Support has no roster: nobody declares support capacity, so open support time is shown on its own and is compared with nothing.</li><li>A roster record is not proof of qualification. Unverified records are never counted as available coverage.</li><li>Declared capacity and commitments are what staff typed into the registry. No timesheet, calendar or contract is compared.</li><li>Coach assignments to members use a member sign-in, not the staff identity the roster uses, so they can't be matched to roster records and aren't shown.</li><li>No staff cost, forecast, booked service or revenue is shown.</li><li>No staff names, identifiers or qualification, agreement or conflict references are shown. Nothing is corrected or stored.</li></ul><p><a href="/operator/staff-capacity">Read a fresh snapshot</a></p></article>`,
   );
 }
 export function staffCapacityUnavailablePage(

@@ -17,6 +17,7 @@ import {
   type StaffCapacityResult,
 } from "../../src/staff-capacity.ts";
 import { migrate, store } from "../../src/store.ts";
+import { supportRequestStore } from "../../src/support-requests.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { testPool } from "../support/database.ts";
 import { withLoopback } from "../support/loopback-server.ts";
@@ -502,4 +503,200 @@ it("CAP-08 signed-out, member, reviewer and coach sessions are refused without f
   );
   expect(r.status).toBe(404);
   expect(r.text).not.toMatch(/\d+ min/);
+});
+
+// #94 SUPCAP-01..03: support time members hold from their support test
+// minutes, shown beside the roster. Invented requests and minutes only.
+const support = supportRequestStore(pool);
+async function supportMember(minutesGranted: number) {
+  const token = randomBytes(32).toString("hex");
+  await members.create(token, { background: "explorer", goal: "everyday" });
+  const session = await members.session(token);
+  if (session.kind !== "active") throw Error("Expected member");
+  await syntheticLedger(pool).grant(
+    session.learner.id,
+    "support_minutes",
+    minutesGranted,
+    randomUUID(),
+    {
+      startsAt: new Date(Date.now() - 60_000).toISOString(),
+      expiresAt: new Date(Date.now() + hour).toISOString(),
+    },
+  );
+  return { token, id: session.learner.id };
+}
+async function booking(memberToken: string, ceiling = 20) {
+  const intake = await support.create(memberToken, {
+    idempotencyKey: randomUUID(),
+    subject: "Invented capacity support request",
+    body: "INVENTED PRIVATE SUPPORT TEXT",
+  });
+  if (!("receipt" in intake)) throw Error("Expected support request");
+  const requestId = intake.receipt.requestId;
+  const held = await support.time!.allocate(
+    memberToken,
+    requestId,
+    randomUUID(),
+    ceiling,
+  );
+  if (!("receipt" in held)) throw Error("Expected held support minutes");
+  return { requestId, allocationId: held.receipt.allocationId };
+}
+async function supportGrant(
+  adminToken: string,
+  b: { requestId: string; allocationId: string },
+  staffId: string,
+) {
+  const granted = await support.time!.grant(adminToken, {
+    ...b,
+    staffId,
+    role: "operator",
+    idempotencyKey: randomUUID(),
+    startsAt: new Date(Date.now() - 60_000),
+    expiresAt: new Date(Date.now() + hour),
+  });
+  if (!("grantId" in granted)) throw Error("Expected support time grant");
+  return granted.grantId;
+}
+const EMPTY_SUPPORT = {
+  status: "empty",
+  open: 0,
+  openMinutes: 0,
+  granted: 0,
+  grantedMinutes: 0,
+  operators: 0,
+  waiting: 0,
+  waitingMinutes: 0,
+  completed: 0,
+  supportMinutes: 0,
+  preparationMinutes: 0,
+};
+
+it("SUPCAP-01/02 held support time counts once at its ceiling: waiting, granted, cancelled and settled time stay apart", async () => {
+  const admin = await staff("platform_admin"),
+    first = await staff("operator"),
+    second = await staff("operator");
+  const read = async () =>
+    ready(await report.snapshot(admin.token)).supportTime;
+  expect(await read()).toEqual(EMPTY_SUPPORT);
+
+  const m = await supportMember(60);
+  const a = await booking(m.token),
+    b = await booking(m.token),
+    c = await booking(m.token);
+  expect(await read()).toEqual({
+    ...EMPTY_SUPPORT,
+    status: "recorded",
+    open: 3,
+    openMinutes: 60,
+    waiting: 3,
+    waitingMinutes: 60,
+  });
+
+  // Two operators on one booking: still one booking of 20 minutes.
+  const grantId = await supportGrant(admin.token, a, first.id);
+  const spare = await supportGrant(admin.token, a, second.id);
+  expect(await read()).toMatchObject({
+    open: 3,
+    openMinutes: 60,
+    granted: 1,
+    grantedMinutes: 20,
+    operators: 2,
+    waiting: 2,
+    waitingMinutes: 40,
+  });
+  // A revoked grant no longer counts its operator.
+  expect((await support.time!.revoke(admin.token, spare)).kind).toBe("revoked");
+  expect(await read()).toMatchObject({ granted: 1, operators: 1 });
+
+  // A cancelled booking frees its minutes and counts nowhere.
+  expect(
+    (await support.time!.cancel(m.token, b.requestId, b.allocationId)).kind,
+  ).toBe("applied");
+  expect(await read()).toMatchObject({
+    open: 2,
+    openMinutes: 40,
+    waiting: 1,
+    waitingMinutes: 20,
+    completed: 0,
+  });
+
+  // A begun booking is still open at its ceiling; settling it moves the
+  // minutes actually used to completed, with preparation counted once.
+  const scope = { ...a, grantId };
+  expect(
+    (await support.time!.begin(first.token, scope, randomUUID())).kind,
+  ).toBe("applied");
+  expect(await read()).toMatchObject({
+    open: 2,
+    openMinutes: 40,
+    granted: 1,
+    grantedMinutes: 20,
+  });
+  const start = new Date(Date.now() - hour),
+    end = new Date(+start + 10 * 60_000);
+  expect(
+    await support.time!.record(first.token, scope, randomUUID(), {
+      supportStart: start,
+      supportEnd: end,
+      preparationStart: end,
+      preparationEnd: new Date(+end + 5 * 60_000),
+    }),
+  ).toMatchObject({
+    kind: "applied",
+    receipt: { consumed: 15, released: 5, held: 0 },
+  });
+  expect(await read()).toEqual({
+    status: "recorded",
+    open: 1,
+    openMinutes: 20,
+    granted: 0,
+    grantedMinutes: 0,
+    operators: 0,
+    waiting: 1,
+    waitingMinutes: 20,
+    completed: 1,
+    supportMinutes: 10,
+    preparationMinutes: 5,
+  });
+  expect(c.allocationId).toBeTruthy();
+});
+
+it("SUPCAP-03 the page shows support time to operators and administrators only, without the member, request or staff", async () => {
+  const admin = await staff("platform_admin"),
+    operator = await staff("operator"),
+    reviewer = await staff("reviewer");
+  const m = await supportMember(20);
+  const b = await booking(m.token);
+  const grantId = await supportGrant(admin.token, b, operator.id);
+  for (const token of [admin.token, operator.token]) {
+    const page = await get(path, token);
+    expect(page.status).toBe(200);
+    expect(page.text).toContain("<h2>Support time · Test data</h2>");
+    expect(page.text).toMatch(
+      /Open support time \(1\)<\/dt><dd data-field="support.open">20 min/,
+    );
+    expect(page.text).toMatch(/data-field="support.granted">20 min/);
+    expect(page.text).toMatch(/data-field="support.operators">1</);
+    for (const secret of [
+      m.id,
+      b.requestId,
+      b.allocationId,
+      grantId,
+      operator.id,
+      "INVENTED PRIVATE SUPPORT TEXT",
+      "Invented capacity support request",
+    ])
+      expect(page.text).not.toContain(secret);
+  }
+  for (const token of [reviewer.token, m.token]) {
+    const refused = await get(path, token);
+    expect(refused.status).toBe(403);
+    expect(refused.text).not.toMatch(/\d+ min/);
+  }
+  // Reading the report changed nothing.
+  expect(await support.time!.receipt(m.token, b.requestId)).toMatchObject({
+    kind: "ready",
+    value: { state: "allocated", ceiling: 20, held: 20 },
+  });
 });
