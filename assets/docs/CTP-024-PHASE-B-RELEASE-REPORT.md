@@ -1,6 +1,6 @@
 # Phase B release report
 
-Issue [#44](https://github.com/deepnative/deep-native-engine/issues/44) (CTP-024). Written 11 November 2026 for main `49713a7d` (tree `4e3adbbf`). This report is the only change after that revision; the gate result for the commit that adds it is in the #44 close-out.
+Issue [#44](https://github.com/deepnative/deep-native-engine/issues/44) (CTP-024). Written 11 November 2026 for main `92015e5a` (tree `d528756c`). This report is the only change after that revision; the gate result for the commit that adds it is in the #44 close-out.
 
 **Result: Phase B is built and rehearsed as a demo with invented data. It is not accepted as a release, and launch is no-go.** The automated register passes in full. An independent review of the 100 full-MVP browser tests found that six of them do not prove what their case requires. Nothing here was checked with real members, real experts, a real AI provider, payment processing or a signed-in session on the hosted site.
 
@@ -21,19 +21,22 @@ Read these before any number below.
 
 ## What was run
 
-All on commit `5df88b07`, whose tree is the tree of main `49713a7d`, in the shared Linux gate container (Node 24.21.0, PostgreSQL 18.6, Playwright 1.63.0), first attempt, no retries.
+In the shared Linux gate container (Node 24.21.0, PostgreSQL 18.6, Playwright 1.63.0), first attempt, no retries. Two revisions are named, because one change merged while this report was being written:
 
-| Check                                                   | Result                                                                                                                                              |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit tests with coverage                                | 6223 of 6223 passed. Statements 99.93%, branches 99.76%, functions 99.97%, lines 99.96% (each must be at least 99%)                                 |
-| PostgreSQL integration tests                            | 3351 of 3351 passed                                                                                                                                 |
-| Local journey register, desktop Chromium and Pixel 7    | 666 of 666 passed: 333 of 333 journeys on both sizes, none skipped or flaky                                                                         |
-| Firefox and WebKit accessibility checks                 | 6 of 6 passed                                                                                                                                       |
-| Full-MVP tests in the ordinary gate (provisional stage) | 200 of 200 passed                                                                                                                                   |
-| Formal full-MVP release run (`npm run verify:full-e2e`) | 100 of 100 cases, 94 of 94 critical, 200 executions, nothing uncovered. Run `9b6e6308-fc2d-49a5-93a1-b6680520e413`, report sha256 `347006bc…be2b12` |
-| Production build and dependency audit                   | Passed; no high-severity finding in production dependencies. GitHub lists one moderate dependency alert on the repository, not looked into here     |
+- **Main `49713a7d`** (gated as `5df88b07`, the same tree): the counts in the table.
+- **Main `92015e5a`**, which adds per-student session length and practice-conversation limit ([#823](https://github.com/deepnative/deep-native-engine/issues/823), journey L337). Its full gate passed on `3237a707`, the same tree, in 36m25s ([PR #825](https://github.com/deepnative/deep-native-engine/pull/825)); I did not read that run's raw counts. The formal release run and the walk below were repeated on `92015e5a`. The full gate then runs once more on the commit that adds this report, and its counts are in the #44 close-out.
 
-The local register has 333 journeys, 321 of them critical. The full-MVP register has 100 cases in 27 requirement families, 94 of them critical, under mapping digest `686cb90f…`. Coverage here means distinct passing scenario IDs out of all approved IDs.
+| Check                                                   | Result                                                                                                                                                                                                                                           |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Unit tests with coverage                                | 6223 of 6223 passed. Statements 99.93%, branches 99.76%, functions 99.97%, lines 99.96% (each must be at least 99%)                                                                                                                              |
+| PostgreSQL integration tests                            | 3351 of 3351 passed                                                                                                                                                                                                                              |
+| Local journey register, desktop Chromium and Pixel 7    | 666 of 666 passed: 333 of 333 journeys on both sizes, none skipped or flaky                                                                                                                                                                      |
+| Firefox and WebKit accessibility checks                 | 6 of 6 passed                                                                                                                                                                                                                                    |
+| Full-MVP tests in the ordinary gate (provisional stage) | 200 of 200 passed                                                                                                                                                                                                                                |
+| Formal full-MVP release run (`npm run verify:full-e2e`) | On `92015e5a`: 100 of 100 cases, 94 of 94 critical, 200 executions, nothing uncovered. Run `20b358fd-8579-4317-a84e-a5a011e7524b`, report sha256 `77fc1a2f…04ffa8d1`. The same result on `5df88b07` (run `9b6e6308-fc2d-49a5-93a1-b6680520e413`) |
+| Production build and dependency audit                   | Passed; no high-severity finding in production dependencies. GitHub lists one moderate dependency alert on the repository, not looked into here                                                                                                  |
+
+The local register had 333 journeys on `49713a7d` and has 334 on `92015e5a`; 321 are critical. The full-MVP register has 100 cases in 27 requirement families, 94 of them critical, under mapping digest `686cb90f…`. Coverage here means distinct passing scenario IDs out of all approved IDs.
 
 "First slice alone fails this gate" holds: the release runner takes no outside report, and it fails if any of the 100 cases is missing, skipped, failed or retried on either browser. Its first run on 11 November failed (196 of 200) for a missing test-clock setting and is recorded in [QA-002](QA-002-JOURNEY-TRACEABILITY.md#first-full-release-runs-11-november-2026-utc).
 
@@ -60,7 +63,7 @@ The fixes, and the tightening of the 26 weak tests, are queued on #94. Until the
 
 ## Rehearsal walk
 
-A scripted Playwright walk on main `49713a7d`, 11 November 2026 18:36–18:37 UTC, on a local listener in test mode with one throwaway in-memory database, plus a second listener on the same database with configured Deep Native Inc. invoicing. Desktop Chrome (1280) and Pixel 7, a separate browser context per actor, a sideways-scroll check and a full-page screenshot on every page. The script is not committed. Nothing was done on the hosted site.
+A scripted Playwright walk on main `92015e5a`, 11 November 2026 19:25–19:26 UTC (and the same walk, with the same result, on `49713a7d` at 18:36 UTC), on a local listener in test mode with one throwaway in-memory database, plus a second listener on the same database with configured Deep Native Inc. invoicing. Desktop Chrome (1280) and Pixel 7, a separate browser context per actor, a sideways-scroll check and a full-page screenshot on every page. The script is not committed. Nothing was done on the hosted site.
 
 | Walk                                                                                                                                                                                                                                                                                                                  | Desktop | Pixel 7 |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ------- |
@@ -76,7 +79,7 @@ A scripted Playwright walk on main `49713a7d`, 11 November 2026 18:36–18:37 UT
 
 82 page visits on each size. No page scrolled sideways and none returned a server error. I looked at the Pixel 7 screenshots of My courses and the paid invoice myself.
 
-The walk is shallow next to the automated register: it opens pages and follows one coaching and billing path. Submitting an assignment, private feedback, circle discussion and moderation, simulated AI practice, support and events were not repeated by hand; they rest on the 333 journeys and 100 cases above, which run on both sizes.
+The walk is shallow next to the automated register: it opens pages and follows one coaching and billing path. Submitting an assignment, private feedback, circle discussion and moderation, simulated AI practice, support and events were not repeated by hand; they rest on the 334 journeys and 100 cases above, which run on both sizes.
 
 ## State of each capability
 
