@@ -282,6 +282,7 @@ Three read-only reviewers re-read the PR #827 fixes on main `f918d421`, one each
 - **F-ECO-08-A:** the learning contrast moved into check 1. Check 2 gains its own: five members join a circle, both participation measures show "5-19", and the learning and contribution figures do not move.
 - **F-BUILD-09-C, F-ROADMAP-08-C, F-ECO-07-B and F-ECO-07-C:** the two reads of a saved background now wait for the save.
 - **F-ROADMAP-05-B:** the response that reaches the limit is sent with the page's own button. The hand-built form is proved on response 14.
+- **Found by the gate, not the reviewers:** local journey L140 failed once on Pixel 7 because the test reloaded the page while the save before it was still navigating. The journey and the shared helper with the same step now wait for the saved sample to show first.
 - **No change, F-ECO-05-A:** the product records the rights confirmation when the member submits, which is check 2's action. Check 1 proves the saved sources and rights notes and that the draft is not curated, so the split follows the product.
 
 **Recorded, not changed.** The first two come from the follow-up fixes; the rest are the reviewers' record-only items.
