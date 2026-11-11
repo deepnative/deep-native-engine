@@ -126,6 +126,22 @@ The reworded cases are F-ROADMAP-04-D checks 4 to 7, F-BUILD-05-C, F-ROADMAP-09-
 
 `tests/full-e2e/eco-07.spec.ts` now also checks, in F-ECO-07-C check 1, that the student's coaching page says there are no cancellation or refund rules and links to info@deepnative.io. The member can still stop future invoices of a monthly course bundle themselves; that existing course-billing control is unchanged. The F-BUILD-05-A/B/D tests are unchanged. F-ROADMAP-04-D, F-BUILD-05-C and F-ROADMAP-09-B had no browser test then; they are covered by the agreed-changes tranche below.
 
+## 11 November 2026 rewording: the last cases that contradicted owner decisions
+
+After the 92-of-100 tranches, seven of the eight cases without a browser test still described things the owner had decided against. The owner settled each on 10 November 2026 ([decisions](https://github.com/deepnative/deep-native-engine/issues/94#issuecomment-6786295710)): a timed-out AI request stays held; an administrator sets each student's allowances and session length; an administrator sets the terms, with no acceptance step; there are no tiers; qualified tailored service is not offered because there are no real experts ([#784](https://github.com/deepnative/deep-native-engine/issues/784)); and there is no cancellation or no-show policy, so students contact info@deepnative.io.
+
+The reworded cases are F-ROADMAP-03-C, F-ROADMAP-03-D check 2, F-ROADMAP-05-B, F-ROADMAP-05-C, F-ROADMAP-08-C check 2, F-BUILD-09-C and F-ECO-07-B, with the steps and expected summaries of those cases and of the ROADMAP-03, ROADMAP-05, ROADMAP-08, BUILD-09 and ECO-07 families, and the preconditions of BUILD-09 and ECO-07. Requirement and title strings stay verbatim, and each family `expected` that changed names what the decision replaces. ECO-08's issue links gain [#121](https://github.com/deepnative/deep-native-engine/issues/121), deferred from PR #818. No case ID, check count (206), criticality (94 of 100) or browser project changes. F-BUILD-07-D is not reworded: the owner defined a template's sample test as the manual comparison of its example input with its example output at each review, with the date recorded. The new splits are:
+
+- ROADMAP-03-C: asking to cancel a held session meets no cancellation-window rule, the student is told to contact info@deepnative.io, and a staff cancellation records one dated replacement credit; a missed session records no no-show outcome, and the hold ends at its own deadline with its units released once.
+- ROADMAP-03-D: one replacement credit for a provider failure (unchanged); the session's time is reserved and counted once, with no fixed 45 plus 15 minute split.
+- ROADMAP-05-B: the last AI request of the administrator-set allowance blocks the next one; lowering the allowance below what is unused leaves only the lowered amount and keeps used requests; one practice conversation stops at its turn limit. Nothing is charged extra.
+- ROADMAP-05-C: a timed-out metered AI request is visibly failed and its usage stays held once; no retry is offered and nothing is charged twice.
+- ROADMAP-08-C: uncovered tailored service cannot be accepted or charged (unchanged); no qualified tailored service is offered, and the page says so.
+- BUILD-09-C: no tier or purchase path exists; capacity and scope are stated truthfully and nothing can be bought or accepted.
+- ECO-07-B: the stored terms are the version the administrator saved, with no acceptance step, and only that version's dated allowances issue.
+
+This rewording is not bound until a separate reviewer approves it on #94; until then the tracked approval still names `7b96c321…` and the pre-push gate fails by design.
+
 ## Execution and failure rules
 
 The existing `make verify` checks the **approved local-slice** browser matrix and reports full-MVP coverage as **0/100 outstanding**. It does not silently promote a local test to full-release evidence. `scripts/quality-gates.mjs` validates each family/case definition, unique reserved IDs and the exact passing browser/project matrix. A full-release report must contain the real browser scenarios on every registered browser and pass `assertFullReleaseJourneys`. The full-release runner is:

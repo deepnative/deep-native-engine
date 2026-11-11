@@ -3179,8 +3179,8 @@
       "status": "outstanding",
       "actor": "Two members competing for one slot and one unit",
       "preconditions": "One qualified slot and one remaining coach unit",
-      "steps": "Race both bookings, race two reservations for one member, then apply cancellation, no-show and provider-failure policies",
-      "expected": "Exactly one slot and unit winner; disclosed policy restores at most one dated credit and preserves 45 contact plus 15 preparation minutes",
+      "steps": "Race both bookings, race two reservations for one member, then ask to cancel, miss a held session and record a provider failure",
+      "expected": "Exactly one slot and unit winner; no cancellation or no-show rule applies automatically, staff record at most one dated replacement credit, and the session's time is counted once (the owner's 10 November 2026 decisions that there is no cancellation or no-show policy, with students contacting info@deepnative.io, and that an administrator sets session length replace the requirement's disclosed policy and its 45 call plus 15 preparation minutes)",
       "risk": "concurrency; entitlement; capacity",
       "issues": [27, 29],
       "critical": true,
@@ -3219,24 +3219,24 @@
         },
         {
           "id": "F-ROADMAP-03-C",
-          "steps": "Cancel or no-show under the disclosed policy",
-          "expected": "The correct dated credit is restored or forfeited once with immutable history",
+          "steps": "Ask to cancel a held session, then miss one, with no cancellation or no-show policy",
+          "expected": "No automatic credit rule applies: the student is told to contact info@deepnative.io, a staff cancellation records one dated replacement credit, and a missed session is neither charged nor forfeited, with immutable history",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Cancel a booked appointment under the disclosed cancellation window",
-              "expected": "The policy-specific dated credit is restored or forfeited exactly once and immutable history records the decision"
+              "action": "Ask to cancel a held session when there is no cancellation policy",
+              "expected": "No cancellation-window rule applies: the student is told to contact info@deepnative.io, and when staff cancel the session one dated replacement credit is recorded exactly once and immutable history records the decision"
             },
             {
-              "action": "Record a no-show under the disclosed no-show policy",
-              "expected": "The no-show-specific credit outcome is applied exactly once and immutable history records the decision"
+              "action": "Miss a held session when there is no no-show policy",
+              "expected": "No no-show outcome is recorded or charged: the hold ends at its own deadline, its units are released exactly once and the earlier history is unchanged"
             }
           ]
         },
         {
           "id": "F-ROADMAP-03-D",
           "steps": "Record a provider failure and inspect staff capacity",
-          "expected": "One replacement credit is issued and the coach booking includes 45 call plus 15 preparation minutes",
+          "expected": "One replacement credit is issued and the coach's time counts the session once, with no fixed call and preparation split",
           "critical": true,
           "requiredChecks": [
             {
@@ -3245,7 +3245,7 @@
             },
             {
               "action": "Inspect the coach booking and staff capacity",
-              "expected": "Forty-five call minutes plus fifteen preparation minutes are reserved and counted once"
+              "expected": "The session's time is reserved and counted once, with no fixed 45-minute call plus 15-minute preparation split"
             }
           ]
         }
@@ -3359,8 +3359,8 @@
       "status": "outstanding",
       "actor": "Consenting and opted-out learners",
       "preconditions": "Deterministic AI adapter, limited allowance and provider-disabled mode",
-      "steps": "Opt out, use demo, exercise mocks/study and turn cap, timeout, insufficient evidence and cost stop",
-      "expected": "No opted-out dispatch or duplicate settlement; demo labelled; grounded output and truthful recovery respect quotas",
+      "steps": "Opt out, use demo, exercise the administrator-set AI allowance and one conversation's limit, timeout, insufficient evidence and cost stop",
+      "expected": "No opted-out dispatch or duplicate settlement; demo labelled; grounded output and truthful recovery respect the student's allowance (the owner's 9 and 10 November 2026 decisions that an administrator sets each student's allowances and that a request with an unknown outcome stays held replace the requirement's monthly 20-mock/100-study allowances, its 30-turn cap and its recovery of a timed-out request)",
       "risk": "AI consent; quota; cost; failure",
       "issues": [23, 27, 31, 34],
       "critical": true,
@@ -3387,37 +3387,37 @@
         },
         {
           "id": "F-ROADMAP-05-B",
-          "steps": "Consume mock, study and conversation allowances at their boundary",
-          "expected": "The 20/100 monthly limits and 30-turn cap block excess use without overcharge",
+          "steps": "Use the student's administrator-set AI allowance and one practice conversation up to their boundaries",
+          "expected": "The administrator-set allowance and the conversation's limit block excess use without overcharge",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Reach the twentieth monthly mock interview",
-              "expected": "The twenty-first mock is blocked without an extra charge"
+              "action": "Use the last AI request of the student's administrator-set allowance",
+              "expected": "The next AI request is blocked without an extra charge"
             },
             {
-              "action": "Reach the hundredth monthly study session",
-              "expected": "The hundred-first study session is blocked without an extra charge"
+              "action": "Have the administrator lower the student's AI request allowance below what is unused",
+              "expected": "Only the lowered allowance stays usable, requests already used are kept and nothing extra is charged"
             },
             {
-              "action": "Reach thirty turns in a conversation",
-              "expected": "Turn thirty-one is blocked without an extra charge"
+              "action": "Reach the limit of turns in one practice conversation",
+              "expected": "A further turn is blocked without an extra charge"
             }
           ]
         },
         {
           "id": "F-ROADMAP-05-C",
-          "steps": "Timeout or retry a paid AI job",
-          "expected": "The result is recoverable and usage reservation settles no more than once",
+          "steps": "Timeout a metered AI request, then try to retry it",
+          "expected": "The failure is visible, the reserved usage stays held once and no duplicate work or charge is created",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Timeout a paid AI job",
-              "expected": "Failure is visible and the reserved usage is restored or settled exactly once"
+              "action": "Timeout a metered AI request",
+              "expected": "Failure is visible and the reserved usage stays held exactly once, neither restored nor settled"
             },
             {
-              "action": "Retry the timed-out job",
-              "expected": "No duplicate paid work or second usage charge is created"
+              "action": "Try to retry the timed-out request",
+              "expected": "No retry is offered and no duplicate work or second usage charge is created"
             }
           ]
         },
@@ -3612,7 +3612,7 @@
       "actor": "Cybersecurity, product and project-management learners",
       "preconditions": "Shared foundation and specialty readiness with incomplete expert roster",
       "steps": "Enter common learning, inspect actual readiness and request tailored specialist service",
-      "expected": "Foundation remains available; uncovered specialty cannot be sold; suitable reviewed rubric and available service work",
+      "expected": "Foundation remains available; uncovered specialty cannot be sold; suitable reviewed rubric works and no qualified tailored service is offered (the owner's 10 November 2026 decision that there are no real experts and qualified tailored service is not offered replaces the requirement's appropriate available service)",
       "risk": "access; qualified capacity",
       "issues": [14, 20, 26, 28, 29],
       "critical": true,
@@ -3655,8 +3655,8 @@
         },
         {
           "id": "F-ROADMAP-08-C",
-          "steps": "Try to accept uncovered tailored service, then an available qualified service",
-          "expected": "Uncovered sale is denied and genuinely available scope can proceed",
+          "steps": "Try to accept uncovered tailored service, then look for an available qualified service",
+          "expected": "Uncovered sale is denied, and no qualified tailored service is offered as available",
           "critical": true,
           "requiredChecks": [
             {
@@ -3664,8 +3664,8 @@
               "expected": "The uncovered service cannot be accepted or charged"
             },
             {
-              "action": "Choose a genuinely available qualified service",
-              "expected": "Only its actual eligible scope can proceed under accepted terms"
+              "action": "Look for an available qualified tailored service",
+              "expected": "None is offered: the page says truthfully that no qualified expert is available, and only the common foundation stays open"
             }
           ]
         },
@@ -4378,9 +4378,9 @@
       "source": "02-codex-build-prompt.md",
       "status": "outstanding",
       "actor": "Prospective optional-service buyer and operator",
-      "preconditions": "Unapproved higher tier, demo activity and one approved test offer",
-      "steps": "Inspect offer, attempt unapproved purchase, accept exact approved version and inspect metrics",
-      "expected": "Unapproved purchase denied; shown and stored terms match; demo activity excluded from live measures",
+      "preconditions": "No purchasable tier, demo activity and one approved test offer",
+      "steps": "Inspect offer, look for a higher tier to buy, accept exact approved version and inspect metrics",
+      "expected": "No tier can be bought; shown and stored terms match; demo activity excluded from live measures (the owner's 10 November 2026 decision that there are no tiers, so nothing higher can be purchased, replaces the requirement's higher-tier purchase)",
       "risk": "commercial truth; authorization",
       "issues": [19, 27, 32, 41],
       "critical": true,
@@ -4415,17 +4415,17 @@
         },
         {
           "id": "F-BUILD-09-C",
-          "steps": "Try to buy an offer without qualified capacity or agreed scope",
-          "expected": "Purchase is denied with truthful availability",
+          "steps": "Look for a higher tier to buy without qualified capacity or agreed scope",
+          "expected": "No tier can be bought, and capacity and scope are stated truthfully",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Attempt higher-tier purchase without qualified capacity",
-              "expected": "Purchase is denied with truthful capacity status"
+              "action": "Look for a higher tier to buy when no qualified capacity is available",
+              "expected": "No tier or purchase path exists, and the capacity status shown is truthful"
             },
             {
-              "action": "Attempt higher-tier purchase without agreed scope",
-              "expected": "Purchase is denied with truthful scope status"
+              "action": "Try to start coaching without scope agreed by an administrator",
+              "expected": "Nothing can be bought or accepted, and the scope status shown is truthful"
             }
           ]
         },
@@ -4934,9 +4934,9 @@
       "source": "ECOSYSTEM-JOURNEYS.md",
       "status": "outstanding",
       "actor": "Member considering optional coaching",
-      "preconditions": "Shared access independent of an approved versioned paid offer",
-      "steps": "Inspect scope and capacity, explicitly accept, then look for cancellation and export; try background-only upgrade",
-      "expected": "Only accepted offer grants exact monthly units; background never mints paid minutes; the notice that there are no cancellation or refund rules and the info@deepnative.io contact remain visible (the owner's 10 November 2026 decision replaces disclosed cancellation rights)",
+      "preconditions": "Shared access independent of versioned coaching terms set by an administrator",
+      "steps": "Inspect scope and capacity, have an administrator set the terms, then look for cancellation and export; try background-only upgrade",
+      "expected": "Only administrator-set terms grant exact dated units; background never mints paid minutes; the notice that there are no cancellation or refund rules and the info@deepnative.io contact remain visible (the owner's 10 November 2026 decisions that an administrator sets the terms, with no acceptance step, and that there are no cancellation rules replace explicit acceptance of an offer and disclosed cancellation rights)",
       "risk": "money; entitlement; access separation",
       "issues": [19, 27, 29, 32, 35],
       "critical": true,
@@ -4959,16 +4959,16 @@
         },
         {
           "id": "F-ECO-07-B",
-          "steps": "Explicitly accept an approved version",
-          "expected": "Only its dated monthly allowances issue and the agreement stores that version",
+          "steps": "Have an administrator set a terms version for the member",
+          "expected": "Only its dated allowances issue and the stored terms identify that version",
           "critical": true,
           "requiredChecks": [
             {
-              "action": "Explicitly accept an approved versioned offer",
-              "expected": "The stored agreement identifies that accepted version"
+              "action": "Have an administrator set versioned coaching terms for the member",
+              "expected": "The stored terms identify exactly the version the administrator saved, and the member has no acceptance step"
             },
             {
-              "action": "Inspect monthly allowances after acceptance",
+              "action": "Inspect allowances after the terms are saved",
               "expected": "Only correctly dated allowances for that version issue; no automatic upgrade occurs"
             }
           ]
@@ -5006,7 +5006,7 @@
       "steps": "Inspect separate measures, filter demo events and try unauthorized drill-down",
       "expected": "Denominators and labels distinguish learning from conversion; self-report stays labelled; private data denied",
       "risk": "metrics integrity; staff privacy",
-      "issues": [18, 41],
+      "issues": [18, 41, 121],
       "critical": true,
       "cases": [
         {
