@@ -8,13 +8,14 @@ import {
   prepareBundle,
   storedPlans,
 } from "../support/course-bundle-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // What a member can buy here is a course bundle an administrator prepared from
 // published lessons; the historical higher-tier coaching plans are unpublished
 // hypotheses with no purchase path at all. This case tries both: the
 // higher-tier plans offer nothing to accept, and a prepared offer whose course
 // is retired before acceptance is refused. Sample invoices only; no money.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 
 test("[F-BUILD-09-B] an unpublished offer cannot be bought: higher tiers have no purchase path and a retired course's offer is refused", async ({
   browser,

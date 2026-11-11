@@ -8,13 +8,14 @@ import {
   workflowRelease,
   type WorkflowId,
 } from "../support/workflow-release.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // A template's "sample test" is what the owner defined on 10 November 2026:
 // the manual check done at each review, where the template's example input is
 // compared by hand with its example output and the date is recorded. No
 // software test or AI call runs. This test reads the same two parts a
 // reviewer compares, on a fixture copy of the reviewed release.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 
 const CHECK = /^(\d{4}-\d{2}-\d{2}) manual input\/output comparison/;
 const metadata = (text: string, key: string) =>

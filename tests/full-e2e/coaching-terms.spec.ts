@@ -20,12 +20,13 @@ import {
   unitsShown,
   type TermsForm,
 } from "../support/coaching-terms-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // The per-student coaching cases (the owner's 9 and 10 November 2026
 // decisions): an administrator sets one student's price, period, renewal date
 // and allowances. Invoices only: no provider, no payment processing, and
 // nothing renews or charges by itself. Every person and amount is invented.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 
 const NOTHING_AUTOMATIC = "Nothing renews or charges automatically.";
 

@@ -19,13 +19,14 @@ import {
   unitsShown,
   type TermsForm,
 } from "../support/coaching-terms-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // What can and can't be obtained under the owner's 9 and 10 November 2026
 // decisions: there are no tiers and nothing can be bought; qualified tailored
 // service is not offered because there are no real experts (#784); and
 // coaching exists only as terms an administrator sets for one student, with
 // no acceptance step. Sample invoices only; every person is invented.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;
 // Everything that would exist if something had been sold or accepted.

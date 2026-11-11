@@ -7,13 +7,14 @@ import { supportRequestStore } from "../../src/support-requests.ts";
 import { reviewedContentFixture } from "../support/reviewed-content-browser.ts";
 import { requiredCheck } from "../support/required-check.ts";
 import { memberReference } from "../support/course-bundle-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // "Funded support" here is what the product has: a member holds their own
 // support test minutes for one private support request, and an operator with
 // an exact grant records the effort. Test minutes only; no paid plan, no
 // qualified support and no promised response time. Staff credentials stay out
 // of traces; every person, request and minute is invented.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 
 const CATEGORIES = ["support_minutes", "coach_minutes", "review_minutes"];
 // Each grant's balance, with its ledger events summed by kind of operation.

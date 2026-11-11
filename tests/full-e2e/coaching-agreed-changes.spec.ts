@@ -33,6 +33,7 @@ import {
   type AgreedForm,
   type TermsForm,
 } from "../support/coaching-terms-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // Cancellation, early release and refunds under the owner's 9 and 10 November
 // 2026 decisions: there are no automatic rules. The student contacts
@@ -40,7 +41,7 @@ import {
 // Invoices are paid offline in full; no provider, no payment processing.
 // Signed test events are off by default and refused on any hosted site (#32).
 // Every person, amount and reason is invented.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 const key = "invented-provisional-test-provider-key-94";
 const CONTACT_RULE =
   "There are no cancellation or refund rules. To ask about changes, contact info@deepnative.io.";

@@ -6,12 +6,13 @@ import {
   grantBalance,
   grantCoachMinutes,
 } from "../support/sample-slot-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // The "group clinic" is the product's private practice event: an administrator
 // schedules an invented rehearsal, the member registers and permits attendance,
 // and the administrator records an actual observation during the real database
 // window. It is not a staffed clinic. Coach minutes are seeded test units.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 
 async function coachMinutes(member: Page, origin: string) {
   const response = await member.request.get(

@@ -10,11 +10,12 @@ import {
   prepareBundle,
   storedPlans,
 } from "../support/course-bundle-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // The "standard continuation" is the agreement the product actually arranges:
 // a monthly course bundle an administrator prepares for one member. Its start
 // date is its acceptance window. Sample invoices only; no provider, no money.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 
 // Stands in for the acceptance window passing: the offered start moves two
 // months back, so two monthly periods would already be due. Only this isolated

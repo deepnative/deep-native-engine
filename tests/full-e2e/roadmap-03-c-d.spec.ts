@@ -2,13 +2,14 @@ import { expect, test, type Page } from "@playwright/test";
 import { reviewedContentFixture } from "../support/reviewed-content-browser.ts";
 import { requiredCheck } from "../support/required-check.ts";
 import { slotJourney } from "../support/fixture-slot-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // Sessions under the owner's 10 November 2026 decisions: there is no
 // cancellation or no-show policy (students contact info@deepnative.io), and no
 // fixed 45-minute call plus 15-minute preparation split. The sessions here are
 // sample holds with test minutes, never real bookings; no real expert is
 // involved. Staff credentials stay out of traces; everything is invented.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 
 const NO_POLICY =
   "There is no cancellation or no-show policy for sessions. To ask about one, contact info@deepnative.io.";

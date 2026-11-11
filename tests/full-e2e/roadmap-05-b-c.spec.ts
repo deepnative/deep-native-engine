@@ -24,13 +24,14 @@ import {
   meteredRequests,
   permitFixtureSample,
 } from "../support/fixture-ai-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // AI allowance boundaries under the owner's 9 and 10 November 2026 decisions:
 // an administrator sets each student's AI request allowance, and a request
 // whose outcome is unknown stays held. The AI step is the local deterministic
 // simulation: no provider, no money. Marked invented text makes it time out;
 // that switch is refused on hosted sites. Staff credentials stay out of traces.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 
 const DID_NOT_FINISH =
   "This attempt did not finish normally and will not retry automatically.";

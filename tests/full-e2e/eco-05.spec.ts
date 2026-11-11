@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { reviewedContentFixture } from "../support/reviewed-content-browser.ts";
 import { requiredCheck } from "../support/required-check.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // Member contributions are off by default, so each case runs on its own listener
 // and database with them on, as on the hosted site (#40, #115). Staff credentials
 // stay out of traces. Every contribution is invented.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;
 const original =
   "An invented club compares three weekend activities and checks each detail against its own notes.";

@@ -11,11 +11,12 @@ import {
   queuedSample,
   sha256,
 } from "../support/sample-feedback-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // The provisional server leaves review-minute writes off, so this case runs on its
 // own listener with the two settings the hosted site turns on (infra/app.tf).
 // Staff credentials stay out of traces.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 const pool = testPool();
 let running: Awaited<ReturnType<typeof start>>;
 test.beforeAll(async () => {

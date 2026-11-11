@@ -8,12 +8,13 @@ import { memberSlotHolds } from "../../src/slot-holds.ts";
 import { reviewedContentFixture } from "../support/reviewed-content-browser.ts";
 import { requiredCheck } from "../support/required-check.ts";
 import { memberReference } from "../support/course-bundle-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // The booking exception the product can show is a member's held sample slot
 // whose coach became unavailable: sample holds with test minutes, never real
 // bookings. An operator resolves it on the staff page. Staff credentials stay
 // out of traces; every person, slot and minute is invented.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 
 async function coachGrants(pool: Pool, memberId: string) {
   return (

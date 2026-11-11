@@ -12,13 +12,14 @@ import {
   expectBillingRetained,
   issuedInvoiceWithPayment,
 } from "../support/billing-retention-journey.ts";
+import { staffTrace } from "../support/staff-trace.ts";
 
 // ROADMAP-09-D: owner and outsider export, member-authorized operator export
 // and its denials (none, expired, out of scope), then deletion of source and
 // derived data with the retained billing and backup exceptions disclosed (#12
 // D08, owner 10 Nov 2026). Invented data on its own database; nothing is
 // payable. Staff credentials stay out of traces.
-test.use({ trace: "off" });
+test.use({ trace: staffTrace });
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;
 
 async function exportJson(page: Page, origin: string, query = "") {
