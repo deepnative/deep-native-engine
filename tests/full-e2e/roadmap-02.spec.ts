@@ -1,5 +1,5 @@
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
@@ -134,6 +134,44 @@ test("[F-ROADMAP-02-A] guessed workspace, evidence and staff APIs reveal no othe
       const roster = await otherPage.request.get("/operator/experts");
       expect(roster.status()).toBe(403);
       expect((await roster.text()).includes(privateDraft)).toBe(false);
+      // The staff route that serves member A's private evidence to a
+      // reviewer refuses member B: reading it, drafting and publishing, each
+      // sent with B's own valid form token.
+      const outsiderCsrf = await otherPage
+        .locator('input[name="csrf"]')
+        .first()
+        .inputValue();
+      const reviewPath = `/review/evidence/${evidenceId}/feedback`;
+      const refusals = [
+        await otherPage.request.get(reviewPath),
+        await otherPage.request.post(`${reviewPath}/draft`, {
+          headers: { Origin: origin },
+          form: {
+            csrf: outsiderCsrf,
+            operationId: randomUUID(),
+            revision: "0",
+          },
+          maxRedirects: 0,
+        }),
+        await otherPage.request.post(`${reviewPath}/publish`, {
+          headers: { Origin: origin },
+          form: {
+            csrf: outsiderCsrf,
+            operationId: randomUUID(),
+            revision: "1",
+            confirm: "yes",
+          },
+          maxRedirects: 0,
+        }),
+      ];
+      for (const refused of refusals) {
+        expect(refused.status(), refused.url()).toBe(403);
+        const text = await refused.text();
+        // Refused for lack of staff authority, not as a stale form.
+        expect(text).toContain("This session cannot use this sample feedback.");
+        expect(text.includes(privateBytes.toString())).toBe(false);
+        expect(text.includes(privateDraft)).toBe(false);
+      }
       const staff = await pool.query(
         `SELECT p.kind,s.role FROM principals p LEFT JOIN staff_profiles s
          ON s.principal_id=p.id WHERE p.id=$1`,

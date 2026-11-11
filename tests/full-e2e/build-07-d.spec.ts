@@ -104,6 +104,17 @@ test("[F-BUILD-07-D] each template shows the example input and output its dated 
         "Not currently supported: unverified. The environment and verification details below describe the last check, not current support.",
       );
       await expect(page.getByText("Currently supported;")).toHaveCount(0);
+      // The copy a member takes away carries the failed check and the
+      // withdrawn support together, not the earlier passing record.
+      const failedDownload = page.waitForEvent("download");
+      await page.getByRole("link", { name: "Download Markdown text" }).click();
+      const failedBytes = await readFile(
+        (await (await failedDownload).path())!,
+        "utf8",
+      );
+      expect(failedBytes).toBe(await source("WF-002"));
+      expect(metadata(failedBytes, "last_verification")).toBe(failed);
+      expect(metadata(failedBytes, "support_state")).toBe("unverified");
       await page.goto(`${f.origin}/workflows`);
       const entry = (id: WorkflowId, title: string) =>
         page

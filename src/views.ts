@@ -1428,6 +1428,16 @@ export function localAiLimitPage() {
     `You already have ${LOCAL_AI_MEMBER_OPEN_LIMIT} AI requests that are not finished. Run one, wait for a held one to be checked, or withdraw permission for one that has not started, then try again. Nothing new was queued or held, and no provider was contacted.`,
   );
 }
+/**
+ * #94 F-ROADMAP-05-D: the spending-ceiling stop names where to go next. The
+ * member's units and requests are both one click away.
+ */
+export function localAiCeilingPage(message: string) {
+  return page(
+    "Test spending ceiling reached",
+    `<section class="error-page"><p class="eyebrow">A SMALL PAUSE</p><h1>Test spending ceiling reached</h1><p class="lead">${escape(message)}</p><p>Your test units are unchanged by this stop. Check them, or go back to your AI requests.</p><p><a href="/member/test-units">View your test units</a> · <a href="/evidence/local-ai">Return to your AI requests</a></p><a class="button" href="/learn">Return to your learning path</a></section>`,
+  );
+}
 export function errorPage(title: string, message: string) {
   return page(
     title,

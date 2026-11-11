@@ -73,9 +73,28 @@ test("[F-ECO-01-A] exploratory member enters foundation without employment, IT a
       page.getByRole("region", { name: "Your starter plan" }),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Open lesson" })).toBeVisible();
+    // The product's own access statement, and no paid step as button or link.
+    const paidStep = /\b(buy|purchase|checkout|pay)\b|accept offer/i;
+    await expect(
+      page.getByText("No-charge foundation access.", { exact: false }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: /buy|purchase|accept offer/i }),
     ).toHaveCount(0);
+    await expect(page.getByRole("button", { name: paidStep })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: paidStep })).toHaveCount(0);
+    // Entering: the lesson and its exercise form open with no gate in between.
+    await page.getByRole("link", { name: "Open lesson" }).click();
+    await expect(page).toHaveURL(/\/lesson$/);
+    await expect(
+      page.getByRole("heading", { name: "Plan a small community event" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Your instruction to AI")).toBeEditable();
+    await expect(
+      page.getByRole("button", { name: "Complete exercise" }),
+    ).toBeEnabled();
+    await expect(page.getByRole("button", { name: paidStep })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: paidStep })).toHaveCount(0);
   });
 });
 
@@ -127,12 +146,51 @@ test("[F-ECO-01-C] completed progress persists for owner and stays private from 
       await startGeneralLearner(otherPage);
       const outsiderId = await learnerId(outsider);
       expect(outsiderId).not.toBe(ownerId);
-      await otherPage.goto(`/learn?learner_id=${ownerId}`);
+      // Exercise progress has no id-addressable route: every surface resolves
+      // the member from the session cookie, so each one is opened as the
+      // outsider and must show none of the owner's work.
+      await otherPage.goto("/learn");
       await expect(
         otherPage.getByRole("progressbar", { name: "Exercises completed" }),
       ).toHaveAttribute("value", "0");
-      await otherPage.goto(`/lesson?learner_id=${ownerId}`);
+      await otherPage.goto("/lesson");
+      await expect(
+        otherPage.getByRole("heading", {
+          name: "Plan a small community event",
+        }),
+      ).toBeVisible();
       await expect(otherPage.getByText(instruction)).toHaveCount(0);
+      await expect(otherPage.getByLabel("Your instruction to AI")).toHaveValue(
+        "",
+      );
+      await otherPage.goto("/progress");
+      await expect(
+        otherPage.getByRole("heading", {
+          name: "Your private learning activity",
+        }),
+      ).toBeVisible();
+      await expect(
+        otherPage.getByText("No learning activity has been saved", {
+          exact: false,
+        }),
+      ).toBeVisible();
+      await expect(otherPage.locator("main")).not.toContainText(
+        "Self-reported complete",
+      );
+      const exported = await otherPage.request.get("/api/member/export");
+      expect(exported.status()).toBe(200);
+      expect((await exported.json()).profile.id).toBe(outsiderId);
+      expect(await exported.text()).not.toContain(instruction);
+      // Control: the same surfaces do show the work to its owner.
+      await page.goto("/lesson");
+      await expect(page.getByText(instruction)).toBeVisible();
+      await page.goto("/progress");
+      await expect(page.locator("main")).toContainText(
+        "Self-reported complete",
+      );
+      expect(
+        await (await page.request.get("/api/member/export")).text(),
+      ).toContain(instruction);
       const rows = await pool.query(
         "SELECT learner_id FROM exercises WHERE learner_id=ANY($1::uuid[])",
         [[ownerId, outsiderId]],

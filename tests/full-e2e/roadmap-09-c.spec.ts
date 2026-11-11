@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { deterministicRegistry } from "../../src/adapters.ts";
 import { estimateAiRequest } from "../../src/ai-budget-policy.ts";
@@ -39,6 +39,18 @@ const key = "invented-provisional-test-provider-key-09c";
 
 const cash = (page: Page, group: string, name: string) =>
   page.locator(`[data-invoice-group="${group}"] [data-field="${name}"]`);
+/** Every figure of one ledger category on the ledger reconciliation report. */
+const ledgerFigures = (row: Locator) =>
+  row
+    .locator("[data-field]")
+    .evaluateAll((nodes) =>
+      Object.fromEntries(
+        nodes.map((node) => [
+          node.getAttribute("data-field")!,
+          Number(node.textContent),
+        ]),
+      ),
+    ) as Promise<Record<string, number>>;
 const cost = (page: Page, name: string) =>
   page.locator(`[data-field="cost.${name}"]`);
 const costLabel = (page: Page, name: string) =>
@@ -147,6 +159,43 @@ test("[F-ROADMAP-09-C] a payment exception is flagged on its invoice, delivery c
         ))!.status(),
       ).toBe(200);
       await expect(page.locator("[data-ledger-category]")).toHaveCount(5);
+      // The ledger leg carries real figures: a known grant of 3 mock sessions
+      // (a category nothing else here uses) shows as exactly that much more
+      // granted and available, and no category reports a discrepancy.
+      const sessions = page.locator('[data-ledger-category="mock_sessions"]');
+      const before = await ledgerFigures(sessions);
+      await syntheticLedger(f.pool).grant(
+        reference,
+        "mock_sessions",
+        3,
+        randomUUID(),
+        {
+          startsAt: new Date(Date.now() - 60_000).toISOString(),
+          expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+        },
+      );
+      await page.goto(f.origin + "/operator/ledger-reconciliation");
+      const after = await ledgerFigures(sessions);
+      for (const [field, added] of [
+        ["observed.grants", 1],
+        ["observed.granted", 3],
+        ["observed.available", 3],
+        ["events.grant", 1],
+        ["observed.reserved", 0],
+        ["observed.consumed", 0],
+      ] as const)
+        expect(after[field], field).toBe(before[field]! + added);
+      await expect(
+        sessions.locator("[data-reconciliation-status]"),
+      ).toHaveAttribute("data-reconciliation-status", "consistent");
+      await expect(
+        page.locator('[data-reconciliation-status="discrepancies"]'),
+      ).toHaveCount(0);
+      for (const name of ["grants", "reservations", "events", "completions"])
+        for (const count of await page
+          .locator(`[data-field="reconciliation.${name}"]`)
+          .allTextContents())
+          expect(count, `reconciliation.${name}`).toBe("0");
     });
 
     await requiredCheck(2, async () => {

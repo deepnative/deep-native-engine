@@ -77,17 +77,98 @@ async function publishedAssignment() {
     expect(await catalog.publish(editor, id, draft.version)).toBe(true);
   };
   await publish(first);
+  const second: DraftContent = {
+    ...first,
+    version: 2,
+    body: "Second brief: compare three invented meeting notes.",
+    rubric: secondRubric,
+    rubricVersion: 2,
+  };
   return {
     first,
-    publishSecond: () =>
-      publish({
-        ...first,
-        version: 2,
-        body: "Second brief: compare three invented meeting notes.",
-        rubric: secondRubric,
-        rubricVersion: 2,
-      }),
+    second,
+    editor,
+    approver,
+    publishSecond: () => publish(second),
   };
+}
+
+// A staff browser on this spec's own listener. Only the staff identity is
+// seeded; everything it does goes through the editor pages.
+async function staffPage(browser: Browser, token: string) {
+  const context = await browser.newContext({ baseURL: running.origin });
+  await context.addCookies([
+    {
+      name: COOKIE,
+      value: token,
+      url: running.origin,
+      httpOnly: true,
+      sameSite: "Strict",
+    },
+  ]);
+  return { context, page: await context.newPage() };
+}
+
+async function saveDraft(page: Page, draft: DraftContent) {
+  await page.goto("/editor/library");
+  await page.getByLabel("Content ID").fill(draft.id);
+  await page.getByLabel("Version", { exact: true }).fill(String(draft.version));
+  await page.getByLabel("Kind").selectOption(draft.kind);
+  await page.getByLabel("Title").fill(draft.title);
+  await page.getByLabel("Body").fill(draft.body);
+  await page.getByLabel("Owner").fill(draft.owner);
+  await page.getByLabel("Sources").fill(draft.sources);
+  await page.getByLabel("Rights").fill(draft.rights);
+  for (const goal of draft.goals)
+    await page.locator(`input[name="goals"][value="${goal}"]`).check();
+  for (const background of draft.backgrounds)
+    await page
+      .locator(`input[name="backgrounds"][value="${background}"]`)
+      .check();
+  await page
+    .getByLabel("Legacy prerequisite (optional)")
+    .fill(draft.prerequisites);
+  await page.getByLabel("Assignment rubric (optional)").fill(draft.rubric!);
+  await page
+    .getByLabel("Rubric version (required with rubric)")
+    .fill(String(draft.rubricVersion));
+  await page.getByRole("button", { name: "Save draft" }).click();
+}
+
+// Version 2 goes out the way staff do it: the editor saves and submits a
+// draft, a different reviewer approves it, and the editor publishes it.
+async function publishSecondThroughPages(
+  browser: Browser,
+  work: Awaited<ReturnType<typeof publishedAssignment>>,
+) {
+  const path = `/editor/library/${work.second.id}/2`;
+  const editor = await staffPage(browser, work.editor);
+  const approver = await staffPage(browser, work.approver);
+  try {
+    await saveDraft(editor.page, work.second);
+    await expect(editor.page).toHaveURL(new RegExp(`${path}$`));
+    await expect(editor.page.getByText("Versioned rubric 2")).toBeVisible();
+    await editor.page.locator(`form[action="${path}/submit"] button`).click();
+    await approver.page.goto(path);
+    const approval = approver.page.locator(`form[action="${path}/approve"]`);
+    await approval.locator('input[name="rights_confirmed"]').check();
+    await approval.getByRole("button").click();
+    await expect(
+      approver.page.locator("p.eyebrow").filter({
+        hasText: "APPROVED · VERSION 2",
+      }),
+    ).toBeVisible();
+    await editor.page.goto(path);
+    await editor.page.locator(`form[action="${path}/publish"] button`).click();
+    await expect(
+      editor.page.locator("p.eyebrow").filter({
+        hasText: "PUBLISHED · VERSION 2",
+      }),
+    ).toBeVisible();
+  } finally {
+    await editor.context.close();
+    await approver.context.close();
+  }
 }
 
 async function onboard(page: Page) {
@@ -277,9 +358,44 @@ test("[F-ROADMAP-06-A] feedback on version-one work pins that content and rubric
       ]);
     });
     await requiredCheck(2, async () => {
-      await page.goto(work.attemptUrl);
-      await expect(page.getByText("Original rubric version 1")).toBeVisible();
-      await expect(page.getByText(firstRubric, { exact: true })).toBeVisible();
+      // The result itself names rubric 1, on the page and in its stored origin.
+      const expectPinned = async () => {
+        await page.goto(work.feedbackPath);
+        await expect(page.locator("body")).toContainText(work.pinnedLine);
+        expect(await pin(work.copyId)).toMatchObject([{ rubric_version: 1 }]);
+        await page.goto(work.attemptUrl);
+        await expect(page.getByText("Original rubric version 1")).toBeVisible();
+        await expect(
+          page.getByText(firstRubric, { exact: true }),
+        ).toBeVisible();
+      };
+      await expectPinned();
+
+      // An editor cannot replace version 1 with a different rubric.
+      const editor = await staffPage(browser, work.editor);
+      try {
+        await saveDraft(editor.page, { ...work.first, rubric: secondRubric });
+        await expect(
+          editor.page.getByRole("heading", { name: "Draft not saved" }),
+        ).toBeVisible();
+      } finally {
+        await editor.context.close();
+      }
+      // Nor can the stored reference or the published rubric be rewritten.
+      await expect(
+        pool.query(
+          "UPDATE assignment_evidence_origins SET rubric_version=2 WHERE evidence_id=$1",
+          [work.copyId],
+        ),
+      ).rejects.toThrow("Assignment origin is immutable");
+      await expect(
+        pool.query(
+          "UPDATE content_versions SET rubric=$3 WHERE id=$1 AND version=$2",
+          [work.first.id, 1, secondRubric],
+        ),
+      ).rejects.toThrow("Released content is immutable");
+      await expectPinned();
+      await expect(page.getByText(secondRubric)).toHaveCount(0);
       await page.goto(work.feedbackPath);
       // The feedback page says plainly what this record is not.
       await expect(page.locator("body")).toContainText(
@@ -307,7 +423,7 @@ test("[F-ROADMAP-06-B] a second version leaves earlier feedback alone and new me
     const before = await feedbackRow(work.submissionId);
     expect(before).toHaveLength(1);
     await requiredCheck(1, async () => {
-      await work.publishSecond();
+      await publishSecondThroughPages(browser, work);
       expect(await pin(work.copyId)).toEqual([
         {
           content_id: work.first.id,
@@ -377,6 +493,19 @@ test("[F-BUILD-07-A] a revised rubric does not change a completed result", async
           [assessmentId],
         )
       ).rows;
+    // What the member can read of that result: their own export, over HTTP.
+    const exportedResult = async () => {
+      const exported = await page.request.get(
+        `${running.origin}/api/member/export`,
+      );
+      expect(exported.status()).toBe(200);
+      const { records } = (await exported.json()) as {
+        records: { contentAssessments: Record<string, unknown>[] };
+      };
+      return records.contentAssessments.filter(
+        (entry) => entry.id === assessmentId,
+      );
+    };
     await requiredCheck(1, async () => {
       assessmentId = await catalogStore(pool).assess(
         assessor,
@@ -389,14 +518,28 @@ test("[F-BUILD-07-A] a revised rubric does not change a completed result", async
       expect(await assessment()).toMatchObject([
         { content_version: 1, rubric_version: 1, mode: "simulated", result },
       ]);
+      expect(await exportedResult()).toMatchObject([
+        {
+          contentId: work.first.id,
+          contentVersion: 1,
+          rubricVersion: 1,
+          mode: "simulated",
+          result,
+        },
+      ]);
       await page.goto(work.feedbackPath);
       await expect(page.locator("body")).toContainText(work.pinnedLine);
     });
     await requiredCheck(2, async () => {
       const heldResult = await assessment();
       const heldFeedback = await feedbackRow(work.submissionId);
+      const heldExport = await exportedResult();
+      expect(heldExport).toHaveLength(1);
       await work.publishSecond();
       expect(await assessment()).toEqual(heldResult);
+      // The member still reads the same result, rubric 1 and score text.
+      expect(await exportedResult()).toEqual(heldExport);
+      expect(heldExport[0]).toMatchObject({ rubricVersion: 1, result });
       expect(await feedbackRow(work.submissionId)).toEqual(heldFeedback);
       await page.goto(work.feedbackPath);
       await expect(page.locator("body")).toContainText(work.pinnedLine);
