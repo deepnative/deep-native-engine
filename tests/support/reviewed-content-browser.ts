@@ -28,6 +28,8 @@ export async function reviewedContentFixture(
     events?: boolean;
     // #769: an absolute folder holding a fixture workflow source release.
     workflowRoot?: string;
+    // #190: marked invented text makes the local AI step time out or garble.
+    aiFaults?: boolean;
   } = {},
 ) {
   const original = process.env.DNE_TEST_DATABASE_URL;
@@ -103,6 +105,7 @@ export async function reviewedContentFixture(
       ...(options.workflowRoot
         ? { DNE_WORKFLOW_ROOT: options.workflowRoot }
         : {}),
+      ...(options.aiFaults ? { DNE_TEST_AI_FAULTS: "enabled" } : {}),
       ...(options.events
         ? {
             DNE_EVENT_REGISTRATION: "enabled",
