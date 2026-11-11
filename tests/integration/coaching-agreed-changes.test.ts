@@ -258,7 +258,7 @@ it("AGREED94-06 the student's download has every record without the administrato
   do {
     const page = await exporter.exportOwned(m.token, cursor);
     if (page.kind !== "ready") throw Error("Expected an export page");
-    expect(page.payload.version).toBe("local-member-records-v48");
+    expect(page.payload.version).toBe("local-member-records-v49");
     rows.push(...(page.payload.records.coachingAgreedChanges ?? []));
     cursor = page.payload.page.nextCursor ?? undefined;
   } while (cursor);

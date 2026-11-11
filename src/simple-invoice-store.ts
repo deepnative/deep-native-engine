@@ -471,6 +471,20 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         return fail("invalid");
       return run(token, ownerId !== undefined, async (tx, actor) => {
         const memberId = ownerId ?? actor;
+        // WALK44-01: the administrator is already authorized, so say plainly
+        // when no student account has this reference any more.
+        if (
+          ownerId !== undefined &&
+          !(
+            await tx.query(
+              `SELECT true AS student_present FROM principals p JOIN learners l ON l.id=p.id
+               JOIN workspaces w ON w.id=p.id AND w.owner_principal_id=p.id AND w.deleting_at IS NULL
+               WHERE p.id=$1 AND p.kind='member'`,
+              [ownerId],
+            )
+          ).rowCount
+        )
+          return fail("not-found");
         await owner(tx, memberId, ownerId !== undefined);
         const today = await coachingToday(tx),
           selected = month ?? today;

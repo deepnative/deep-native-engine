@@ -54,7 +54,7 @@ There are no automatic cancellation or refund rules (owner decisions of 9 and 10
 
 - A record is kept as written. It can't be edited or removed, and the same form sent twice is one record.
 - Recording changes nothing else. To end coaching early, the administrator also saves new coaching terms with the agreed end date, which writes off the unused units of the shortened period as described above. To refund, the administrator also records the offline refund on the invoice, where it joins the payment record.
-- The student sees their records, read-only, under **Changes agreed with you** on `/account/coaching`, with the same contact address. They are in Download my records (`coachingAgreedChanges`, export v48) without the administrator, and deleting the account removes them.
+- The student sees their records, read-only, under **Changes agreed with you** on `/account/coaching`, with the same contact address. They are in Download my records (`coachingAgreedChanges`, export v49) without the administrator, and deleting the account removes them.
 
 Tests: AGREED94-01..06 in `tests/integration/coaching-agreed-changes.test.ts` and `tests/unit/coaching-agreed-changes.test.ts`, the export index in `tests/unit/member-export.test.ts`, and the provisional browser journeys F-ROADMAP-04-D, F-ROADMAP-09-B and F-BUILD-05-C in `tests/full-e2e/coaching-agreed-changes.spec.ts`.
 

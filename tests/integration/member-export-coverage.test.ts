@@ -4,6 +4,8 @@ import type { Pool, PoolClient } from "pg";
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { availabilityStore } from "../../src/availability.ts";
+import { circleDiscussionStore } from "../../src/circle-discussion.ts";
+import { circleStore } from "../../src/circles.ts";
 import { evidenceStore, type ObjectStorage } from "../../src/evidence.ts";
 import { syntheticLedger } from "../../src/ledger.ts";
 import { memberExportStore } from "../../src/member-export.ts";
@@ -144,7 +146,9 @@ async function records(token: string) {
   throw Error("Export never completed");
 }
 
-async function staff(role: "coach" | "operator" | "platform_admin") {
+async function staff(
+  role: "coach" | "moderator" | "operator" | "platform_admin",
+) {
   const token = randomBytes(32).toString("hex");
   const id = await access.provisionStaff(
     token,
@@ -213,7 +217,7 @@ it("EXPCOV-03 a member's held and withdrawn sample sessions are in Download my r
   await holds.withdraw(owner.token, withdrawn.requestId);
   const theirs = await heldBy(other, (await slot()).id);
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v48");
+  expect(version).toBe("local-member-records-v49");
   const rows = all.sampleHolds!;
   expect(rows.map((row) => row.id).sort()).toEqual(
     [kept.requestId, withdrawn.requestId].sort(),
@@ -310,7 +314,7 @@ it("EXPCOV-05 how many coaches the member has, and since when, is in Download my
   ).rows[0]!.n;
   expect(coaches).toBeGreaterThanOrEqual(1);
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v48");
+  expect(version).toBe("local-member-records-v49");
   expect(all.coachAssignments).toEqual([
     {
       coaches,
@@ -420,4 +424,197 @@ it("EXPCOV-07/08 files derived from a member's upload are listed in Download my 
 
   expect(await evidence.remove(owner.token, mine)).toBe(true);
   expect((await records(owner.token)).all.evidenceDerivatives).toEqual([]);
+});
+
+it("EXPCOV-09/10 moderation decisions on a member's own circle posts and their reconsideration requests are in Download my records without the staff, and go with the account", async () => {
+  const circles = circleStore(pool),
+    discussion = circleDiscussionStore(pool, "invented-expcov-circle-secret"),
+    circle = "everyday-ai";
+  const [owner, other] = [await member(), await member()];
+  const [admin, moderator] = [
+    await staff("platform_admin"),
+    await staff("moderator"),
+  ];
+  const granted = await discussion.grantModerator(
+    admin.token,
+    moderator.id,
+    circle,
+    randomUUID(),
+    new Date(Date.now() + 1_800_000),
+  );
+  expect(granted.kind).toBe("ready");
+  const keys: string[] = [];
+  const key = () => {
+    keys.push(randomUUID());
+    return keys.at(-1)!;
+  };
+  const hiddenPost = async (token: string, words: string) => {
+    expect(await circles.join(token, circle)).toBe("joined");
+    const chosen = await discussion.choose(
+      token,
+      circle,
+      key(),
+      "1",
+      "circle-discussion-test-v1",
+      true,
+    );
+    expect(chosen.kind).toBe("ready");
+    const post = await discussion.post(token, circle, key(), words, true);
+    if (post.kind !== "ready") throw Error(`Post ${post.kind}`);
+    const hidden = await discussion.moderate(
+      moderator.token,
+      circle,
+      post.value.id,
+      key(),
+      "hide",
+      1,
+      "off_topic",
+    );
+    expect(hidden.kind).toBe("ready");
+    const appeal = await discussion.requestAppeal(
+      token,
+      circle,
+      post.value.id,
+      key(),
+      2,
+      "missing_context",
+      true,
+    );
+    if (appeal.kind !== "ready") throw Error(`Appeal ${appeal.kind}`);
+    return { post: post.value.id, appeal: appeal.value.id };
+  };
+  const mine = await hiddenPost(owner.token, "Invented owner question");
+  const theirs = await hiddenPost(other.token, "Invented other question");
+  const restored = await discussion.resolveAppeal(
+    moderator.token,
+    circle,
+    mine.appeal,
+    key(),
+    "restore",
+    2,
+    "decision_corrected",
+  );
+  expect(restored.kind).toBe("ready");
+
+  const { version, all } = await records(owner.token);
+  expect(version).toBe("local-member-records-v49");
+  expect(all.circleModerationDecisions).toEqual([
+    {
+      id: expect.anything(),
+      circleId: circle,
+      postId: mine.post,
+      action: "hidden",
+      reason: "off_topic",
+      oldRevision: 1,
+      newRevision: 2,
+      occurredAt: expect.any(Date),
+    },
+    {
+      id: expect.anything(),
+      circleId: circle,
+      postId: mine.post,
+      action: "restored",
+      reason: "test_correction",
+      oldRevision: 2,
+      newRevision: 3,
+      occurredAt: expect.any(Date),
+    },
+  ]);
+  expect(all.circleAppeals).toEqual([
+    {
+      id: mine.appeal,
+      circleId: circle,
+      postId: mine.post,
+      decisionRevision: 2,
+      requestReason: "missing_context",
+      requestedAt: expect.any(Date),
+      state: "restored",
+      closedAt: expect.any(Date),
+      resolutionReason: "decision_corrected",
+      resolvedRevision: 3,
+    },
+  ]);
+  const fingerprints = (
+    await pool.query<{ f: string }>(
+      `SELECT fingerprint f FROM preview_circle_moderation_audit
+       UNION SELECT fingerprint FROM preview_circle_appeals
+       UNION SELECT resolution_fingerprint FROM preview_circle_appeals
+         WHERE resolution_fingerprint IS NOT NULL`,
+    )
+  ).rows.map((row) => row.f);
+  expect(fingerprints.length).toBeGreaterThan(3);
+  const text = JSON.stringify([
+    all.circleModerationDecisions,
+    all.circleAppeals,
+  ]);
+  for (const hidden of [
+    moderator.id,
+    admin.id,
+    "moderator",
+    theirs.post,
+    theirs.appeal,
+    other.id,
+    ...keys,
+    ...fingerprints,
+  ])
+    expect(text).not.toContain(hidden);
+
+  // The other member sees only their own pending request and its one decision.
+  const others = (await records(other.token)).all;
+  expect(others.circleModerationDecisions).toHaveLength(1);
+  expect(others.circleAppeals).toMatchObject([
+    {
+      id: theirs.appeal,
+      state: "pending",
+      closedAt: null,
+      resolutionReason: null,
+    },
+  ]);
+
+  await members.remove(owner.id);
+  const left = await pool.query<{ t: string; member_id: string }>(
+    `SELECT 'audit' t,member_id FROM preview_circle_moderation_audit
+     UNION ALL SELECT 'appeal',member_id FROM preview_circle_appeals`,
+  );
+  expect(left.rows).toHaveLength(2);
+  for (const row of left.rows) expect(row.member_id).toBe(other.id);
+});
+
+it("EXPCOV-11 a member's cohort memberships, current and ended, are in Download my records and go with the account", async () => {
+  const [owner, other] = [await member(), await member()];
+  const expires = new Date(Date.now() + 86_400_000);
+  await pool.query(
+    "INSERT INTO cohorts(id) VALUES('expcov-open'),('expcov-ended'),('expcov-other')",
+  );
+  await pool.query(
+    `INSERT INTO cohort_memberships(cohort_id,member_id,can_read_shared_content,expires_at,revoked_at)
+     VALUES('expcov-open',$1,true,$3,NULL),
+       ('expcov-ended',$1,false,NULL,clock_timestamp()),
+       ('expcov-other',$2,true,NULL,NULL)`,
+    [owner.id, other.id, expires],
+  );
+  const { all } = await records(owner.token);
+  expect(all.cohortMemberships).toEqual([
+    {
+      cohortId: "expcov-ended",
+      canReadSharedContent: false,
+      expiresAt: null,
+      revokedAt: expect.any(Date),
+    },
+    {
+      cohortId: "expcov-open",
+      canReadSharedContent: true,
+      expiresAt: expires,
+      revokedAt: null,
+    },
+  ]);
+  expect(JSON.stringify(all.cohortMemberships)).not.toContain("expcov-other");
+  await members.remove(owner.id);
+  expect(
+    (
+      await pool.query<{ member_id: string }>(
+        "SELECT member_id FROM cohort_memberships",
+      )
+    ).rows,
+  ).toEqual([{ member_id: other.id }]);
 });

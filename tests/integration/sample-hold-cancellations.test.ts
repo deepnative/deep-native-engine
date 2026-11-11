@@ -470,7 +470,7 @@ it("HOLDCANCEL-EXP-01/02/03 the member's download shows why and when staff cance
   ).rows[0]!.id;
 
   const { version, all } = await download(mine.owner.token);
-  expect(version).toBe("local-member-records-v48");
+  expect(version).toBe("local-member-records-v49");
   expect(all.sampleHoldCancellations).toEqual([
     {
       sampleHoldId: mine.requestId,

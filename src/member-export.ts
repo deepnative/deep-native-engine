@@ -697,7 +697,35 @@ const sections = {
     WHERE e.owner_principal_id=$1 AND e.quarantine_state<>'deleting'`,
     "d.id",
   ),
-  // v48 appends #94: changes staff agreed with the member (early release,
+  // v48 appends #40: what moderators decided about the member's own circle
+  // posts (hidden or restored, the reason and when), as the member's notice
+  // shows it. Never the moderator, their role, the request key or fingerprint.
+  circleModerationDecisions: section(
+    `id,circle_id AS "circleId",post_id AS "postId",action,reason,
+    old_revision AS "oldRevision",new_revision AS "newRevision",
+    occurred_at AS "occurredAt"`,
+    "preview_circle_moderation_audit WHERE member_id=$1",
+    "id",
+  ),
+  // v48: the member's own requests to reconsider those decisions and how each
+  // ended. Never the staff member who resolved it, their role or any key.
+  circleAppeals: section(
+    `id,circle_id AS "circleId",post_id AS "postId",
+    decision_revision AS "decisionRevision",request_reason AS "requestReason",
+    requested_at AS "requestedAt",state,closed_at AS "closedAt",
+    resolution_reason AS "resolutionReason",
+    resolved_revision AS "resolvedRevision"`,
+    "preview_circle_appeals WHERE member_id=$1",
+    "id",
+  ),
+  // v48: the cohorts the member was placed in, including ended ones.
+  cohortMemberships: section(
+    `cohort_id AS "cohortId",can_read_shared_content AS "canReadSharedContent",
+    expires_at AS "expiresAt",revoked_at AS "revokedAt"`,
+    "cohort_memberships WHERE member_id=$1",
+    "cohort_id",
+  ),
+  // v49 appends #94: changes staff agreed with the member (early release,
   // refund or another change) and why, never which administrator.
   coachingAgreedChanges: section(
     'kind,agreed,reason,created_at AS "recordedAt"',
@@ -719,7 +747,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v48";
+  version: "local-member-records-v49";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -853,7 +881,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v48",
+          version: "local-member-records-v49",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

@@ -74,6 +74,18 @@ function failure(
       ),
     );
 }
+/** WALK44-01: an administrator opened a student reference no account has now. */
+function studentGonePage() {
+  return page(
+    "Student account not found",
+    `<section class="invoice-workspace portal-workspace"><h1>Student account not found</h1><p role="alert">No student account has this reference now. If the student deleted their account, their coaching terms, hours and allowances were removed with it.</p><p>Invoices already issued to a deleted account are kept for the tax record and stay listed under Courses and invoices, without a link to the account.</p>${portalActions(
+      [
+        [adminPath, "Choose another member"],
+        ["/operator/invoices", "Courses and invoices"],
+      ],
+    )}</section>`,
+  );
+}
 /** HOURTABLE-01/02: saved months with hours, amount, readable status and invoice. */
 /** A saved month's state as members and administrators read it. */
 export function coachingStatus(m: {
@@ -235,6 +247,8 @@ export function mountCoachingRoutes(
         req.query.month as string | undefined,
         admin ? (req.params as Record<string, string>).ownerId! : undefined,
       );
+      if (admin && r.kind === "not-found")
+        return res.status(404).send(studentGonePage());
       if (r.kind !== "ready") return failure(res, r.kind, admin);
       const v = r.value,
         e = v.entry,
