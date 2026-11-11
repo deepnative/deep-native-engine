@@ -126,6 +126,13 @@ test("[F-ROADMAP-05-A] opting out dispatches nothing, the demo says it is simula
     });
 
     await requiredCheck(3, async () => {
+      // A sample the member has permitted right now on the ordinary site: its
+      // two queue forms are what a live-mode attempt has to be refused.
+      const open = await permitSample(pool, page);
+      const openForms = [
+        await savedForm(open.item, "/queue"),
+        await savedForm(open.item, "/queue-metered"),
+      ];
       // Hosting refuses live mode outright, so this listener runs the same
       // application in live mode with no provider settings at all.
       const port = await freePort();
@@ -182,22 +189,44 @@ test("[F-ROADMAP-05-A] opting out dispatches nothing, the demo says it is simula
           },
         );
         expect(attempt.status()).toBe(403);
+        // The permitted receipt itself is refused in live mode, plain and
+        // metered, and nothing is queued or held.
+        for (const form of openForms) {
+          const refused = await livePage.request.post(
+            new URL(form.action, liveOrigin).pathname,
+            {
+              headers: { Origin: liveOrigin },
+              form: { ...form.fields, csrf },
+              maxRedirects: 0,
+            },
+          );
+          expect(refused.status(), form.action).toBe(403);
+          // Refused by the simulation route itself, not as a stale form.
+          expect(await refused.text()).not.toContain(
+            "Your form needs a refresh",
+          );
+        }
         expect(await memberJobs(pool, member.id)).toHaveLength(completedJobs);
+        expect(await studyBalance(pool, grantId)).toEqual({
+          available: 1,
+          reserved: 0,
+          consumed: 0,
+        });
       } finally {
         await liveContext.close();
         await closeLoopback(live);
       }
 
-      // The ordinary site is untouched: the simulation still runs there.
+      // The ordinary site is untouched: the same receipt that live mode
+      // refused still queues and runs there, as a simulation.
       await page.goto("/evidence/local-ai");
-      const permitted = await permitSample(pool, page);
-      await permitted.item
+      await open.item
         .getByRole("button", { name: "Queue local simulation" })
         .click();
-      await permitted.item
+      await open.item
         .getByRole("button", { name: "Run local simulation" })
         .click();
-      await expect(permitted.item).toContainText("Simulated locally.");
+      await expect(open.item).toContainText("Simulated locally.");
       const jobs = await memberJobs(pool, member.id);
       expect(jobs).toHaveLength(completedJobs + 1);
       expect(jobs.every((job) => job.mode === "test")).toBe(true);

@@ -140,6 +140,20 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
     await expect(
       page.getByText("NO FORMAL REVIEW", { exact: false }),
     ).toBeVisible();
+    // The submitted attempt itself shows this assignment's own rubric, and no
+    // coding assessment.
+    const expectOwnRubric = async () => {
+      const shown = page.getByRole("region", {
+        name: "Original assignment rubric",
+        exact: true,
+      });
+      await expect(shown).toContainText("Original rubric version 1");
+      await expect(shown.locator("pre.content-text")).toHaveText(rubric);
+      await expect(page.locator("main")).not.toContainText(
+        /code review|coding rubric|unit tests/i,
+      );
+    };
+    await expectOwnRubric();
     const saved = await pool.query(
       `SELECT a.member_id,a.content_id,a.content_version,a.goal_at_start,
               a.response,a.submitted_at,cv.rubric,cv.rubric_version
@@ -192,5 +206,6 @@ test("[F-ROADMAP-08-D] project-management learner submits a noncoding assignment
     await expect(
       page.getByText("NO FORMAL REVIEW", { exact: false }),
     ).toBeVisible();
+    await expectOwnRubric();
   });
 });

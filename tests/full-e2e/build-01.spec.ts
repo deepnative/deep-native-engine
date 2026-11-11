@@ -227,56 +227,94 @@ test("[F-BUILD-01-D] demo reviewer roster entry does not change live service rea
   page,
   context,
 }) => {
-  const recordId = randomUUID();
+  const recordId = randomUUID(),
+    backupRecordId = randomUUID();
   try {
     await requiredCheck(1, async () => {
-      const staffId = await authorizationStore(pool).provisionStaff(
-        randomBytes(32).toString("hex"),
-        "reviewer",
-        new Date(Date.now() + 86_400_000),
-      );
-      await pool.query(
-        `INSERT INTO expert_registry(
-           id,staff_id,staff_role,domain,service_type,starts_at,ends_at,
-           loaded_cost_cents,capacity_minutes,committed_minutes,
-           qualification_ref,agreement_ref,conflict_review_ref
-         ) VALUES($1,$2,'reviewer','education','formal-review',
-           CURRENT_TIMESTAMP-INTERVAL '1 day',CURRENT_TIMESTAMP+INTERVAL '1 day',
-           10000,90,0,'invented demo qualification','','')`,
-        [recordId, staffId],
-      );
-      const record = await pool.query<{
-        verified_by: string | null;
-        verified_at: Date | null;
-        backup_staff_id: string | null;
-        capacity_minutes: number;
-      }>(
-        `SELECT verified_by,verified_at,backup_staff_id,capacity_minutes
-         FROM expert_registry WHERE id=$1`,
-        [recordId],
-      );
-      expect(record.rows).toEqual([
-        {
-          verified_by: null,
-          verified_at: null,
-          backup_staff_id: null,
-          capacity_minutes: 90,
-        },
-      ]);
-
       await onboard(page, "analysis");
       const owner = await member(context);
-      await page.goto("/readiness/tracks");
       const service = page
         .getByRole("listitem")
         .filter({ hasText: "Education · formal review" });
+      const reviewerGap = "Qualified reviewer coverage not verified";
+      const capacityGap = "Deliverable service capacity not verified";
+      await page.goto("/readiness/tracks");
+      const before = await service.innerText();
+      expect(before).toContain("in preparation");
+
+      // The demo entry lacks verification and nothing else: documents on
+      // file, spare capacity, and a backup reviewer who is just as complete.
+      const auth = authorizationStore(pool);
+      const expires = new Date(Date.now() + 86_400_000);
+      const [staffId, backupId, adminId] = [
+        await auth.provisionStaff(
+          randomBytes(32).toString("hex"),
+          "reviewer",
+          expires,
+        ),
+        await auth.provisionStaff(
+          randomBytes(32).toString("hex"),
+          "reviewer",
+          expires,
+        ),
+        await auth.provisionStaff(
+          randomBytes(32).toString("hex"),
+          "platform_admin",
+          expires,
+        ),
+      ];
+      await pool.query(
+        `INSERT INTO expert_registry(
+           id,staff_id,staff_role,domain,service_type,starts_at,ends_at,
+           loaded_cost_cents,capacity_minutes,committed_minutes,backup_staff_id,
+           qualification_ref,agreement_ref,conflict_review_ref
+         ) VALUES($1,$2,'reviewer','education','formal-review',
+           CURRENT_TIMESTAMP-INTERVAL '1 day',CURRENT_TIMESTAMP+INTERVAL '1 day',
+           10000,90,0,$4,'invented demo qualification','invented demo agreement',
+           'invented demo conflict review'),
+         ($3,$4,'reviewer','education','formal-review',
+           CURRENT_TIMESTAMP-INTERVAL '1 day',CURRENT_TIMESTAMP+INTERVAL '1 day',
+           10000,90,0,$2,'invented demo qualification','invented demo agreement',
+           'invented demo conflict review')`,
+        [recordId, staffId, backupRecordId, backupId],
+      );
+      const verification = async () =>
+        (
+          await pool.query<{ verified: boolean }>(
+            `SELECT (verified_by IS NOT NULL AND verified_at IS NOT NULL) AS verified
+             FROM expert_registry WHERE id=ANY($1::uuid[])`,
+            [[recordId, backupRecordId]],
+          )
+        ).rows.map((row) => row.verified);
+      expect(await verification()).toEqual([false, false]);
+
+      // Unverified, the demo entry changes nothing on the readiness page.
+      await page.goto("/readiness/tracks");
+      expect(await service.innerText()).toBe(before);
       await expect(service).toContainText("in preparation");
-      await expect(service).toContainText(
-        "Qualified reviewer coverage not verified",
+      await expect(service).toContainText(reviewerGap);
+      await expect(service).toContainText(capacityGap);
+
+      // Control: verification is the only thing missing. Once the same two
+      // entries are verified both gaps go, and they return when it is removed.
+      await pool.query(
+        `UPDATE expert_registry SET verified_by=$2,verified_at=CURRENT_TIMESTAMP
+         WHERE id=ANY($1::uuid[])`,
+        [[recordId, backupRecordId], adminId],
       );
-      await expect(service).toContainText(
-        "Deliverable service capacity not verified",
+      expect(await verification()).toEqual([true, true]);
+      await page.goto("/readiness/tracks");
+      await expect(service).not.toContainText(reviewerGap);
+      await expect(service).not.toContainText(capacityGap);
+      await pool.query(
+        `UPDATE expert_registry SET verified_by=NULL,verified_at=NULL
+         WHERE id=ANY($1::uuid[])`,
+        [[recordId, backupRecordId]],
       );
+      await page.goto("/readiness/tracks");
+      expect(await service.innerText()).toBe(before);
+      await expect(service).toContainText(reviewerGap);
+      await expect(service).toContainText(capacityGap);
       await expect(page.getByText("invented demo qualification")).toHaveCount(
         0,
       );
@@ -290,6 +328,8 @@ test("[F-BUILD-01-D] demo reviewer roster entry does not change live service rea
       expect(paid.rowCount).toBe(0);
     });
   } finally {
-    await pool.query("DELETE FROM expert_registry WHERE id=$1", [recordId]);
+    await pool.query("DELETE FROM expert_registry WHERE id=ANY($1::uuid[])", [
+      [recordId, backupRecordId],
+    ]);
   }
 });

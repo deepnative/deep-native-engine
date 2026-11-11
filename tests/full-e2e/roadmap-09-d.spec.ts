@@ -43,10 +43,23 @@ async function operatorRequest(
   await operator.getByLabel("Records").selectOption(scope);
 }
 async function expectRefused(operator: Page, hidden: string[]) {
-  await operator.getByRole("button", { name: "Download records" }).click();
+  // Refused for lack of the member's permission (403), not as a malformed
+  // request (400), which shows the same heading.
+  const [response] = await Promise.all([
+    operator.waitForResponse(
+      (answer) =>
+        answer.request().method() === "POST" &&
+        answer.url().endsWith("/operator/member-records"),
+    ),
+    operator.getByRole("button", { name: "Download records" }).click(),
+  ]);
+  expect(response.status()).toBe(403);
   await expect(
     operator.getByRole("heading", { name: "Download refused" }),
   ).toBeVisible();
+  await expect(operator.locator("main")).toContainText(
+    "hasn't allowed operators to download these records right now",
+  );
   const text = (await operator.locator("main").textContent()) ?? "";
   for (const value of hidden) expect(text).not.toContain(value);
 }
@@ -159,6 +172,28 @@ test("[F-ROADMAP-09-D] member and operator export stay within authorization, and
         await operatorRequest(f, operator, ownerId, scope);
         await expectRefused(operator, [supportBody, ownerTitle]);
       }
+      // The refusal was about scope: once the owner allows support requests,
+      // the same request downloads them, and still no learning records.
+      await owner.goto(f.origin + "/account/record-access");
+      await owner.getByRole("radio", { name: /^Support requests/ }).check();
+      await owner.getByRole("button", { name: "Allow for 7 days" }).click();
+      await expect(
+        owner.locator('[data-record-access="support"]'),
+      ).toContainText("No downloads yet.");
+      await operatorRequest(f, operator, ownerId, "support");
+      const [download] = await Promise.all([
+        operator.waitForEvent("download"),
+        operator.getByRole("button", { name: "Download records" }).click(),
+      ]);
+      const saved = info.outputPath("support.json");
+      await download.saveAs(saved);
+      const allowed = await readFile(saved, "utf8");
+      expect(JSON.parse(allowed)).toMatchObject({
+        reference: ownerId,
+        scope: "support",
+      });
+      expect(allowed).toContain(supportBody);
+      expect(allowed).not.toContain(ownerTitle);
     });
 
     // Source evidence with a derived text extract, and an issued, paid invoice.

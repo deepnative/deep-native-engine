@@ -228,7 +228,7 @@ test("[F-ROADMAP-05-B] the administrator-set AI allowance blocks at its end, a l
         .click();
       const path = new URL(page.url()).pathname;
       const responses = page.locator("[data-practice-response]");
-      for (let sequence = 1; sequence <= 15; sequence++) {
+      for (let sequence = 1; sequence <= 14; sequence++) {
         await page
           .getByLabel("Your next sample response")
           .fill(`Invented response ${sequence}: check the source.`);
@@ -242,6 +242,20 @@ test("[F-ROADMAP-05-B] the administrator-set AI allowance blocks at its end, a l
           .click();
         await expect(responses).toHaveCount(sequence);
       }
+      // The form the page sends, built by hand. Response 15 is accepted this
+      // way, so the refusal of response 16 below can only be the limit.
+      const send = async (sequence: number) =>
+        page.request.post(`${j.f.origin}${path}/responses`, {
+          headers: { Origin: j.f.origin },
+          form: {
+            csrf: await page.locator('input[name="csrf"]').first().inputValue(),
+            expected_sequence: String(sequence),
+            response: `Invented response ${sequence}: check the source.`,
+            synthetic: "yes",
+          },
+          maxRedirects: 0,
+        });
+      expect((await send(15)).status()).toBe(303);
       // Thirty visible turns: fifteen responses and fifteen comparisons.
       await page.reload();
       await expect(page.locator("[data-practice-comparison]")).toHaveCount(15);
@@ -251,25 +265,13 @@ test("[F-ROADMAP-05-B] the administrator-set AI allowance blocks at its end, a l
       await expect(
         page.getByRole("button", { name: "Save response and compare" }),
       ).toHaveCount(0);
-      // A further turn sent directly is refused, and nothing is saved.
-      const csrf = await page
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
-      const further = await page.request.post(
-        `${j.f.origin}${path}/responses`,
-        {
-          headers: { Origin: j.f.origin },
-          form: {
-            csrf,
-            expected_sequence: "16",
-            response: "Invented response 16 past the limit.",
-            confirm: "yes",
-          },
-          maxRedirects: 0,
-        },
+      // A further turn sent the same way is refused for the limit, and
+      // nothing is saved.
+      const further = await send(16);
+      expect(further.status()).toBe(409);
+      expect(await further.text()).toContain(
+        "The session or sequence is unavailable, changed, full or withdrawn.",
       );
-      expect(further.status()).toBeGreaterThanOrEqual(400);
       await page.goto(j.f.origin + path);
       await expect(responses).toHaveCount(15);
       // The conversation used and charged no AI request.

@@ -7,6 +7,8 @@ import {
   prepareBundle,
 } from "../support/course-bundle-journey.ts";
 import { staffTrace } from "../support/staff-trace.ts";
+import { randomBytes } from "node:crypto";
+import { store } from "../../src/store.ts";
 
 // Staff measures and their demo separation (ECO-08-A/B, BUILD-09-A). Each case
 // runs on its own database. The main listener issues sample (demo) course
@@ -79,6 +81,13 @@ async function recordPayment(
   ).toContainText("Invented reference for a browser test");
 }
 
+// The aggregate data behind the staff snapshot page.
+async function metricsJson(admin: Page, origin: string) {
+  const response = await admin.request.get(origin + "/operator/metrics");
+  expect(response.status()).toBe(200);
+  return response.json();
+}
+
 async function selfAssess(f: Fixture, member: Page) {
   await member.goto(f.origin + "/library/FND-001?version=2");
   await member.getByRole("button", { name: "Start this lesson" }).click();
@@ -129,16 +138,19 @@ test("[F-ECO-08-A] learning, participation, reviewed-contribution and paid-conve
       await expect(activity).toContainText(
         "Each measure counts distinct retained members.",
       );
-      for (const [label, definition] of [
+      for (const [key, label, definition] of [
         [
+          "activated",
           "Opened a versioned lesson",
           "at least one versioned lesson open, divided by members",
         ],
         [
+          "selfAssessed",
           "Self-assessed lesson completion",
           "at least one self-assessed lesson completion, divided by members",
         ],
         [
+          "submittedAssignment",
           "Submitted an assignment",
           "private assignment submission snapshot, divided by members",
         ],
@@ -146,7 +158,36 @@ test("[F-ECO-08-A] learning, participation, reviewed-contribution and paid-conve
         const term = activity.locator("dt", { hasText: label });
         await expect(term).toHaveCount(1);
         await expect(term.locator("+ dd")).toContainText(definition);
+        // Each measure has its own computed value cell, withheld on its own.
+        await expect(term.locator("+ dd").locator("[data-metric]")).toHaveCount(
+          1,
+        );
+        await expect(
+          term.locator("+ dd").locator(`[data-metric="${key}"]`),
+        ).toHaveText("Suppressed");
       }
+      // The data behind the page keeps one definition and one value per
+      // learning measure, each over members, and carries no paid measure.
+      const data = await metricsJson(admin, f.origin);
+      expect(data.learning.disclosure).toBe("suppressed");
+      const learningKeys = [
+        "activated",
+        "selfAssessed",
+        "submittedAssignment",
+      ] as const;
+      for (const key of learningKeys) {
+        expect(data.definitions[key]).toContain("divided by members");
+        expect(data.learning.values).toHaveProperty(key, null);
+      }
+      expect(
+        new Set(learningKeys.map((key) => data.definitions[key])).size,
+      ).toBe(learningKeys.length);
+      for (const key of [
+        ...Object.keys(data),
+        ...Object.keys(data.definitions),
+        ...Object.keys(data.learning.values),
+      ])
+        expect(key).not.toMatch(/paid|revenue|conversion|offer|invoice/i);
       // Four members is below the 20-member floor, so values are withheld,
       // not shown as small exact counts.
       await expect(accounts.locator('[data-metric="members"]')).toHaveText(
@@ -163,19 +204,27 @@ test("[F-ECO-08-A] learning, participation, reviewed-contribution and paid-conve
       const activity = admin.locator(
         'section[aria-labelledby="metrics-activity"]',
       );
-      for (const [label, definition] of [
+      for (const [key, label, definition] of [
         [
+          "participated",
           "Ever joined a circle",
           "who ever joined a local circle, divided by members",
         ],
         [
+          "activeCircle",
           "Currently in a circle",
           "with no recorded departure, divided by members",
         ],
       ] as const) {
-        await expect(
-          activity.locator("dt", { hasText: label }).locator("+ dd"),
-        ).toContainText(definition);
+        const value = activity
+          .locator("dt", { hasText: label })
+          .locator("+ dd");
+        await expect(value).toContainText(definition);
+        // Each participation measure has its own value cell, withheld alone.
+        await expect(value.locator("[data-metric]")).toHaveCount(1);
+        await expect(value.locator(`[data-metric="${key}"]`)).toHaveText(
+          "Suppressed",
+        );
       }
       await expect(activity).toContainText(
         "Measures overlap and must not be added together.",
@@ -206,6 +255,85 @@ test("[F-ECO-08-A] learning, participation, reviewed-contribution and paid-conve
         }),
       ).toBeVisible();
       await expect(contributions).not.toContainText("divided by members");
+      // Each contribution group is withheld as a group of its own.
+      for (const origin of ["member", "sample"])
+        await expect(
+          contributions.locator(`[data-contributions="${origin}-suppressed"]`),
+        ).toHaveCount(1);
+      // In the data, participation is defined over members, while
+      // contributions are a separate block with their own groups and
+      // definitions that never use the member denominator.
+      const data = await metricsJson(admin, f.origin);
+      const circleKeys = ["participated", "activeCircle"] as const;
+      for (const key of circleKeys) {
+        expect(data.definitions[key]).toContain("divided by members");
+        expect(data.learning.values).toHaveProperty(key, null);
+      }
+      expect(data.definitions.participated).not.toBe(
+        data.definitions.activeCircle,
+      );
+      expect(
+        data.contributions.groups.map(
+          (group: { origin: string; disclosure: string }) => [
+            group.origin,
+            group.disclosure,
+          ],
+        ),
+      ).toEqual([
+        ["member", "suppressed"],
+        ["sample", "suppressed"],
+      ]);
+      const contributionDefinitions: Record<string, string> =
+        data.contributions.definitions;
+      expect(Object.keys(contributionDefinitions).length).toBeGreaterThan(0);
+      for (const [key, text] of Object.entries(contributionDefinitions)) {
+        expect(text).not.toContain("divided by members");
+        expect(Object.keys(data.learning.values)).not.toContain(key);
+      }
+
+      // Contrast above the 20-member floor: learning moves and nothing else
+      // does. Eighteen more accounts bring the total to 25, and four more
+      // members report a lesson complete, making five. A measure is shown
+      // once it has five members and five outside it.
+      const accounts = store(f.pool);
+      for (let n = 0; n < 18; n++)
+        await accounts.create(randomBytes(32).toString("hex"), {
+          background: "explorer",
+          goal: "everyday",
+        });
+      const shownValue = (key: string) =>
+        admin.locator(`[data-metric="${key}"]`);
+      for (let n = 0; n < 3; n++) await selfAssess(f, await f.member());
+      // Four self-assessed members of 24 is still too few to show.
+      await admin.goto(f.origin + "/operator/metrics/report");
+      await expect(shownValue("members")).toHaveText("20-49");
+      await expect(shownValue("selfAssessed")).toHaveText("Suppressed");
+      await selfAssess(f, await f.member());
+      await admin.goto(f.origin + "/operator/metrics/report");
+      await expect(shownValue("members")).toHaveText("20-49");
+      await expect(shownValue("selfAssessed")).toHaveText("5-19");
+      await expect(shownValue("activated")).toHaveText("5-19");
+      // No one joined a circle or contributed: those stay withheld.
+      for (const key of ["participated", "activeCircle", "submittedAssignment"])
+        await expect(shownValue(key)).toHaveText("Suppressed");
+      for (const origin of ["member", "sample"])
+        await expect(
+          contributions.locator(`[data-contributions="${origin}-suppressed"]`),
+        ).toHaveCount(1);
+      const moved = await metricsJson(admin, f.origin);
+      expect(moved.learning.disclosure).toBe("coarse-band");
+      expect(moved.learning.values).toMatchObject({
+        selfAssessed: "5-19",
+        activated: "5-19",
+        participated: null,
+        activeCircle: null,
+        submittedAssignment: null,
+      });
+      expect(
+        moved.contributions.groups.map(
+          (group: { disclosure: string }) => group.disclosure,
+        ),
+      ).toEqual(["suppressed", "suppressed"]);
     });
 
     await requiredCheck(3, async () => {

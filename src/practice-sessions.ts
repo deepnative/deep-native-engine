@@ -62,6 +62,18 @@ export const STANDARD_EXCHANGES = 15;
 const MOST_EXCHANGES = 50;
 export const exchangeLimitOf = (value: { exchangeLimit?: number }) =>
   value.exchangeLimit ?? STANDARD_EXCHANGES;
+/**
+ * #94 F-BUILD-06-B / F-ROADMAP-05-D: a response of fewer than five words is
+ * told, in its own comparison, that it is too little to compare. A fuller
+ * response never gets this line.
+ */
+export const SPARSE_WORDS = 5;
+export function sparseNotice(response: string) {
+  const words = response.trim().split(/\s+/).length;
+  return words < SPARSE_WORDS
+    ? `Insufficient evidence: your response has ${words} word${words === 1 ? "" : "s"}, too few to compare with the source. Add what you would do and one detail you checked, then respond again.\n`
+    : "";
+}
 // #200 PRACTICE-AI: a request whose outcome was never recorded is "unknown"
 // and is never retried.
 export interface PracticeSuggestionView {
@@ -625,6 +637,7 @@ export function practiceSessionStore(
             const comparison =
               `Simulation — unreviewed local comparison. Your paired words: “${input.response}”\n` +
               `Exact source excerpt (${row.contentId} v${row.contentVersion}): “${sourceExcerpt}”\n` +
+              sparseNotice(input.response) +
               "Compare the two yourself and identify a detail to verify. This deterministic comparison does not verify accuracy and cannot judge competence. Uncertainty remains; no qualified review has occurred." +
               (row.promptVersion === interviewPromptVersion
                 ? `\n${interviewNotice}`

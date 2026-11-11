@@ -1,7 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
+import { interviewNotice } from "../../src/practice-session-purpose.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
+import { setTestCeiling } from "../support/ai-test-ceiling.ts";
 import { testPool } from "../support/database.ts";
 import {
   aiMember,
@@ -17,7 +19,13 @@ import { requiredCheck } from "../support/required-check.ts";
 const pool = testPool();
 test.afterAll(async () => pool.end());
 
-const insufficient = "there is insufficient evidence for formal assessment";
+// The sparse-specific line a comparison carries only for a response of fewer
+// than five words. The page's standing "insufficient evidence for formal
+// assessment" sentence is on every session and proves nothing about a response.
+const insufficient =
+  /Insufficient evidence: your response has 1 word, too few to compare with the source\./;
+const fullAnswer =
+  "I would check the invented claim against the source excerpt before relying on it.";
 
 function lessonId() {
   const letters = Array.from(randomBytes(3), (byte) =>
@@ -69,12 +77,15 @@ async function publish(draft: DraftContent) {
   return { ...staff, retire: () => catalog.retire(staff.editor, draft.id) };
 }
 
-async function startSession(page: Page, id: string) {
+async function startSession(
+  page: Page,
+  id: string,
+  purpose: "lesson" | "interview" = "lesson",
+) {
   await page.goto(`/library/${id}/practice-session`);
-  await page.getByLabel("I want to start private sample practice").check();
-  await page
-    .getByRole("button", { name: "Start or return to private session" })
-    .click();
+  const form = page.locator(`form[data-practice-purpose="${purpose}"]`);
+  await form.getByRole("checkbox").check();
+  await form.getByRole("button").click();
   await expect(
     page.getByRole("heading", {
       name: "Private practice session",
@@ -183,7 +194,7 @@ test("[F-BUILD-06-A] each comparison quotes the member's own response and nothin
   try {
     const otherPage = await otherContext.newPage();
     await signIn(otherPage, other.token);
-    await startSession(otherPage, source.id);
+    await startSession(otherPage, source.id, "interview");
     await respond(otherPage, foreign);
   } finally {
     await otherContext.close();
@@ -192,11 +203,17 @@ test("[F-BUILD-06-A] each comparison quotes the member's own response and nothin
   const member = await aiMember(pool);
   await signIn(page, member.token);
   await requiredCheck(1, async () => {
-    await startSession(page, source.id);
+    // Interview practice, the member's own choice: not ordinary lesson practice.
+    await startSession(page, source.id, "interview");
+    await expect(page.locator("body")).toContainText(
+      "Purpose: optional interview practice.",
+    );
     const pairOne = await respond(page, first);
     await expect(pairOne).toContainText(`Your paired words: “${first}”`);
+    await expect(pairOne).toContainText(interviewNotice);
     const pairTwo = await respond(page, second);
     await expect(pairTwo).toContainText(`Your paired words: “${second}”`);
+    await expect(pairTwo).toContainText(interviewNotice);
     // A comparison holds its own response and the source: not the other pair.
     await expect(pairTwo).not.toContainText(first);
     await expect(
@@ -212,8 +229,10 @@ test("[F-BUILD-06-A] each comparison quotes the member's own response and nothin
       [member.id],
     );
     expect(stored.rows.map((row) => row.response)).toEqual([first, second]);
-    for (const row of stored.rows)
+    for (const row of stored.rows) {
       expect(row.comparison).toContain(`“${row.response}”`);
+      expect(row.comparison).toContain(interviewNotice);
+    }
   });
 });
 
@@ -228,10 +247,18 @@ test("[F-BUILD-06-B] a very short response is told the evidence is insufficient"
   await signIn(page, member.token);
   await requiredCheck(1, async () => {
     await startSession(page, source.id);
+    // The feedback for the sparse response itself says so.
     const comparison = await respond(page, "ok");
-    await expect(page.locator("body")).toContainText(insufficient);
+    await expect(comparison).toContainText(insufficient);
     await expect(comparison).toContainText("cannot judge competence");
     await expect(comparison).toContainText("Uncertainty remains");
+    // Contrast: a fuller response in the same session is not told that.
+    const fuller = await respond(page, fullAnswer);
+    await expect(fuller).toContainText(fullAnswer);
+    await expect(fuller).not.toContainText("Insufficient evidence");
+    await expect(
+      page.locator("[data-practice-comparison]").first(),
+    ).toContainText(insufficient);
     await expect(page.locator("body")).not.toContainText(
       /\b(you passed|well done|competent)\b/i,
     );
@@ -258,9 +285,17 @@ test("[F-ROADMAP-05-D] sparse answers, disallowed sources and a spent budget all
   await signIn(page, member.token);
 
   await requiredCheck(1, async () => {
-    await startSession(page, allowed.id);
-    await respond(page, "ok");
-    await expect(page.locator("body")).toContainText(insufficient);
+    // Interview practice: the feedback for the sparse answer says so, and a
+    // full answer in the same interview session does not.
+    await startSession(page, allowed.id, "interview");
+    await expect(page.locator("body")).toContainText(
+      "Purpose: optional interview practice.",
+    );
+    const sparse = await respond(page, "ok");
+    await expect(sparse).toContainText(insufficient);
+    const fuller = await respond(page, fullAnswer);
+    await expect(fuller).toContainText(fullAnswer);
+    await expect(fuller).not.toContainText("Insufficient evidence");
   });
 
   await requiredCheck(2, async () => {
@@ -284,7 +319,7 @@ test("[F-ROADMAP-05-D] sparse answers, disallowed sources and a spent budget all
     await expect(page.getByLabel("Your next sample response")).toHaveCount(0);
 
     // Output for the allowed source holds that source only.
-    await startSession(page, allowed.id);
+    await startSession(page, allowed.id, "interview");
     const comparison = page.locator("[data-practice-comparison]").last();
     await expect(comparison).toContainText(allowed.body);
     await expect(page.locator("body")).not.toContainText(otherGoal.body);
@@ -321,9 +356,13 @@ test("[F-ROADMAP-05-D] sparse answers, disallowed sources and a spent budget all
     await expect(
       page.getByRole("heading", { name: "Local test request unavailable" }),
     ).toBeVisible();
-    await expect(page.locator("body")).toContainText(
-      "No allowance was granted and no live provider was contacted.",
+    // The refusal says what to check, and offers a way back.
+    await expect(page.locator("p.lead")).toHaveText(
+      "Check current permission, the local pause state and your existing test units. No allowance was granted and no live provider was contacted.",
     );
+    await expect(
+      page.getByRole("link", { name: "Return to your learning path" }),
+    ).toBeVisible();
     expect(await studyBalance(pool, grantId)).toEqual(spentBalance);
     expect(await memberJobs(pool, member.id)).toEqual(jobs);
 
@@ -332,5 +371,60 @@ test("[F-ROADMAP-05-D] sparse answers, disallowed sources and a spent budget all
     const units = page.locator('[data-test-unit-category="study_requests"]');
     await expect(units.locator('[data-field="usable"]')).toHaveText("0");
     await expect(units.locator('[data-field="consumed"]')).toHaveText("1");
+
+    // The spending budget itself: with a fresh request to hold but no room
+    // under the test spending ceiling, nothing is held, queued or estimated.
+    const freshGrant = await grantStudyRequests(pool, member.id, 1);
+    const estimates = async () =>
+      (
+        await pool.query(
+          "SELECT job_id FROM ai_usage_estimates WHERE member_id=$1 ORDER BY job_id",
+          [member.id],
+        )
+      ).rows;
+    const estimated = await estimates();
+    const blocked = await permitSample(pool, page);
+    const ceiling = Number(
+      (
+        await pool.query<{ ceiling_points: string }>(
+          "SELECT ceiling_points FROM ai_test_spending_ceiling WHERE singleton",
+        )
+      ).rows[0]!.ceiling_points,
+    );
+    // The ceiling is shared by the whole test database, so it is put back.
+    await setTestCeiling(pool, { room: 0 });
+    try {
+      await blocked.item
+        .getByLabel("Hold one existing local test request")
+        .check();
+      await blocked.item
+        .getByRole("button", { name: "Use one local test request" })
+        .click();
+      await expect(
+        page.getByRole("heading", { name: "Test spending ceiling reached" }),
+      ).toBeVisible();
+      await expect(page.locator("p.lead")).toHaveText(
+        "The test spending ceiling has no room for this request. No test request was held and no provider was contacted.",
+      );
+      expect(await studyBalance(pool, freshGrant)).toEqual({
+        available: 1,
+        reserved: 0,
+        consumed: 0,
+      });
+      expect(await studyBalance(pool, grantId)).toEqual(spentBalance);
+      expect(await memberJobs(pool, member.id)).toEqual(jobs);
+      expect(await estimates()).toEqual(estimated);
+      // The stop names a real way forward: the member's own units, where the
+      // fresh request still reads as usable.
+      await page.getByRole("link", { name: "View your test units" }).click();
+      await expect(page).toHaveURL(/\/member\/test-units$/);
+      await expect(
+        page
+          .locator('[data-test-unit-category="study_requests"]')
+          .locator('[data-field="usable"]'),
+      ).toHaveText("1");
+    } finally {
+      await setTestCeiling(pool, { ceiling });
+    }
   });
 });

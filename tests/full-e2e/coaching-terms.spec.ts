@@ -106,9 +106,20 @@ const left = (n: number, unit = "") =>
 
 async function generateDueInvoices(j: Journey) {
   await j.admin.goto(j.f.origin + "/operator/invoices");
-  await j.admin
-    .getByRole("button", { name: "Generate due recurring invoices" })
-    .click();
+  // The run was accepted and finished (303 back to the invoice list) before
+  // any caller looks for what it created.
+  const [run] = await Promise.all([
+    j.admin.waitForResponse(
+      (answer) =>
+        answer.request().method() === "POST" &&
+        answer.url().endsWith("/operator/invoices/due"),
+    ),
+    j.admin
+      .getByRole("button", { name: "Generate due recurring invoices" })
+      .click(),
+  ]);
+  expect(run.status()).toBe(303);
+  await expect(j.admin).toHaveURL(j.f.origin + "/operator/invoices");
 }
 const renewalsDue = (j: Journey) =>
   j.admin.locator('section[aria-labelledby="renewals-due"]');

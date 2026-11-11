@@ -1,5 +1,6 @@
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { authorizationStore } from "../../src/authorization.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
@@ -201,6 +202,63 @@ test("[F-BUILD-10-D] queued private review remains truthful after a fresh local 
       await expect(
         returnedPage!.getByRole("button", { name: /approve|book|pay/i }),
       ).toHaveCount(0);
+      // Every control on the returned sample is an expected one, so an extra
+      // or dead control fails here. Each button is enabled and posts its own
+      // form to this sample's route with the session's form token.
+      const path = `/evidence/${evidenceId}`;
+      const buttons = [
+        [`Download ${title}`, "download"],
+        ["Revoke review consent", "revoke-private-review"],
+        ["Delete sample", "delete"],
+      ] as const;
+      await expect(item.getByRole("button")).toHaveText(
+        buttons.map(([name]) => name),
+      );
+      for (const [name, action] of buttons) {
+        const button = item.getByRole("button", { name, exact: true });
+        await expect(button).toBeEnabled();
+        expect(
+          await button.evaluate((element) => {
+            const form = (element as HTMLButtonElement).form;
+            return form
+              ? {
+                  method: form.method,
+                  action: new URL(form.action).pathname,
+                  token: form.querySelector('input[name="csrf"]') !== null,
+                }
+              : null;
+          }),
+        ).toEqual({ method: "post", action: `${path}/${action}`, token: true });
+      }
+      // The whole page offers only those and the form that saves a new sample.
+      await expect(
+        returnedPage!.locator("section.private-evidence").getByRole("button"),
+      ).toHaveText([
+        ...buttons.map(([name]) => name),
+        "Save private text sample",
+      ]);
+      // The download button really returns the saved sample.
+      const downloading = returnedPage!.waitForEvent("download");
+      await item
+        .getByRole("button", { name: `Download ${title}`, exact: true })
+        .click();
+      const downloaded = await downloading;
+      expect(downloaded.suggestedFilename()).toBe(title);
+      expect(await readFile((await downloaded.path())!, "utf8")).toBe(bytes);
+      // Each link on the sample leads to a page that answers.
+      const links = [
+        [`Read private feedback for ${title}`, `${path}/feedback`],
+        [`Create a new private revision of ${title}`, `${path}/revise`],
+      ] as const;
+      await expect(item.getByRole("link")).toHaveText(
+        links.map(([name]) => name),
+      );
+      for (const [name, href] of links) {
+        await expect(
+          item.getByRole("link", { name, exact: true }),
+        ).toHaveAttribute("href", href);
+        expect((await returnedPage!.request.get(href)).status()).toBe(200);
+      }
       await item
         .getByRole("link", {
           name: `Create a new private revision of ${title}`,

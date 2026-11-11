@@ -183,6 +183,7 @@ import {
   careerPage,
   errorPage,
   localAiLimitPage,
+  localAiCeilingPage,
   circleMembershipRecoveryPage,
   usefulnessRecoveryPage,
   assignmentAttemptsPage,
@@ -2449,8 +2450,7 @@ export function app(
       res
         .status(409)
         .send(
-          errorPage(
-            "Test spending ceiling reached",
+          localAiCeilingPage(
             "The test spending ceiling has no room for this request. No test request was held and no provider was contacted.",
           ),
         );
@@ -2484,8 +2484,7 @@ export function app(
       res
         .status(409)
         .send(
-          errorPage(
-            "Test spending ceiling reached",
+          localAiCeilingPage(
             "Nothing was sent to the provider. Your test request stays reserved and can run when there is room, or withdraw permission to get it back.",
           ),
         );

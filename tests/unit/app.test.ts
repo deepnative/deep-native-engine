@@ -1840,6 +1840,10 @@ it("requires explicit member confirmation and current local AI permission at eve
   }).expect(409);
   expect(fullQueue.text).toContain("Test spending ceiling reached");
   expect(fullQueue.text).toContain("No test request was held");
+  // #94 F-ROADMAP-05-D: the stop names where to go next.
+  expect(fullQueue.text).toContain(
+    '<a href="/member/test-units">View your test units</a>',
+  );
   // AILIMIT: both queue routes explain the member-wide limit.
   localAiConsent.enqueueMetered.mockResolvedValueOnce({
     kind: "limit_reached",

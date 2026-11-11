@@ -362,6 +362,51 @@ test("[F-BUILD-08-C] owner deletion removes configured synthetic source and deri
     ).rows[0]!;
     const path = (key: string) =>
       join(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!, key);
+    // Derived AI material made by the product: the member permits the
+    // simulated AI summary of this sample and runs it, leaving a permission
+    // receipt and a completed AI job with the summary's output.
+    await page.goto("/evidence/local-ai");
+    const aiItem = page
+      .locator("li")
+      .filter({ has: page.getByRole("heading", { name: sampleName }) });
+    await aiItem
+      .getByLabel("I permit this exact invented sample version")
+      .check();
+    await aiItem
+      .getByRole("button", { name: "Grant local simulation permission" })
+      .click();
+    await aiItem
+      .getByRole("button", { name: "Queue local simulation" })
+      .click();
+    await aiItem.getByRole("button", { name: "Run local simulation" }).click();
+    const aiRecords = async () => ({
+      receipts: (
+        await pool.query<{ id: string }>(
+          "SELECT id FROM local_ai_receipts WHERE evidence_id=$1",
+          [id],
+        )
+      ).rows.map((row) => row.id),
+      jobs: (
+        await pool.query<{ id: string; status: string }>(
+          "SELECT id,status FROM adapter_jobs WHERE id=ANY($1::uuid[])",
+          [aiJobIds],
+        )
+      ).rows,
+    });
+    let aiJobIds: string[] = [];
+    const receiptIds = (await aiRecords()).receipts;
+    expect(receiptIds).toHaveLength(1);
+    const aiJobs = (
+      await pool.query<{ id: string; status: string }>(
+        "SELECT id,status FROM adapter_jobs WHERE local_ai_receipt_id=$1",
+        [receiptIds[0]],
+      )
+    ).rows;
+    expect(aiJobs).toEqual([{ id: expect.any(String), status: "succeeded" }]);
+    aiJobIds = aiJobs.map((job) => job.id);
+    await page.goto("/evidence/local-ai");
+    const summaryText = (await aiItem.innerText()).trim();
+    expect(summaryText).toContain(sampleName);
     expect(await readFile(path(sourceRow.storage_key))).toEqual(source);
     expect(await readFile(path(derivativeRow.storage_key))).toEqual(derivative);
     const issued = await page.request.post(
@@ -414,6 +459,18 @@ test("[F-BUILD-08-C] owner deletion removes configured synthetic source and deri
       expect((await replay.text()).includes(source.toString())).toBe(false);
     });
     await requiredCheck(2, async () => {
+      // The AI-derived records of the deleted sample are gone, and the member
+      // is no longer shown the sample or its summary.
+      expect(await aiRecords()).toEqual({ receipts: [], jobs: [] });
+      await page.goto("/evidence/local-ai");
+      await expect(page.getByRole("heading", { name: sampleName })).toHaveCount(
+        0,
+      );
+      const exported = await page.request.get("/api/member/export");
+      expect(exported.status()).toBe(200);
+      const exportedText = await exported.text();
+      expect(exportedText).not.toContain(receiptIds[0]!);
+      for (const jobId of aiJobIds) expect(exportedText).not.toContain(jobId);
       expect(
         (
           await pool.query("SELECT id FROM evidence_derivatives WHERE id=$1", [

@@ -101,14 +101,18 @@ test("[F-BUILD-09-C] no tier can be bought, and capacity and scope are stated as
       await expect(
         member.locator('main form[method="post"], main button'),
       ).toHaveCount(0);
-      // Sending a purchase anyway reaches nothing.
+      // Sending a purchase anyway reaches nothing: with the member's own
+      // valid form token the request passes the form check and finds no
+      // purchase route at all.
+      const csrf = await member
+        .goto(f.origin + "/account/billing")
+        .then(() => member.locator('input[name="csrf"]').first().inputValue());
       for (const offer of COACHING_OFFERS) {
-        const sent = await member.request.post(f.origin + "/readiness/offers", {
-          headers: { Origin: f.origin },
-          form: { offer: offer.id },
-          maxRedirects: 0,
+        const sent = await postForm(member, f.origin, "/readiness/offers", {
+          csrf,
+          offer: offer.id,
         });
-        expect(sent.status()).toBeGreaterThanOrEqual(400);
+        expect(sent.status()).toBe(404);
       }
       // Capacity is stated as it is: none is verified and nothing is bookable.
       await member.goto(f.origin + "/readiness/tracks");
@@ -263,6 +267,13 @@ test("[F-ECO-07-B] an administrator sets the member's terms version; the member 
       coachingSessions: 3,
       aiRequests: 40,
     };
+    const background = async () =>
+      (
+        await f.pool.query<{ background: string }>(
+          "SELECT background FROM learners WHERE id=$1",
+          [reference],
+        )
+      ).rows[0]!.background;
 
     await requiredCheck(1, async () => {
       await nothingSold(f, reference);
@@ -344,9 +355,12 @@ test("[F-ECO-07-B] an administrator sets the member's terms version; the member 
       ).toHaveText("40 of 40 left, 0 held, 0 used");
       // The member's professional background is not an upgrade: changing
       // direction leaves the terms and the units exactly as they were.
+      expect(await background()).toBe("professional");
       await member.goto(f.origin + "/learn");
       await member.getByLabel("Your starting point").selectOption("technical");
       await member.getByRole("button", { name: "Save my direction" }).click();
+      // The change of background really was saved before anything is compared.
+      expect(await background()).toBe("technical");
       await member.goto(f.origin + "/readiness/offers");
       await expect(member.locator("main")).toContainText(
         "A professional background never assigns the Professional coaching package.",

@@ -38,6 +38,12 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
   const ownerId = await memberId(context);
+  // The member's own workspace holds a private draft saved through the lesson.
+  await page.goto("/lesson");
+  await page.getByLabel("Your instruction to AI").fill(privateText);
+  await page.getByRole("button", { name: "Save draft" }).click();
+  await expect(page).toHaveURL(/\/lesson#exercise-status$/);
+  await page.goto("/learn");
   await pool.query(
     `INSERT INTO learning_milestones(id,member_id,goal_title,milestone_title,next_action)
      VALUES($1,$2,'Invented goal',$3,'Check my next step')`,
@@ -77,6 +83,22 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
   expect(ownerLink.status()).toBe(200);
   const { href } = (await ownerLink.json()) as { href: string };
   expect(await (await page.request.get(href)).body()).toEqual(privateBytes);
+  // Positive control: this is the member's real workspace, and its private
+  // read returns the draft to its owner.
+  const workspacePath = `/api/workspaces/${ownerId}/private`;
+  expect(
+    (
+      await pool.query(
+        "SELECT 1 FROM workspaces WHERE id=$1 AND owner_principal_id=$1",
+        [ownerId],
+      )
+    ).rowCount,
+  ).toBe(1);
+  const ownerWorkspace = await page.request.get(workspacePath);
+  expect(ownerWorkspace.status()).toBe(200);
+  const ownerRead = await ownerWorkspace.json();
+  expect(ownerRead).toMatchObject({ via: "member", workspaceId: ownerId });
+  expect(ownerRead.records[0].instruction).toBe(privateText);
 
   const operatorToken = randomBytes(32).toString("hex");
   await authorizationStore(pool).provisionStaff(
@@ -141,7 +163,7 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
       for (const path of [
         `/api/member/export?member_id=${ownerId}`,
         `/api/evidence/export?member_id=${ownerId}`,
-        `/api/workspaces/${ownerId}/private`,
+        workspacePath,
       ]) {
         const denied = await operatorPage.request.get(path);
         expect(denied.status()).toBe(403);
@@ -158,6 +180,10 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
       expect(stolenLink.status()).toBe(403);
       expect(await stolenLink.json()).toEqual({ error: "forbidden" });
       expect(await stolenLink.text()).not.toContain(privateText);
+      // Another member is refused the same workspace the owner just read.
+      const outsiderWorkspace = await outsiderPage.request.get(workspacePath);
+      expect(outsiderWorkspace.status()).toBe(403);
+      expect(await outsiderWorkspace.json()).toEqual({ error: "forbidden" });
       const forgedMember = await outsiderPage.request.get(
         `/api/member/export?member_id=${ownerId}`,
       );

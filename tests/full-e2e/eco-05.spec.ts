@@ -122,13 +122,35 @@ test("[F-ECO-05-A] a proposed resource records its rights and stays private unti
   try {
     const { owner, peer } = await actors(f);
     const title = "Invented club activity comparison";
-    const id = await draft(owner, f, title);
+    let id = "";
     await requiredCheck(1, async () => {
-      await submit(owner);
+      // Propose: the saved draft shows its sources and rights notes, and is
+      // not curated. It is not shared with members and not in the library.
+      id = await draft(owner, f, title);
       await expect(owner.locator("[data-proposal-body]")).toContainText(
         "An invented club",
       );
-      await expect(owner.getByText(sources, { exact: true })).toBeVisible();
+      // On the draft the notes show both as saved text and in the edit form.
+      await expect(
+        owner.getByText(sources, { exact: true }).first(),
+      ).toBeVisible();
+      expect(
+        (
+          await f.pool.query(
+            `SELECT state,sources,rights_attested_revision FROM member_proposals WHERE id=$1`,
+            [id],
+          )
+        ).rows,
+      ).toEqual([{ state: "draft", sources, rights_attested_revision: null }]);
+      expect(await publication(f, id)).toEqual([]);
+      expect(await listed(peer, f, title)).toBe(0);
+      await peer.goto(f.origin + "/library");
+      await expect(peer.getByText(title)).toHaveCount(0);
+    });
+    await requiredCheck(2, async () => {
+      // Submit for review, with the rights confirmed for this revision.
+      await owner.goto(f.origin + `/contribute/${id}`);
+      await submit(owner);
       await expect(
         owner.getByText(/Rights confirmed for revision 1 at/),
       ).toBeVisible();
@@ -140,13 +162,6 @@ test("[F-ECO-05-A] a proposed resource records its rights and stays private unti
           )
         ).rows,
       ).toEqual([{ state: "submitted", sources, rights_attested_revision: 1 }]);
-      // Not curated: it is not shared with members and not in the library.
-      expect(await publication(f, id)).toEqual([]);
-      expect(await listed(peer, f, title)).toBe(0);
-      await peer.goto(f.origin + "/library");
-      await expect(peer.getByText(title)).toHaveCount(0);
-    });
-    await requiredCheck(2, async () => {
       // Before acceptance there is no sharing choice, and choosing the member
       // audience directly is refused.
       await owner.goto(f.origin + `/contribute/${id}/publication`);
@@ -160,9 +175,13 @@ test("[F-ECO-05-A] a proposed resource records its rights and stays private unti
         .locator('input[name="csrf"]')
         .first()
         .getAttribute("value");
+      // The complete sharing form with this site's origin, so the refusal
+      // comes from the sharing rules and not from the form or origin checks.
       const early = await owner.request.post(
         f.origin + `/contribute/${id}/publish`,
         {
+          headers: { Origin: f.origin },
+          maxRedirects: 0,
           form: {
             csrf: csrf!,
             operationId: randomUUID(),
@@ -174,9 +193,14 @@ test("[F-ECO-05-A] a proposed resource records its rights and stays private unti
           },
         },
       );
-      expect([403, 409]).toContain(early.status());
+      expect(early.status()).toBe(409);
+      expect(await early.text()).toContain(
+        "The source, accepted revision or original request changed. Inspect its current state.",
+      );
       expect(await publication(f, id)).toEqual([]);
       expect(await listed(peer, f, title)).toBe(0);
+      await peer.goto(f.origin + "/library");
+      await expect(peer.getByText(title)).toHaveCount(0);
       await owner.goto(f.origin + `/contribute/${id}`);
       await expect(
         owner.getByText("PRIVATE CONTRIBUTION · SUBMITTED"),
