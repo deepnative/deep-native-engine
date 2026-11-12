@@ -1787,7 +1787,7 @@ it("NEXTSTEP-03 confirms a save or an invoice request after the redirect", async
 });
 it("NEXTSTEP-04 shows the student a plain status and moves reference material below the hours form", async () => {
   const f = fixture();
-  // Coaching terms are reference material: kept, but folded below the form.
+  // Terms and allowances stay in view below the form; agreed changes fold.
   const terms = express();
   terms.use((_req, res, next) => {
     res.locals.token = token;
@@ -1799,6 +1799,9 @@ it("NEXTSTEP-04 shows the student a plain status and moves reference material be
     coachingTerms: {
       own: vi.fn().mockResolvedValue(ready(null)),
     } as never,
+    agreedChanges: {
+      own: vi.fn().mockResolvedValue(ready([])),
+    } as never,
   });
   const text = mainHtml(
     (await withLoopback(terms, (s) => request(s).get("/account/coaching")))
@@ -1807,9 +1810,12 @@ it("NEXTSTEP-04 shows the student a plain status and moves reference material be
   expect(text).toContain("Status: Draft, not sent yet");
   expect(text).not.toContain("revision 1");
   expect(text).toContain(
-    '<details class="coaching-details"><summary>Coaching terms and agreed changes</summary><section class="portal-card" aria-labelledby="coaching-terms">',
+    '<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary><section class="portal-card" aria-labelledby="agreed-changes">',
   );
   expect(text.indexOf('id="hours-form"')).toBeLessThan(
+    text.indexOf('aria-labelledby="coaching-terms"'),
+  );
+  expect(text.indexOf('aria-labelledby="coaching-terms"')).toBeLessThan(
     text.indexOf('<details class="coaching-details">'),
   );
   expect(text.indexOf('<section class="portal-card next-step"')).toBeLessThan(

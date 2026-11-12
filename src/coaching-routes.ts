@@ -512,6 +512,9 @@ export function mountCoachingRoutes(
           );
         }
       }
+      // NEXTSTEP-04: the student's terms and allowances stay in view.
+      const terms = admin ? "" : body;
+      if (!admin) body = "";
       // #94 AGREED94-01/03: what staff and the student agreed, append-only.
       if (options.agreedChanges) {
         const a = admin
@@ -576,7 +579,7 @@ export function mountCoachingRoutes(
       else if (admin && !e && period)
         body += `<p>The student has not saved hours for this ${unit}. An administrator cannot enter new hours for a student; once the student saves hours, you can change them here.</p>`;
       if (!admin)
-        body += `${hoursChangesSection(v.overrides, admin)}${billing}${reference ? `<details class="coaching-details"><summary>Coaching terms and agreed changes</summary>${reference}</details>` : ""}`;
+        body += `${hoursChangesSection(v.overrides, admin)}${billing}${terms}${reference ? `<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>${reference}</details>` : ""}`;
       body += `<h2 id="saved-months">Saved periods</h2>${savedMonthsTable(v.months, v.rates, base, admin ? "/operator/invoices/" : "/account/purchases/invoices/")}${
         admin
           ? portalActions([

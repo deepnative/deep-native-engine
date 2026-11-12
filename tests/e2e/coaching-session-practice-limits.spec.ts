@@ -237,8 +237,6 @@ test("[L337] LIMITS823-01/02/06 an administrator sets a student's session length
     // 4. The student sees their own values on their coaching terms, on
     //    session availability and before starting a practice conversation.
     await s.goto(f.origin + "/account/coaching");
-    // NEXTSTEP-04: the terms are folded below the hours form.
-    await s.getByText("Coaching terms and agreed changes").click();
     const own = s.getByRole("region", {
       name: "Your coaching terms",
       exact: true,
