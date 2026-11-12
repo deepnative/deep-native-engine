@@ -1307,3 +1307,43 @@ it("RECIPIENT-01/02/03/05 suggests the registered name, keeps coaching-form edit
       .billedToCompany,
   ).toBe("Invented Co");
 });
+it("DRAFTEMAIL-01/02 hours save without an invoice email, keep the reusable recipient and cannot be submitted until an email is added", async () => {
+  const m = await member(),
+    profiles = billingProfileStore(pool);
+  const saved = ready(
+    await invoices.saveCoaching(m.token, { ...saveInput(6000), email: "" }),
+  );
+  expect(
+    (
+      await pool.query(
+        "SELECT minutes,email,state FROM coaching_months WHERE owner_id=$1 AND month=$2",
+        [m.id, month],
+      )
+    ).rows,
+  ).toEqual([{ minutes: 6000, email: "", state: "draft" }]);
+  // No email given, so no reusable recipient is written.
+  expect(
+    (
+      await pool.query("SELECT 1 FROM billing_profiles WHERE owner_id=$1", [
+        m.id,
+      ])
+    ).rowCount,
+  ).toBe(0);
+  const rate = ready(await invoices.setCoachingRate(admin, rateInput(m.id)));
+  const submit = (expectedRevision: number) =>
+    invoices.submitCoaching(m.token, {
+      month,
+      rateId: rate.rateId,
+      sample: settings.sample,
+      expectedRevision,
+      operationId: randomUUID(),
+    });
+  expect((await submit(saved.revision)).kind).toBe("invalid");
+  const withEmail = ready(
+    await invoices.saveCoaching(m.token, saveInput(6000, saved.revision)),
+  );
+  expect(ready(await profiles.read(m.token))).toMatchObject({
+    email: "recipient@example.invalid",
+  });
+  expect((await submit(withEmail.revision)).kind).toBe("ready");
+});

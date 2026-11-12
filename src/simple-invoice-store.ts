@@ -615,11 +615,14 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         !invoiceCents(input.expectedRevision) ||
         !invoiceText(input.name, 200) ||
         typeof input.email !== "string" ||
-        !normalizedEmail(input.email) ||
+        // DRAFTEMAIL-01: hours save without an invoice email; it is needed
+        // only to submit.
+        (input.email.trim() !== "" && !normalizedEmail(input.email)) ||
         invoiceCompany(input.company) === undefined
       )
         return fail("invalid");
-      const email = normalizedEmail(input.email)!,
+      const email =
+          input.email.trim() === "" ? "" : normalizedEmail(input.email)!,
         company = invoiceCompany(input.company)!;
       return run(token, false, async (tx, actor) => {
         await owner(tx, actor);
@@ -654,10 +657,12 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         // RECIPIENT-03: the saved recipient becomes the reusable billing
         // recipient for later months. Its revision moves only on a change, so
         // an open Billing recipient form sees the edit. Sign-in is untouched.
-        await tx.query(
-          "INSERT INTO billing_profiles AS b(owner_id,name,email,company,revision) VALUES($1,$2,$3,$4,1) ON CONFLICT(owner_id) DO UPDATE SET name=EXCLUDED.name,email=EXCLUDED.email,company=EXCLUDED.company,revision=b.revision+1 WHERE (b.name,b.email,b.company) IS DISTINCT FROM (EXCLUDED.name,EXCLUDED.email,EXCLUDED.company)",
-          [actor, input.name, email, company],
-        );
+        // DRAFTEMAIL-02: without an email the reusable recipient is kept.
+        if (email)
+          await tx.query(
+            "INSERT INTO billing_profiles AS b(owner_id,name,email,company,revision) VALUES($1,$2,$3,$4,1) ON CONFLICT(owner_id) DO UPDATE SET name=EXCLUDED.name,email=EXCLUDED.email,company=EXCLUDED.company,revision=b.revision+1 WHERE (b.name,b.email,b.company) IS DISTINCT FROM (EXCLUDED.name,EXCLUDED.email,EXCLUDED.company)",
+            [actor, input.name, email, company],
+          );
         return remember(tx, actor, input.operationId, digest, {
           month: input.month,
           revision,
@@ -702,6 +707,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             )
           ).rows[0];
         if (!entry) return fail("not-found");
+        // DRAFTEMAIL-02: an invoice needs somewhere to go.
+        if (!entry.email) return fail("invalid");
         if (!rate) return fail("unavailable");
         if (
           entry.state !== "draft" ||
