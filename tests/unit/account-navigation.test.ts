@@ -20,9 +20,7 @@ it("NAV-01 exposes account, logout, coaching and administration in shared naviga
     )?.[1];
   const navigation = nav("student");
   expect(navigation).toBeDefined();
-  expect(navigation).toContain(
-    'href="/account/coaching">Monthly coaching hours</a>',
-  );
+  expect(navigation).toContain('href="/account/coaching">Coaching hours</a>');
   for (const path of [
     "/learn",
     "/account",
@@ -84,7 +82,7 @@ it.each(["linked", "unlinked", "unavailable"] as const)(
       );
     expect(withAdministration(false, render)).not.toContain('href="/admin"');
     expect(withAdministration(false, render)).toContain(
-      'href="/account/coaching">Monthly coaching hours</a>',
+      'href="/account/coaching">Coaching hours</a>',
     );
     expect(withAdministration(true, render)).toContain('href="/admin"');
   },
@@ -94,8 +92,8 @@ it.each([
   ["/learn/notebooks", "Learning"],
   ["/account", "Account"],
   ["/account/purchases", "Account"],
-  ["/account/coaching", "Monthly coaching hours"],
-  ["/account/coaching/save", "Monthly coaching hours"],
+  ["/account/coaching", "Coaching hours"],
+  ["/account/coaching/save", "Coaching hours"],
   ["/admin", "Administration"],
   ["/operator/coaching", "Administration"],
   ["/account/sign-out", "Sign out"],

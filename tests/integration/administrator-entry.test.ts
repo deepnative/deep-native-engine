@@ -1,3 +1,4 @@
+import { monthPeriod } from "../../src/coaching-values.ts";
 import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 import type { Pool, PoolClient } from "pg";
@@ -564,6 +565,9 @@ it("CONSOLEMONTHS-01..03 lists this month, last month and the latest earlier mon
     );
   const summary = (month: string, minutes: number, state = "draft") => ({
     month,
+    // #832: a calendar month covers its first to its last day.
+    periodStart: monthPeriod(month).start,
+    periodEnd: monthPeriod(month).end,
     minutes,
     state,
     returned: false,
@@ -618,4 +622,25 @@ it("CONSOLEMONTHS-01..03 lists this month, last month and the latest earlier mon
   });
   expect(found.members).toHaveLength(1);
   expect(found.members[0]!.thisMonth).toEqual(summary(current, 720));
+  // PERIOD832-08: a billing period shows in the month it ends in; with two
+  // ending this month, the later one.
+  for (const [start, end] of [
+    ["01", "07"],
+    ["08", "14"],
+  ])
+    await pool.query(
+      `INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision,period_start,period_end)
+       VALUES($1,$2,45,'Invented','invented@example.test','draft',1,$3,$4)`,
+      [idle, `${current}-${start}`, `${current}-${start}`, `${current}-${end}`],
+    );
+  const periods = await view(admin.credential, undefined, {
+    search: "Invented learner 03",
+  });
+  expect(periods.members[0]!.thisMonth).toMatchObject({
+    month: `${current}-08`,
+    periodStart: `${current}-08`,
+    periodEnd: `${current}-14`,
+    minutes: 45,
+  });
+  expect(periods.members[0]!.lastMonth).toBeNull();
 });

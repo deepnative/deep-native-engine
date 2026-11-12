@@ -1020,7 +1020,7 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
     await expect(page).toHaveURL(owner.origin + "/learn");
     await expect(
       header().getByRole("link", {
-        name: "Monthly coaching hours",
+        name: "Coaching hours",
         exact: true,
       }),
     ).toBeVisible();
@@ -1042,7 +1042,7 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
     await expect(page).toHaveURL(student.origin + "/learn");
     await page.goto(student.origin + "/account");
     await expect(
-      header().getByRole("link", { name: "Monthly coaching hours" }),
+      header().getByRole("link", { name: "Coaching hours" }),
     ).toBeVisible();
     await expect(
       header().getByRole("button", { name: /^Switch to/ }),

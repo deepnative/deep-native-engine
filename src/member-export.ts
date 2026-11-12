@@ -484,7 +484,9 @@ const sections = {
     true,
   ),
   coachingMonths: section(
-    'month,minutes,name,email,company,state,revision,submitted_revision AS "submittedRevision",invoice_id AS "invoiceId",previous_invoice_id AS "previousInvoiceId",return_reason AS "returnReason"',
+    // v52 (#832): `month` is the period key, YYYY-MM for a calendar month or
+    // the first day of a billing period; the dates say which days it covers.
+    `month,to_char(period_start,'YYYY-MM-DD') AS "periodStart",to_char(period_end,'YYYY-MM-DD') AS "periodEnd",minutes,name,email,company,state,revision,submitted_revision AS "submittedRevision",invoice_id AS "invoiceId",previous_invoice_id AS "previousInvoiceId",return_reason AS "returnReason"`,
     "coaching_months WHERE owner_id=$1",
     "month",
     true,
@@ -752,6 +754,13 @@ const sections = {
     "coaching_hours_overrides WHERE owner_id=$1",
     "id",
   ),
+  // v52 appends #832: each billing-period setting an administrator saved for
+  // the member (length and first day), never which administrator.
+  coachingBillingSchedules: section(
+    `version,unit,days,to_char(starts_on,'YYYY-MM-DD') AS "startsOn",created_at AS "setAt"`,
+    "coaching_billing_schedules WHERE owner_id=$1",
+    "version",
+  ),
 } as const;
 /** Section SQL, shared with the member-authorized operator download (#40). */
 export const MEMBER_EXPORT_SECTIONS = sections;
@@ -767,7 +776,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v51";
+  version: "local-member-records-v52";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -901,7 +910,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v51",
+          version: "local-member-records-v52",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

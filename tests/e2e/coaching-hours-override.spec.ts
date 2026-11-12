@@ -97,7 +97,7 @@ test("[L338] OVR832-01/03/06/07/08 an administrator changes a student's submitte
     await s.goto(f.origin + "/account/coaching");
     await expect(
       s.getByText(
-        "An administrator changed the hours you reported for this month. Your earlier figure is kept below.",
+        "An administrator changed the hours you reported here. Your earlier figure is kept below.",
       ),
     ).toBeVisible();
     await expect(s.locator("ul.hours-changes li")).toContainText(

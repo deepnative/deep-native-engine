@@ -45,7 +45,7 @@ it("ROLES-02 picks a saved view only when held, else the highest held role", () 
 });
 
 it.each([
-  ["student", "/account/coaching", "Monthly coaching hours"],
+  ["student", "/account/coaching", "Coaching hours"],
   ["coach", "/coach", "Coaching"],
   ["admin", "/admin", "Administration"],
 ] as const)(

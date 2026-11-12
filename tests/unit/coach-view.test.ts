@@ -40,10 +40,43 @@ it("ROLES-03/04 the coach summary checks the coach role, then reads hours only",
     .mockResolvedValueOnce({ rows: [{ today: "2026-11", assigned: 4 }] })
     .mockResolvedValueOnce({
       rows: [
-        { displayName: "Ada", minutes: 90, state: "draft", returned: false },
-        { displayName: null, minutes: 30, state: "draft", returned: true },
-        { displayName: "Bo", minutes: 60, state: "submitted", returned: false },
-        { displayName: "Cy", minutes: 15, state: "invoiced", returned: false },
+        {
+          displayName: "Ada",
+          minutes: 90,
+          state: "draft",
+          returned: false,
+          key: "2026-11",
+          start: "2026-11-01",
+          end: "2026-11-30",
+        },
+        {
+          displayName: null,
+          minutes: 30,
+          state: "draft",
+          returned: true,
+          key: "2026-11",
+          start: "2026-11-01",
+          end: "2026-11-30",
+        },
+        {
+          displayName: "Bo",
+          minutes: 60,
+          state: "submitted",
+          returned: false,
+          key: "2026-11",
+          start: "2026-11-01",
+          end: "2026-11-30",
+        },
+        // #832: a two-week period that ends in the month, named by its dates.
+        {
+          displayName: "Cy",
+          minutes: 15,
+          state: "invoiced",
+          returned: false,
+          key: "2026-11-02",
+          start: "2026-11-02",
+          end: "2026-11-15",
+        },
       ],
     });
   const ready = await coach.summary(token);
@@ -57,7 +90,12 @@ it("ROLES-03/04 the coach summary checks the coach role, then reads hours only",
         { name: "Ada", minutes: 90, status: "Draft" },
         { name: null, minutes: 30, status: "Returned for changes" },
         { name: "Bo", minutes: 60, status: "Submitted" },
-        { name: "Cy", minutes: 15, status: "Reviewed" },
+        {
+          name: "Cy",
+          minutes: 15,
+          status: "Reviewed",
+          period: { key: "2026-11-02", start: "2026-11-02", end: "2026-11-15" },
+        },
       ],
     },
   });
@@ -95,6 +133,13 @@ it("ROLES-03 Coaching lists each person's hours and status with no billing", asy
       rows: [
         { name: "Ada <Lovelace>", minutes: 90, status: "Submitted" },
         { name: null, minutes: 45, status: "Draft" },
+        // #832: a billing period that ends in the month, named by its dates.
+        {
+          name: "Bo",
+          minutes: 60,
+          status: "Submitted",
+          period: { key: "2026-10-05", start: "2026-10-05", end: "2026-10-18" },
+        },
       ],
     },
   });
@@ -109,6 +154,12 @@ it("ROLES-03 Coaching lists each person's hours and status with no billing", asy
     "<td>Ada &lt;Lovelace&gt;</td><td>1h 30m</td><td>Submitted</td>",
   );
   expect(r.text).toContain("<td>Name needed</td><td>0h 45m</td><td>Draft</td>");
+  expect(r.text).toContain(
+    "<td>Bo<span>5 Oct 2026 to 18 Oct 2026</span></td><td>1h</td><td>Submitted</td>",
+  );
+  expect(r.text).toContain(
+    "A billing period shorter or longer than a calendar month is listed in the month it ends.",
+  );
   expect(r.text).not.toMatch(/\$|CAD|cents|per hour/i);
   expect(r.text).toContain('href="/coach?month=2026-09"');
   expect(r.text).toContain('href="/coach?month=2026-11"');

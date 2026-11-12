@@ -25,9 +25,17 @@ import { normalizedEmail } from "./member-email-access.ts";
 import type { SimpleInvoiceDocument } from "./simple-invoice-views.ts";
 
 import {
+  addDays,
+  coachingDate,
   coachingMonth,
-  coachingMinutes,
+  coachingPeriodKey,
   coachingSubtotal,
+  effectiveSchedules,
+  monthPeriod,
+  periodContaining,
+  recentPeriods,
+  type BillingSchedule,
+  type CoachingPeriod,
   type CoachingRate,
   type CoachingMonth,
   type CoachingSnapshot,
@@ -50,6 +58,7 @@ type BillingChangeAction =
   | "rate_set"
   | "hours_returned"
   | "hours_overridden"
+  | "billing_period_set"
   | "coaching_invoice_issued"
   | "monthly_invoice_issued"
   | "payment_recorded"
@@ -149,6 +158,9 @@ export type CoachingStatus =
 /** A saved coaching month as listed in the Saved months table. */
 export interface SavedCoachingMonth {
   month: string;
+  /** #832: the period's first and last day; a calendar month for YYYY-MM keys. */
+  periodStart?: string;
+  periodEnd?: string;
   state: string;
   minutes: number;
   returned?: boolean;
@@ -432,12 +444,44 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
     return { kind: "ready", value: { created } };
   }
   const rateColumns = 'id,effective_month AS "effectiveMonth",cents,version';
-  async function coachingToday(tx: PracticeTransaction) {
+  /** The database clock's UTC month and date; periods follow the date. */
+  async function coachingClock(tx: PracticeTransaction) {
     return (
-      await tx.query<{ month: string }>(
-        "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM') AS month",
+      await tx.query<{ month: string; date: string }>(
+        "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM') AS month,to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS date",
       )
-    ).rows[0]!.month;
+    ).rows[0]!;
+  }
+  const coachingToday = async (tx: PracticeTransaction) =>
+    (await coachingClock(tx)).month;
+  /** #832: every version of the student's billing-period setting. */
+  async function billingSchedules(tx: PracticeTransaction, ownerId: string) {
+    return (
+      await tx.query<BillingSchedule>(
+        `SELECT version,unit,days,to_char(starts_on,'YYYY-MM-DD') AS "startsOn",
+                to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD') AS "setOn"
+         FROM coaching_billing_schedules WHERE owner_id=$1 ORDER BY version`,
+        [ownerId],
+      )
+    ).rows;
+  }
+  /**
+   * PERIOD832-02/05: the period a key names for hours not saved yet, or null
+   * when it has not started, is not one of the student's periods, or is a
+   * calendar month that their defined periods reach into.
+   */
+  function openPeriod(
+    schedules: BillingSchedule[],
+    key: string,
+    clock: { month: string; date: string },
+  ): CoachingPeriod | null {
+    const first = effectiveSchedules(schedules)[0]?.startsOn;
+    if (key.length === 7) {
+      const month = monthPeriod(key);
+      return key <= clock.month && (!first || month.end < first) ? month : null;
+    }
+    const period = key <= clock.date ? periodContaining(schedules, key) : null;
+    return period?.start === key ? period : null;
   }
   async function coachingEntry(
     tx: PracticeTransaction,
@@ -446,7 +490,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
   ): Promise<CoachingMonth | null> {
     const row = (
       await tx.query<CoachingMonth>(
-        `SELECT month,minutes,name,email,company,state,revision,submitted_revision AS "submittedRevision",invoice_id AS "invoiceId",previous_invoice_id AS "previousInvoiceId",return_reason AS "returnReason" FROM coaching_months WHERE owner_id=$1 AND month=$2 FOR UPDATE`,
+        `SELECT month,minutes,name,email,company,state,revision,submitted_revision AS "submittedRevision",invoice_id AS "invoiceId",previous_invoice_id AS "previousInvoiceId",return_reason AS "returnReason",to_char(period_start,'YYYY-MM-DD') AS "periodStart",to_char(period_end,'YYYY-MM-DD') AS "periodEnd" FROM coaching_months WHERE owner_id=$1 AND month=$2 FOR UPDATE`,
         [memberId, month],
       )
     ).rows[0];
@@ -479,7 +523,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
   return {
     async coachingOverview(token: string, month?: string, ownerId?: string) {
       if (
-        (month !== undefined && !coachingMonth(month)) ||
+        (month !== undefined && !coachingPeriodKey(month)) ||
         (ownerId !== undefined && !invoiceUuid(ownerId))
       )
         return fail("invalid");
@@ -500,9 +544,13 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         )
           return fail("not-found");
         await owner(tx, memberId, ownerId !== undefined);
-        const today = await coachingToday(tx),
-          selected = month ?? today;
-        if (selected > today) return fail("invalid");
+        // PERIOD832-02: with a billing period in force the page opens on the
+        // current period; otherwise on the calendar month, as before #832.
+        const clock = await coachingClock(tx),
+          today = clock.month,
+          schedules = await billingSchedules(tx, memberId),
+          current = periodContaining(schedules, clock.date),
+          selected = month ?? current?.key ?? today;
         const rates = (
           await tx.query<CoachingRate>(
             `SELECT ${rateColumns} FROM coaching_rates WHERE owner_id=$1 ORDER BY version DESC`,
@@ -510,17 +558,33 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           )
         ).rows;
         const entry = await coachingEntry(tx, memberId, selected);
+        // Saved hours keep their own dates; otherwise the key must name a
+        // period the student could report now. Only the unasked opening view
+        // may have none, before a first period starts.
+        const period: CoachingPeriod | null = entry
+          ? {
+              key: selected,
+              start: entry.periodStart,
+              end: entry.periodEnd,
+              days:
+                (Date.parse(entry.periodEnd) - Date.parse(entry.periodStart)) /
+                  86400000 +
+                1,
+            }
+          : openPeriod(schedules, selected, clock);
+        if (!period && month !== undefined) return fail("invalid");
         // HOURTABLE-01: each saved month with its amount and invoice state.
         const months = (
           await tx.query<SavedCoachingMonth>(
-            `SELECT m.month,m.state,m.minutes,m.return_reason IS NOT NULL AS returned,
+            `SELECT m.month,to_char(m.period_start,'YYYY-MM-DD') AS "periodStart",to_char(m.period_end,'YYYY-MM-DD') AS "periodEnd",
+                    m.state,m.minutes,m.return_reason IS NOT NULL AS returned,
                     (SELECT (s.snapshot->>'subtotalCents')::bigint FROM coaching_submissions s
                      WHERE s.owner_id=m.owner_id AND s.month=m.month AND s.revision=m.submitted_revision) AS "submittedCents",
                     m.invoice_id AS "invoiceId",i.total_cents::text AS "totalCents",
                     i.paid_cents::text AS "paidCents",i.refunded_cents::text AS "refundedCents",i.voided_at IS NOT NULL AS voided,
                     EXISTS(SELECT 1 FROM coaching_hours_overrides o WHERE o.owner_id=m.owner_id AND o.month=m.month) AS overridden
              FROM coaching_months m LEFT JOIN simple_invoices i ON i.id=m.invoice_id
-             WHERE m.owner_id=$1 ORDER BY m.month DESC LIMIT 100`,
+             WHERE m.owner_id=$1 ORDER BY m.period_start DESC LIMIT 100`,
             [memberId],
           )
         ).rows;
@@ -544,9 +608,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
               [memberId],
             )
           ).rows[0]?.displayName ?? null;
+        // PERIOD832-06: the rate in effect on the period's first day.
         const rate =
           rates
-            .filter((r) => r.effectiveMonth <= selected)
+            .filter((r) => r.effectiveMonth <= selected.slice(0, 7))
             .sort(
               (a, b) =>
                 b.effectiveMonth.localeCompare(a.effectiveMonth) ||
@@ -565,6 +630,19 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             entry,
             months,
             overrides,
+            period,
+            /** UTC date today. */
+            date: clock.date,
+            /** Started periods the student can open, newest first. */
+            periods: recentPeriods(schedules, clock.date, 60),
+            billing: {
+              /** Settings that take effect, oldest first. */
+              schedules: effectiveSchedules(schedules),
+              /** The newest version saved, for the next change. */
+              version: schedules.at(-1)?.version ?? 0,
+              /** A change now would start here; null before a first period. */
+              nextStart: current ? addDays(current.end, 1) : null,
+            },
             sample: settings.sample,
           },
         };
@@ -640,7 +718,9 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
       if (
         !input ||
         !invoiceUuid(input.operationId) ||
-        !coachingMinutes(input.month, input.minutes) ||
+        !coachingPeriodKey(input.month) ||
+        !Number.isSafeInteger(input.minutes) ||
+        input.minutes < 0 ||
         !invoiceCents(input.expectedRevision) ||
         !invoiceText(input.name, 200) ||
         typeof input.email !== "string" ||
@@ -663,8 +743,24 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             digest,
           );
         if (previous) return previous;
-        if (input.month > (await coachingToday(tx))) return fail("invalid");
         const entry = await coachingEntry(tx, actor, input.month);
+        // PERIOD832-02/05: saved hours keep their dates; new hours need a
+        // period of the student's that has started.
+        const period = entry
+          ? { start: entry.periodStart, end: entry.periodEnd }
+          : openPeriod(
+              await billingSchedules(tx, actor),
+              input.month,
+              await coachingClock(tx),
+            );
+        if (
+          !period ||
+          input.minutes >
+            ((Date.parse(period.end) - Date.parse(period.start)) / 86400000 +
+              1) *
+              1440
+        )
+          return fail("invalid");
         if (
           (entry?.revision ?? 0) !== input.expectedRevision ||
           (entry && entry.state !== "draft")
@@ -672,7 +768,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           return fail("conflict");
         const revision = input.expectedRevision + 1;
         await tx.query(
-          "INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision,company) VALUES($1,$2,$3,$4,$5,'draft',$6,$7) ON CONFLICT(owner_id,month) DO UPDATE SET minutes=EXCLUDED.minutes,name=EXCLUDED.name,email=EXCLUDED.email,revision=EXCLUDED.revision,company=EXCLUDED.company",
+          "INSERT INTO coaching_months(owner_id,month,minutes,name,email,state,revision,company,period_start,period_end) VALUES($1,$2,$3,$4,$5,'draft',$6,$7,$8,$9) ON CONFLICT(owner_id,month) DO UPDATE SET minutes=EXCLUDED.minutes,name=EXCLUDED.name,email=EXCLUDED.email,revision=EXCLUDED.revision,company=EXCLUDED.company",
           [
             actor,
             input.month,
@@ -681,6 +777,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             email,
             revision,
             company,
+            period.start,
+            period.end,
           ],
         );
         // RECIPIENT-03: the saved recipient becomes the reusable billing
@@ -710,7 +808,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
     ): Promise<InvoiceResult<{ month: string; revision: number }>> {
       if (
         !input ||
-        !coachingMonth(input.month) ||
+        !coachingPeriodKey(input.month) ||
         !invoiceUuid(input.rateId) ||
         typeof input.sample !== "boolean" ||
         !invoiceCents(input.expectedRevision) ||
@@ -727,12 +825,12 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             digest,
           );
         if (previous) return previous;
-        if (input.month > (await coachingToday(tx))) return fail("invalid");
+        // PERIOD832-06: the rate in effect on the period's first day.
         const entry = await coachingEntry(tx, actor, input.month),
           rate = (
             await tx.query<CoachingRate>(
               `SELECT ${rateColumns} FROM coaching_rates WHERE owner_id=$1 AND effective_month<=$2 ORDER BY effective_month DESC,version DESC LIMIT 1`,
-              [actor, input.month],
+              [actor, input.month.slice(0, 7)],
             )
           ).rows[0];
         if (!entry) return fail("not-found");
@@ -751,6 +849,9 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         const revision = entry.revision + 1,
           snapshot: CoachingSnapshot = {
             month: input.month,
+            ...(input.month.length === 10
+              ? { periodStart: entry.periodStart, periodEnd: entry.periodEnd }
+              : {}),
             minutes: entry.minutes,
             rate,
             subtotalCents,
@@ -786,7 +887,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
       if (
         !input ||
         !invoiceUuid(input.ownerId) ||
-        !coachingMonth(input.month) ||
+        !coachingPeriodKey(input.month) ||
         !invoiceCents(input.expectedRevision) ||
         !invoiceUuid(input.operationId) ||
         !invoiceText(input.reason, 500)
@@ -841,6 +942,111 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
       });
     },
     /**
+     * #832 PERIOD832-01/04: a platform administrator sets the student's
+     * billing period. The first setting names the first period's start date;
+     * a later one applies from the day after the current period ends.
+     */
+    async setBillingSchedule(
+      token: string,
+      input: {
+        ownerId: string;
+        unit: "days" | "month";
+        /** 1 to 31 for "days"; absent for a month. */
+        days?: number;
+        /** Only before a first period has started. */
+        startsOn?: string;
+        expectedVersion: number;
+        operationId: string;
+      },
+    ): Promise<InvoiceResult<{ version: number; startsOn: string }>> {
+      if (
+        !input ||
+        !invoiceUuid(input.ownerId) ||
+        !invoiceUuid(input.operationId) ||
+        !invoiceCents(input.expectedVersion) ||
+        (input.unit === "month"
+          ? input.days !== undefined
+          : input.unit !== "days" ||
+            !Number.isSafeInteger(input.days) ||
+            input.days! < 1 ||
+            input.days! > 31) ||
+        (input.startsOn !== undefined && !coachingDate(input.startsOn))
+      )
+        return fail("invalid");
+      return run(token, true, async (tx, actor) => {
+        await owner(tx, input.ownerId, true);
+        const digest = invoiceDigest({ action: "coaching-period", input }),
+          previous = await replay<{ version: number; startsOn: string }>(
+            tx,
+            actor,
+            input.operationId,
+            digest,
+          );
+        if (previous) return previous;
+        const schedules = await billingSchedules(tx, input.ownerId),
+          latest = schedules.at(-1),
+          clock = await coachingClock(tx),
+          current = periodContaining(schedules, clock.date);
+        if ((latest?.version ?? 0) !== input.expectedVersion)
+          return fail("conflict");
+        let startsOn: string;
+        if (current) {
+          // Saved, submitted and invoiced periods are never rewritten.
+          if (input.startsOn !== undefined) return fail("invalid");
+          startsOn = addDays(current.end, 1);
+        } else {
+          // The first period starts after everything the student has saved.
+          const saved = (
+            await tx.query<{ last: string | null }>(
+              "SELECT to_char(max(period_end),'YYYY-MM-DD') AS last FROM coaching_months WHERE owner_id=$1",
+              [input.ownerId],
+            )
+          ).rows[0]!.last;
+          if (
+            input.startsOn === undefined ||
+            input.startsOn < addDays(clock.date, -366) ||
+            input.startsOn > addDays(clock.date, 366) ||
+            (saved !== null && input.startsOn <= saved)
+          )
+            return fail("invalid");
+          startsOn = input.startsOn;
+        }
+        const pending = effectiveSchedules(schedules).at(-1),
+          days = input.unit === "days" ? input.days! : null;
+        // The same length again, from the same day, is not a change.
+        if (
+          pending &&
+          pending.unit === input.unit &&
+          pending.days === days &&
+          (current
+            ? pending.startsOn <= startsOn
+            : pending.startsOn === startsOn)
+        )
+          return fail("invalid");
+        const version = input.expectedVersion + 1;
+        await tx.query(
+          "INSERT INTO coaching_billing_schedules(id,owner_id,version,unit,days,starts_on,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)",
+          [
+            randomUUID(),
+            input.ownerId,
+            version,
+            input.unit,
+            days,
+            startsOn,
+            actor,
+          ],
+        );
+        await logChange(tx, actor, "billing_period_set", {
+          memberId: input.ownerId,
+          month: startsOn,
+        });
+        return remember(tx, actor, input.operationId, digest, {
+          version,
+          startsOn,
+        });
+      });
+    },
+    /**
      * #832 OVR832-01..06: a platform administrator changes hours the student
      * already saved or submitted. Never creates a period; an issued invoice
      * changes only through void and return.
@@ -859,7 +1065,9 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
       if (
         !input ||
         !invoiceUuid(input.ownerId) ||
-        !coachingMinutes(input.month, input.minutes) ||
+        !coachingPeriodKey(input.month) ||
+        !Number.isSafeInteger(input.minutes) ||
+        input.minutes < 0 ||
         !invoiceCents(input.expectedRevision) ||
         !invoiceUuid(input.operationId) ||
         !invoiceText(input.reason, 500)
@@ -883,7 +1091,15 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           entry.revision !== input.expectedRevision
         )
           return fail("conflict");
-        if (entry.minutes === input.minutes) return fail("invalid");
+        if (
+          entry.minutes === input.minutes ||
+          input.minutes >
+            ((Date.parse(entry.periodEnd) - Date.parse(entry.periodStart)) /
+              86400000 +
+              1) *
+              1440
+        )
+          return fail("invalid");
         const revision = entry.revision + 1;
         if (entry.state === "submitted") {
           // The student confirmed this rate version; only the hours change.
@@ -945,7 +1161,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
       if (
         !input ||
         !invoiceUuid(input.ownerId) ||
-        !coachingMonth(input.month) ||
+        !coachingPeriodKey(input.month) ||
         !invoiceCents(input.expectedRevision) ||
         (settings.tax
           ? input.taxCents !== undefined
@@ -972,6 +1188,12 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           entry.snapshot.sample !== settings.sample
         )
           return fail("conflict");
+        // PERIOD832-03: a defined period is invoiced only after its last day.
+        if (
+          input.month.length === 10 &&
+          entry.periodEnd >= (await coachingClock(tx)).date
+        )
+          return fail("invalid");
         const snapshot = entry.snapshot,
           taxCents = settings.tax
             ? salesTaxCents(snapshot.subtotalCents, settings.tax)
@@ -1007,7 +1229,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           recipientEmail: snapshot.email,
           lines: [
             {
-              description: `Coaching · ${snapshot.month}`,
+              description:
+                input.month.length === 10
+                  ? `Coaching · ${entry.periodStart} to ${entry.periodEnd}`
+                  : `Coaching · ${snapshot.month}`,
               amountCents: snapshot.subtotalCents,
             },
           ],
@@ -1020,6 +1245,9 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           ...(settings.tax ? { tax: settings.tax } : {}),
           coaching: {
             month: snapshot.month,
+            ...(input.month.length === 10
+              ? { periodStart: entry.periodStart, periodEnd: entry.periodEnd }
+              : {}),
             minutes: snapshot.minutes,
             rateCents: snapshot.rate.cents,
             rateVersion: snapshot.rate.version,
@@ -1256,9 +1484,11 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           await tx.query<{
             ownerId: string;
             month: string;
+            periodStart: string;
+            periodEnd: string;
             displayName: string | null;
           }>(
-            'SELECT owner_id AS "ownerId",month,l.display_name AS "displayName" FROM coaching_months JOIN learners l ON l.id=owner_id WHERE state=\'submitted\' AND ($1::uuid IS NULL OR owner_id=$1) ORDER BY month,owner_id LIMIT 100',
+            `SELECT owner_id AS "ownerId",month,to_char(period_start,'YYYY-MM-DD') AS "periodStart",to_char(period_end,'YYYY-MM-DD') AS "periodEnd",l.display_name AS "displayName" FROM coaching_months JOIN learners l ON l.id=owner_id WHERE state='submitted' AND ($1::uuid IS NULL OR owner_id=$1) ORDER BY period_start,owner_id LIMIT 100`,
             [ownerId ?? null],
           )
         ).rows;
@@ -1268,7 +1498,11 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         };
       });
     },
-    /** Manager view of one month's contractor hours and coaching invoices. */
+    /**
+     * Manager view of one month's contractor hours and coaching invoices.
+     * PERIOD832-08: a billing period counts in the calendar month it ends in,
+     * which is when it can be invoiced; a calendar month ends in itself.
+     */
     async coachingDashboard(token: string, month?: string) {
       if (month !== undefined && !coachingMonth(month)) return fail("invalid");
       return run(token, true, async (tx) => {
@@ -1289,15 +1523,15 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             oldestWaitingDays: number | null;
           }>(
             `SELECT
-              (SELECT COALESCE(sum(minutes),0)::integer FROM coaching_months WHERE month=$1 AND state IN ('submitted','invoiced')) AS "submittedMinutes",
-              (SELECT count(*)::integer FROM coaching_months WHERE month=$1 AND state IN ('submitted','invoiced')) AS "contractorsSubmitted",
+              (SELECT COALESCE(sum(minutes),0)::integer FROM coaching_months WHERE to_char(period_end,'YYYY-MM')=$1 AND state IN ('submitted','invoiced')) AS "submittedMinutes",
+              (SELECT count(DISTINCT owner_id)::integer FROM coaching_months WHERE to_char(period_end,'YYYY-MM')=$1 AND state IN ('submitted','invoiced')) AS "contractorsSubmitted",
               COALESCE(sum(i.total_cents),0)::text AS "invoicedCents",
               count(i.id) FILTER (WHERE i.delivery<>'sent')::integer AS "invoicesNotSent",
               COALESCE(sum(i.total_cents-i.paid_cents),0)::text AS "outstandingCents",
               (SELECT count(*)::integer FROM coaching_months WHERE state='submitted') AS "awaitingReview",
               (SELECT floor(extract(epoch FROM clock_timestamp()-min(s.submitted_at))/86400)::integer FROM coaching_months c JOIN coaching_submissions s ON s.owner_id=c.owner_id AND s.month=c.month AND s.revision=c.submitted_revision WHERE c.state='submitted') AS "oldestWaitingDays"
             FROM coaching_months m JOIN simple_invoices i ON i.id=m.invoice_id AND i.voided_at IS NULL
-            WHERE m.month=$1`,
+            WHERE to_char(m.period_end,'YYYY-MM')=$1`,
             [selected],
           )
         ).rows[0]!;
@@ -1315,19 +1549,33 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             invoiceId: string | null;
             delivery: string | null;
             balanceCents: string | null;
+            notSent: number | null;
+            periodKey: string | null;
+            scheduled: boolean;
           }>(
             `SELECT l.id,l.display_name AS "displayName",
               (SELECT r.cents FROM coaching_rates r WHERE r.owner_id=l.id AND r.effective_month<=$1 ORDER BY r.effective_month DESC,r.version DESC LIMIT 1) AS "rateCents",
-              (SELECT x.minutes FROM coaching_months x WHERE x.owner_id=l.id AND x.month=$1 AND x.state IN ('submitted','invoiced')) AS minutes,
-              (SELECT x.minutes FROM coaching_months x WHERE x.owner_id=l.id AND x.month=$2 AND x.state IN ('submitted','invoiced')) AS "previousMinutes",
-              (SELECT COALESCE(sum(x.minutes),0)::integer FROM coaching_months x WHERE x.owner_id=l.id AND x.month BETWEEN $3 AND $1 AND x.state IN ('submitted','invoiced')) AS "yearMinutes",
-              m.state,m.return_reason IS NOT NULL AS returned,m.invoice_id AS "invoiceId",
-              i.delivery,(i.total_cents-i.paid_cents)::text AS "balanceCents"
+              (SELECT sum(x.minutes)::integer FROM coaching_months x WHERE x.owner_id=l.id AND to_char(x.period_end,'YYYY-MM')=$1 AND x.state IN ('submitted','invoiced')) AS minutes,
+              (SELECT sum(x.minutes)::integer FROM coaching_months x WHERE x.owner_id=l.id AND to_char(x.period_end,'YYYY-MM')=$2 AND x.state IN ('submitted','invoiced')) AS "previousMinutes",
+              (SELECT COALESCE(sum(x.minutes),0)::integer FROM coaching_months x WHERE x.owner_id=l.id AND to_char(x.period_end,'YYYY-MM') BETWEEN $3 AND $1 AND x.state IN ('submitted','invoiced')) AS "yearMinutes",
+              m.state,m.return_reason IS NOT NULL AS returned,m.invoice_id AS "invoiceId",m.month AS "periodKey",
+              i.delivery,
+              (SELECT sum(j.total_cents-j.paid_cents)::text FROM coaching_months x JOIN simple_invoices j ON j.id=x.invoice_id AND j.voided_at IS NULL WHERE x.owner_id=l.id AND to_char(x.period_end,'YYYY-MM')=$1) AS "balanceCents",
+              (SELECT count(*) FILTER (WHERE j.delivery<>'sent')::integer FROM coaching_months x JOIN simple_invoices j ON j.id=x.invoice_id AND j.voided_at IS NULL WHERE x.owner_id=l.id AND to_char(x.period_end,'YYYY-MM')=$1) AS "notSent",
+              EXISTS (SELECT 1 FROM coaching_billing_schedules b WHERE b.owner_id=l.id) AS scheduled
             FROM learners l JOIN workspaces w ON w.owner_principal_id=l.id AND w.deleting_at IS NULL
-            LEFT JOIN coaching_months m ON m.owner_id=l.id AND m.month=$1
+            -- With several periods ending in the month, show the one that
+            -- most needs the manager: awaiting review, then returned, draft,
+            -- voided and invoiced; the latest of equals.
+            LEFT JOIN LATERAL (
+              SELECT x.* FROM coaching_months x LEFT JOIN simple_invoices j ON j.id=x.invoice_id AND j.voided_at IS NULL
+              WHERE x.owner_id=l.id AND to_char(x.period_end,'YYYY-MM')=$1
+              ORDER BY CASE WHEN x.state='submitted' THEN 0 WHEN x.state='draft' AND x.return_reason IS NOT NULL THEN 1
+                WHEN x.state='draft' THEN 2 WHEN j.id IS NULL THEN 3 ELSE 4 END,x.period_start DESC LIMIT 1
+            ) m ON true
             LEFT JOIN simple_invoices i ON i.id=m.invoice_id AND i.voided_at IS NULL
             WHERE EXISTS (SELECT 1 FROM coaching_rates r WHERE r.owner_id=l.id AND r.effective_month<=$1)
-              OR EXISTS (SELECT 1 FROM coaching_months x WHERE x.owner_id=l.id AND x.month BETWEEN $3 AND $1)
+              OR EXISTS (SELECT 1 FROM coaching_months x WHERE x.owner_id=l.id AND to_char(x.period_end,'YYYY-MM') BETWEEN $3 AND $1)
             ORDER BY l.display_name NULLS LAST,l.id LIMIT 100`,
             [selected, previous, yearStart],
           )
@@ -1348,8 +1596,11 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
               : r.state === "invoiced" && r.delivery === null
                 ? "voided"
                 : r.state) as CoachingStatus,
-          sent: r.delivery === null ? null : r.delivery === "sent",
+          sent: r.balanceCents === null ? null : r.notSent === 0,
           balanceCents: r.balanceCents === null ? null : Number(r.balanceCents),
+          // Where the name links: the period shown, the calendar month, or
+          // for a student on defined periods with none here, their current one.
+          periodKey: r.periodKey ?? (r.scheduled ? null : selected),
         }));
         return {
           kind: "ready",

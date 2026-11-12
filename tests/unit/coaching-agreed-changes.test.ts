@@ -316,6 +316,10 @@ const overview = {
   entry: null,
   months: [],
   overrides: [],
+  period: { key: "2026-10", start: "2026-10-01", end: "2026-10-31", days: 31 },
+  periods: [],
+  date: "2026-10-20",
+  billing: { schedules: [], version: 0, nextStart: null },
   sample: true,
 };
 function routes(agreed?: Partial<CoachingAgreedChangesStore>) {

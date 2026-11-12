@@ -18,7 +18,7 @@ import { page, escape } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import { coachingStatus } from "./coaching-routes.ts";
 import { hours } from "./coaching-dashboard-views.ts";
-import { monthLabel } from "./coaching-values.ts";
+import { monthLabel, periodLabel } from "./coaching-values.ts";
 import type { AccountRoleAdmin } from "./account-role-admin.ts";
 import { coachAssignmentCard } from "./account-role-admin-routes.ts";
 import type { AdministratorDiagnostics } from "./administrator-diagnostics.ts";
@@ -49,8 +49,10 @@ function learnersCard(v: AdministratorConsole, ownerId?: string) {
   ) => {
     if (!saved) return '<td class="member-coaching">—</td>';
     const link = `/operator/coaching/${escape(m.id)}?month=${escape(saved.month)}`;
-    return named
-      ? `<td class="member-coaching"><a href="${link}">${monthLabel(saved.month)}</a><span>${hours(saved.minutes)} · ${coachingStatus(saved)}</span></td>`
+    // #832: a defined period is named by its dates; with several ending in
+    // the month, this is the latest.
+    return named || saved.month.length === 10
+      ? `<td class="member-coaching"><a href="${link}">${periodLabel({ key: saved.month, start: saved.periodStart, end: saved.periodEnd })}</a><span>${hours(saved.minutes)} · ${coachingStatus(saved)}</span></td>`
       : `<td class="member-coaching"><a href="${link}">${hours(saved.minutes)}</a><span>${coachingStatus(saved)}</span></td>`;
   };
   const coaching = (m: Member) =>
@@ -180,7 +182,7 @@ export function mountAdministratorEntry(
                   ],
                   [
                     `/operator/coaching/${escape(chosen.member.id)}`,
-                    "Monthly coaching and rates",
+                    "Coaching hours and rates",
                   ],
                 ],
                 true,
@@ -207,7 +209,7 @@ export function mountAdministratorEntry(
             ? `<p>Select a learner above to inspect their retained invoices or compose a proposal for that exact account.</p>${portalActions(
                 [
                   ["/operator/invoices", "Courses and invoices"],
-                  ["/operator/coaching", "Monthly coaching"],
+                  ["/operator/coaching", "Coaching administration"],
                 ],
               )}`
             : "<p>Invoicing is disabled. Learning accounts and saved work remain available.</p>"
@@ -243,7 +245,7 @@ export function mountAdministratorEntry(
           [
             ["/operator", "Administration console"],
             ["/operator/invoices", "Courses and invoices"],
-            ["/operator/coaching", "Monthly coaching"],
+            ["/operator/coaching", "Coaching administration"],
             ...(options.roleAdmin
               ? ([
                   ["/operator/roles", "Roles"],

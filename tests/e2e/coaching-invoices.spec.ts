@@ -220,7 +220,7 @@ async function save(f: Fixture, p: Page, hours = "1", minutes = "30") {
     p.getByRole("button", { name: "Save coaching draft" }).click(),
   ]);
   await expect(
-    p.getByRole("heading", { name: "Monthly coaching hours", exact: true }),
+    p.getByRole("heading", { name: "Coaching hours", exact: true }),
   ).toBeVisible();
 }
 async function submit(p: Page) {
@@ -360,9 +360,9 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
       fullPage: true,
     });
     await admin.goto(`${f.origin}/operator/coaching`);
-    // The dashboard row links to the same month; check the Pending months list.
+    // The dashboard row links to the same month; check the Pending periods list.
     const pending = admin.locator(
-      `h2:text-is("Pending months") + ul a[href="/operator/coaching/${a.id}?month=${pastMonth}"]`,
+      `h2:text-is("Pending periods") + ul a[href="/operator/coaching/${a.id}?month=${pastMonth}"]`,
     );
     await expect(pending).toBeVisible();
     await expect(pending).toHaveText(
@@ -458,16 +458,16 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       o.getByRole("heading", { name: "Selected learner" }),
     ).toBeVisible();
     await o
-      .getByRole("link", { name: "Monthly coaching and rates", exact: true })
+      .getByRole("link", { name: "Coaching hours and rates", exact: true })
       .click();
     await o.getByLabel("Hourly rate (CAD)").fill("95.00");
     await o.getByLabel("Effective month").fill(month);
     await friendly(o, "owner-set-rate");
     await o.getByRole("button", { name: "Save hourly rate" }).click();
 
-    // 4. The student reports last month's hours from Monthly coaching hours.
+    // 4. The student reports last month's hours from Coaching hours.
     await menu(s)
-      .getByRole("link", { name: "Monthly coaching hours", exact: true })
+      .getByRole("link", { name: "Coaching hours", exact: true })
       .click();
     await expect(s).toHaveURL(f.origin + "/account/coaching");
     await s.getByLabel("Calendar month (UTC)").fill(month);
@@ -501,10 +501,10 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       .getByRole("link", { name: "Administration", exact: true })
       .click();
     await o
-      .getByRole("link", { name: "Monthly coaching", exact: true })
+      .getByRole("link", { name: "Coaching administration", exact: true })
       .click();
     await expect(
-      o.getByRole("heading", { name: "Pending months" }),
+      o.getByRole("heading", { name: "Pending periods" }),
     ).toBeVisible();
     // DASH-04: the manager dashboard opens on last month by default.
     const figure = (label: string) =>
@@ -588,7 +588,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       .getByRole("link", { name: "Administration", exact: true })
       .click();
     await o
-      .getByRole("link", { name: "Monthly coaching", exact: true })
+      .getByRole("link", { name: "Coaching administration", exact: true })
       .click();
     await expect(figure("Invoiced")).toHaveText("CAD 213.75");
     await expect(
@@ -636,7 +636,7 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
     ).toHaveCount(0);
     await m.page.goto(`${f.origin}/operator/coaching/${m.id}`);
     await expect(
-      m.page.getByRole("heading", { name: "Review monthly coaching" }),
+      m.page.getByRole("heading", { name: "Review coaching hours" }),
     ).toHaveCount(0);
     await admin
       .getByLabel("Reason", { exact: true })
@@ -701,7 +701,7 @@ test("[L275] HOUR03/06/09 committed submission recovery preserves zero totals wi
       admin = await f.admin();
     await m.page
       .locator("#main")
-      .getByRole("link", { name: "Monthly coaching hours", exact: true })
+      .getByRole("link", { name: "Coaching hours", exact: true })
       .click();
     await expect(m.page.getByText(/No rate is set/)).toBeVisible();
     await setRate(f, admin, m.id, "0.01");
@@ -760,7 +760,7 @@ test("[L276] HOUR09 disabled invoicing keeps monthly entry honest and learning a
     const m = await f.member();
     await m.page
       .locator("#main")
-      .getByRole("link", { name: "Monthly coaching hours", exact: true })
+      .getByRole("link", { name: "Coaching hours", exact: true })
       .click();
     await expect(
       m.page.getByText(/Coaching invoicing is not configured/),

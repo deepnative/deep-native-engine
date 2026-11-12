@@ -776,6 +776,19 @@ it("CHANGELOG-02/04 words every kind of change", () => {
   expect(said("hours_overridden", { amountCents: null })).toBe(
     "Ada changed the coaching hours Bo reported for 2026-11.",
   );
+  // PERIOD832-10: a defined period is named by its first day, and setting
+  // a student's billing period is recorded with the day it starts.
+  expect(
+    said("hours_returned", { amountCents: null, month: "2026-11-16" }),
+  ).toBe(
+    "Ada returned the coaching hours for Bo for the period starting 2026-11-16.",
+  );
+  expect(
+    said("billing_period_set", { amountCents: null, month: "2026-11-16" }),
+  ).toBe("Ada set the coaching billing period for Bo, starting 2026-11-16.");
+  expect(said("billing_period_set", { amountCents: null, month: null })).toBe(
+    "Ada set the coaching billing period for Bo.",
+  );
   expect(said("coaching_invoice_issued")).toBe(
     "Ada issued Bo a coaching invoice of CAD 120.00 for 2026-11.",
   );
