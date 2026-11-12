@@ -19,6 +19,7 @@ Download my records (My account → Download my records, `src/member-export.ts`)
 - **EXPCOV-11:** the cohorts the member was placed in are in the download (`cohortMemberships`, v48), including expired and revoked ones, with whether the membership lets them read the cohort's shared content. No page lets a member join a cohort yet.
 - Account deletion removes all three kinds of record with the account; the same tests check it.
 - **EXPCOV-12:** what happened to each of the member's own support requests is in the download (`supportRequestEvents`, v50, #40): the request, the stored action code and when. The codes are `received`, `acknowledged`, `replied`, `resolved`, `withdrawn`, `coverage-reviewed` (staff marked it outside current support), and `detail-read` and `worklist-read` (staff opened it, or saw it in their list). Never the staff member, the access grant or the reply reference. Private staff notes and grant changes aren't in the section at all, so the download doesn't show that a note exists. Account deletion removes the history with the request.
+- **OVR832-07:** each time an administrator changed the hours the member reported for coaching is in the download (`coachingHoursOverrides`, v51, #832): the month, the earlier figure, the new figure, the reason, whether the month was a draft or submitted, and when. Never the administrator.
 
 The check is about which tables the download reads, not which columns. Each section's own tests decide which fields a member sees.
 

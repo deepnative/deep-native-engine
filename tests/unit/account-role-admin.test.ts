@@ -772,6 +772,10 @@ it("CHANGELOG-02/04 words every kind of change", () => {
   expect(said("hours_returned", { amountCents: null })).toBe(
     "Ada returned the coaching hours for Bo for 2026-11.",
   );
+  // OVR832-08: who changed a student's hours; the reason is not in this log.
+  expect(said("hours_overridden", { amountCents: null })).toBe(
+    "Ada changed the coaching hours Bo reported for 2026-11.",
+  );
   expect(said("coaching_invoice_issued")).toBe(
     "Ada issued Bo a coaching invoice of CAD 120.00 for 2026-11.",
   );

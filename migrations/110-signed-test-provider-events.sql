@@ -31,9 +31,14 @@ BEGIN
  RETURN NEW;
 END $$;
 -- TESTPAY-10: no staff member acts on a signed test event, so none is named.
+-- Every migration re-runs at each start; 140 widens this, and its rows must survive a restart.
+DO $$ BEGIN
+IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=140) THEN
 ALTER TABLE IF EXISTS billing_change_events DROP CONSTRAINT IF EXISTS billing_change_events_action_check;
 ALTER TABLE IF EXISTS billing_change_events ADD CONSTRAINT billing_change_events_action_check
  CHECK(action IN ('plan_offered','rate_set','hours_returned','coaching_invoice_issued','monthly_invoice_issued','payment_recorded','payment_refunded','invoice_voided','test_payment_received','test_payment_failed','test_refund_recorded'));
+END IF;
+END $$;
 ALTER TABLE IF EXISTS billing_change_events ALTER COLUMN actor_id DROP NOT NULL;
 ALTER TABLE IF EXISTS billing_change_events DROP CONSTRAINT IF EXISTS billing_change_events_actor;
 ALTER TABLE IF EXISTS billing_change_events ADD CONSTRAINT billing_change_events_actor

@@ -49,6 +49,7 @@ type BillingChangeAction =
   | "plan_offered"
   | "rate_set"
   | "hours_returned"
+  | "hours_overridden"
   | "coaching_invoice_issued"
   | "monthly_invoice_issued"
   | "payment_recorded"
@@ -157,6 +158,19 @@ export interface SavedCoachingMonth {
   paidCents?: string | null;
   refundedCents?: string | null;
   voided?: boolean;
+  /** OVR832-07: an administrator changed this period's hours at least once. */
+  overridden?: boolean;
+}
+/** OVR832-07: one administrator change to a period's hours, newest first. */
+export interface CoachingHoursOverride {
+  previousMinutes: number;
+  minutes: number;
+  reason: string;
+  /** What the period was when it was changed. */
+  state: "draft" | "submitted";
+  changedAt: Date;
+  /** Administrators only; null when no name is set or for the student. */
+  actorName: string | null;
 }
 
 export function shiftMonth(month: string, by: number) {
@@ -503,10 +517,24 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
                     (SELECT (s.snapshot->>'subtotalCents')::bigint FROM coaching_submissions s
                      WHERE s.owner_id=m.owner_id AND s.month=m.month AND s.revision=m.submitted_revision) AS "submittedCents",
                     m.invoice_id AS "invoiceId",i.total_cents::text AS "totalCents",
-                    i.paid_cents::text AS "paidCents",i.refunded_cents::text AS "refundedCents",i.voided_at IS NOT NULL AS voided
+                    i.paid_cents::text AS "paidCents",i.refunded_cents::text AS "refundedCents",i.voided_at IS NOT NULL AS voided,
+                    EXISTS(SELECT 1 FROM coaching_hours_overrides o WHERE o.owner_id=m.owner_id AND o.month=m.month) AS overridden
              FROM coaching_months m LEFT JOIN simple_invoices i ON i.id=m.invoice_id
              WHERE m.owner_id=$1 ORDER BY m.month DESC LIMIT 100`,
             [memberId],
+          )
+        ).rows;
+        // OVR832-07: each administrator change to this period's hours. The
+        // student reads the figures and the reason, never who changed them.
+        const overrides = (
+          await tx.query<CoachingHoursOverride>(
+            `SELECT o.previous_minutes AS "previousMinutes",o.minutes,o.reason,o.state,o.created_at AS "changedAt",
+                    CASE WHEN $3::boolean THEN actor.display_name END AS "actorName"
+             FROM coaching_hours_overrides o
+             LEFT JOIN administrator_sessions s ON s.staff_id=o.actor_id
+             LEFT JOIN learners actor ON actor.id=s.member_id
+             WHERE o.owner_id=$1 AND o.month=$2 ORDER BY o.revision DESC LIMIT 50`,
+            [memberId, selected, ownerId !== undefined],
           )
         ).rows;
         const displayName =
@@ -536,6 +564,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             rateVersion: rates[0]?.version ?? 0,
             entry,
             months,
+            overrides,
             sample: settings.sample,
           },
         };
@@ -802,6 +831,97 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           [input.ownerId, input.month, revision, input.reason],
         );
         await logChange(tx, actor, "hours_returned", {
+          memberId: input.ownerId,
+          month: input.month,
+        });
+        return remember(tx, actor, input.operationId, digest, {
+          month: input.month,
+          revision,
+        });
+      });
+    },
+    /**
+     * #832 OVR832-01..06: a platform administrator changes hours the student
+     * already saved or submitted. Never creates a period; an issued invoice
+     * changes only through void and return.
+     */
+    async overrideCoachingHours(
+      token: string,
+      input: {
+        ownerId: string;
+        month: string;
+        minutes: number;
+        reason: string;
+        expectedRevision: number;
+        operationId: string;
+      },
+    ): Promise<InvoiceResult<{ month: string; revision: number }>> {
+      if (
+        !input ||
+        !invoiceUuid(input.ownerId) ||
+        !coachingMinutes(input.month, input.minutes) ||
+        !invoiceCents(input.expectedRevision) ||
+        !invoiceUuid(input.operationId) ||
+        !invoiceText(input.reason, 500)
+      )
+        return fail("invalid");
+      return run(token, true, async (tx, actor) => {
+        await owner(tx, input.ownerId, true);
+        const digest = invoiceDigest({ action: "coaching-override", input }),
+          previous = await replay<{ month: string; revision: number }>(
+            tx,
+            actor,
+            input.operationId,
+            digest,
+          );
+        if (previous) return previous;
+        const entry = await coachingEntry(tx, input.ownerId, input.month);
+        // OVR832-03: the student has not started this period.
+        if (!entry) return fail("not-found");
+        if (
+          entry.state === "invoiced" ||
+          entry.revision !== input.expectedRevision
+        )
+          return fail("conflict");
+        if (entry.minutes === input.minutes) return fail("invalid");
+        const revision = entry.revision + 1;
+        if (entry.state === "submitted") {
+          // The student confirmed this rate version; only the hours change.
+          const submitted = entry.snapshot,
+            subtotalCents = submitted
+              ? coachingSubtotal(input.minutes, submitted.rate.cents)
+              : null;
+          if (!submitted) return fail("conflict");
+          if (subtotalCents === null) return fail("invalid");
+          const snapshot: CoachingSnapshot = {
+            ...submitted,
+            minutes: input.minutes,
+            subtotalCents,
+          };
+          await tx.query(
+            "INSERT INTO coaching_submissions(owner_id,month,revision,snapshot) VALUES($1,$2,$3,$4)",
+            [input.ownerId, input.month, revision, JSON.stringify(snapshot)],
+          );
+        }
+        await tx.query(
+          "UPDATE coaching_months SET minutes=$3,revision=$4,submitted_revision=CASE WHEN state='submitted' THEN $4 ELSE submitted_revision END WHERE owner_id=$1 AND month=$2",
+          [input.ownerId, input.month, input.minutes, revision],
+        );
+        await tx.query(
+          "INSERT INTO coaching_hours_overrides(id,owner_id,month,previous_minutes,minutes,reason,state,revision,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+          [
+            randomUUID(),
+            input.ownerId,
+            input.month,
+            entry.minutes,
+            input.minutes,
+            input.reason.trim(),
+            entry.state,
+            revision,
+            actor,
+          ],
+        );
+        await logChange(tx, actor, "hours_overridden", {
           memberId: input.ownerId,
           month: input.month,
         });

@@ -43,6 +43,7 @@ const value = {
   rateVersion: 1,
   entry,
   months: [{ month, state: "draft" }],
+  overrides: [],
   sample: true,
 };
 const contractor = (over: Record<string, unknown>) => ({
@@ -119,6 +120,9 @@ function fixture(disabled = false) {
     saveCoaching: vi.fn().mockResolvedValue(ready({ month, revision: 1 })),
     submitCoaching: vi.fn().mockResolvedValue(ready({ month, revision: 2 })),
     returnCoaching: vi.fn().mockResolvedValue(ready({ month, revision: 3 })),
+    overrideCoachingHours: vi
+      .fn()
+      .mockResolvedValue(ready({ month, revision: 2 })),
     issueCoaching: vi.fn().mockResolvedValue(ready({ invoiceId: id })),
   };
   const app = express();
@@ -1070,4 +1074,166 @@ it("DRAFTEMAIL-01/03 lets a member save hours with no invoice email and asks for
     token,
     expect.objectContaining({ minutes: 6000, email: "" }),
   );
+});
+
+const change = {
+  previousMinutes: 600,
+  minutes: 480,
+  reason: "Two <sessions> were cancelled",
+  state: "submitted",
+  changedAt: new Date("2026-11-12T17:00:00Z"),
+  actorName: "Ada <Admin>",
+};
+it("OVR832-01/02/07 an administrator gets a change-hours form for saved or submitted hours, and both people read each change with its reason", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      overrides: [change],
+      months: [{ month, state: "draft", minutes: 480, overridden: true }],
+    }),
+  );
+  const admin = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(admin).toContain("<h2>Change this student’s hours</h2>");
+  expect(admin).toContain(
+    `<form method="post" action="/operator/coaching/${id}/override">`,
+  );
+  expect(admin).toContain('name="action" value="override"');
+  expect(admin).toContain(
+    '<label>Reason for the change<input name="reason" maxlength="500" required></label><button>Change hours</button>',
+  );
+  expect(admin).toContain("The draft stays the student’s to submit.");
+  expect(admin).toContain(
+    '<h2 id="hours-changes">Hours changed by an administrator</h2>',
+  );
+  expect(admin).toContain(
+    "November 12, 2026 · from <strong>10 hours 0 minutes</strong> to <strong>8 hours 0 minutes</strong> · by Ada &lt;Admin&gt;<p>Reason: Two &lt;sessions&gt; were cancelled</p>",
+  );
+  expect(admin).toContain(
+    '8h <span class="small">changed by an administrator</span>',
+  );
+  const member = (await f.get("/account/coaching")).text;
+  expect(member).not.toContain("Change this student");
+  expect(member).not.toContain("Ada");
+  expect(member).toContain(
+    "An administrator changed the hours you reported for this month. Your earlier figure is kept below.",
+  );
+  expect(member).toContain(
+    "November 12, 2026 · from <strong>10 hours 0 minutes</strong> to <strong>8 hours 0 minutes</strong><p>Reason: Two &lt;sessions&gt; were cancelled</p>",
+  );
+  // A submitted month keeps the rate the student confirmed.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      overrides: [{ ...change, actorName: null }],
+      entry: {
+        ...entry,
+        state: "submitted",
+        revision: 2,
+        submittedRevision: 2,
+        snapshot,
+      },
+    }),
+  );
+  const review = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(review).toContain(
+    "The month stays awaiting review at the rate the student confirmed, and its subtotal is recalculated.",
+  );
+  expect(review).toContain("</strong> · by an administrator<p>");
+});
+it("OVR832-03/06 no change-hours form for a month the student has not started or one that is invoiced", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: null, months: [] }),
+  );
+  const empty = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(empty).not.toContain("/override");
+  expect(empty).toContain(
+    "The student has not saved hours for this month. An administrator cannot enter new hours for a student; once the student saves hours, you can change them here.",
+  );
+  expect((await f.get("/account/coaching")).text).not.toContain(
+    "An administrator cannot enter",
+  );
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      entry: {
+        ...entry,
+        state: "invoiced",
+        revision: 3,
+        submittedRevision: 2,
+        snapshot,
+        invoiceId: id,
+      },
+    }),
+  );
+  const invoiced = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(invoiced).not.toContain("/override");
+  expect(invoiced).not.toContain("An administrator cannot enter");
+});
+it("OVR832-01/04/05/08 a posted change carries exact minutes, reason and revision; refusals say why and change nothing", async () => {
+  const f = fixture();
+  const fields = {
+    month,
+    action: "override",
+    hours: "8",
+    minutes: "15",
+    reason: "Two sessions were cancelled",
+  };
+  const ok = await f.post(`/operator/coaching/${id}/override`, fields);
+  expect(ok.status).toBe(303);
+  expect(ok.headers.location).toBe(
+    `/operator/coaching/${id}?month=${month}#hours-changes`,
+  );
+  expect(f.service.overrideCoachingHours).toHaveBeenCalledWith(token, {
+    ownerId: id,
+    month,
+    minutes: 495,
+    reason: "Two sessions were cancelled",
+    expectedRevision: 1,
+    operationId: id,
+  });
+  f.service.overrideCoachingHours.mockClear();
+  for (const bad of [
+    { hours: "x" },
+    { minutes: "60" },
+    { action: "return" },
+    { extra: "1" },
+  ])
+    expect(
+      (await f.post(`/operator/coaching/${id}/override`, { ...fields, ...bad }))
+        .status,
+    ).toBeGreaterThanOrEqual(403);
+  expect(
+    (
+      await f.post(
+        `/operator/coaching/${id}/override`,
+        fields,
+        "https://attacker.invalid",
+      )
+    ).status,
+  ).toBe(403);
+  expect(f.service.overrideCoachingHours).not.toHaveBeenCalled();
+  // The member has no such action.
+  expect((await f.post("/account/coaching/override", fields)).status).toBe(404);
+  f.service.overrideCoachingHours.mockResolvedValueOnce({ kind: "not-found" });
+  const missing = await f.post(`/operator/coaching/${id}/override`, fields);
+  expect(missing.status).toBe(404);
+  expect(missing.text).toContain(
+    "The student has not saved hours for this month, so there is nothing to change. An administrator cannot enter new hours for a student.",
+  );
+  f.service.overrideCoachingHours.mockResolvedValueOnce({ kind: "invalid" });
+  const invalid = await f.post(`/operator/coaching/${id}/override`, fields);
+  expect(invalid.status).toBe(422);
+  expect(invalid.text).toContain(
+    "The hours were not changed. Give a reason, and hours that fit the month and differ from the current figure.",
+  );
+  f.service.overrideCoachingHours.mockResolvedValueOnce({ kind: "conflict" });
+  const stale = await f.post(`/operator/coaching/${id}/override`, fields);
+  expect(stale.status).toBe(409);
+  expect(stale.text).toContain("This form is out of date");
+  const off = fixture(true);
+  expect(
+    (await off.post(`/operator/coaching/${id}/override`, fields)).status,
+  ).toBe(503);
 });

@@ -744,6 +744,14 @@ const sections = {
       'resolved','withdrawn','coverage-reviewed','detail-read','worklist-read')`,
     "e.id",
   ),
+  // v51 appends #832: each time an administrator changed the hours the member
+  // reported, with the figure it replaced and the reason, never which
+  // administrator.
+  coachingHoursOverrides: section(
+    'month,previous_minutes AS "previousMinutes",minutes,reason,state AS "stateWhenChanged",created_at AS "changedAt"',
+    "coaching_hours_overrides WHERE owner_id=$1",
+    "id",
+  ),
 } as const;
 /** Section SQL, shared with the member-authorized operator download (#40). */
 export const MEMBER_EXPORT_SECTIONS = sections;
@@ -759,7 +767,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v50";
+  version: "local-member-records-v51";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -893,7 +901,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v50",
+          version: "local-member-records-v51",
           profile: owner.rows[0],
           records,
           testUnitHistory: {
