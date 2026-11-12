@@ -101,6 +101,7 @@ function fixture(
     settings?: InvoiceSettings;
     dashboard?: { summary: unknown; rows: unknown[] };
     studentGone?: boolean;
+    overrides?: unknown[];
   } = {},
 ) {
   const query = vi.fn(async (sql: string, _args?: unknown[]) => {
@@ -128,6 +129,7 @@ function fixture(
     else if (sql.includes("AS month")) rows = [{ month }];
     else if (sql.includes("AS today")) rows = [{ today: month + "-31" }];
     else if (sql.includes("FROM coaching_rates")) rows = o.rates ?? [rate];
+    else if (sql.includes("o.reason,o.state")) rows = o.overrides ?? [];
     else if (sql.includes("FROM coaching_months"))
       rows = o.entry === null ? [] : [o.entry ?? draft];
     else if (sql.includes("FROM coaching_submissions"))
@@ -779,4 +781,175 @@ it("DRAFTEMAIL-01/02 saves hours without an invoice email, keeps the reusable re
       sql.startsWith("INSERT INTO coaching_submissions"),
     ),
   ).toBe(false);
+});
+
+const override = {
+  ownerId: id,
+  month,
+  minutes: 60,
+  reason: "Two sessions were cancelled",
+  expectedRevision: 1,
+  operationId: key,
+};
+it("OVR832-02/03/04/05/06 an administrator changes only saved, uninvoiced hours at the current revision, with a reason and a different figure", async () => {
+  const f = fixture({ admin: true });
+  expect(await f.service.overrideCoachingHours(token, override)).toEqual({
+    kind: "ready",
+    value: { month, revision: 2 },
+  });
+  const sql = f.query.mock.calls.map(([text]) => text);
+  // A draft has no submitted snapshot to replace, and no period is created.
+  expect(sql.some((q) => q.includes("INSERT INTO coaching_submissions"))).toBe(
+    false,
+  );
+  expect(sql.some((q) => q.includes("INSERT INTO coaching_months"))).toBe(
+    false,
+  );
+  expect(
+    f.query.mock.calls.find(([q]) =>
+      q.startsWith("UPDATE coaching_months"),
+    )![1],
+  ).toEqual([id, month, 60, 2]);
+  expect(
+    f.query.mock.calls
+      .find(([q]) => q.includes("INSERT INTO coaching_hours_overrides"))![1]!
+      .slice(1),
+  ).toEqual([id, month, 90, 60, override.reason, "draft", 2, id]);
+  expect(
+    f.query.mock.calls.find(([q]) =>
+      q.includes("INSERT INTO billing_change_events"),
+    )![1],
+  ).toEqual([id, "hours_overridden", id, month, null]);
+  expect(
+    (
+      await fixture({ admin: true, entry: null }).service.overrideCoachingHours(
+        token,
+        override,
+      )
+    ).kind,
+  ).toBe("not-found");
+  for (const entry of [
+    { ...draft, revision: 2 },
+    { ...submitted, state: "invoiced" as const, revision: 1, invoiceId: id },
+  ])
+    expect(
+      (
+        await fixture({ admin: true, entry }).service.overrideCoachingHours(
+          token,
+          override,
+        )
+      ).kind,
+    ).toBe("conflict");
+  // The same figure is not a change.
+  expect(
+    (
+      await fixture({ admin: true }).service.overrideCoachingHours(token, {
+        ...override,
+        minutes: 90,
+      })
+    ).kind,
+  ).toBe("invalid");
+  for (const change of [
+    null,
+    { ownerId: "bad" },
+    { month: "bad" },
+    { minutes: -1 },
+    { minutes: 31 * 24 * 60 + 1 },
+    { expectedRevision: -1 },
+    { operationId: "bad" },
+    { reason: " " },
+    { reason: "x".repeat(501) },
+  ])
+    expect(
+      (
+        await fixture({ admin: true }).service.overrideCoachingHours(
+          token,
+          change === null ? (null as never) : { ...override, ...change },
+        )
+      ).kind,
+    ).toBe("invalid");
+  // A student token is not an administrator.
+  expect(
+    (await fixture().service.overrideCoachingHours(token, override)).kind,
+  ).toBe("denied");
+  const receipt = {
+    digest: invoiceDigest({ action: "coaching-override", input: override }),
+    result: { month, revision: 2 },
+  };
+  expect(
+    await fixture({ admin: true, receipt }).service.overrideCoachingHours(
+      token,
+      override,
+    ),
+  ).toEqual({ kind: "ready", value: receipt.result });
+});
+it("OVR832-01 changing submitted hours appends a snapshot at the rate the student confirmed and keeps the month awaiting review", async () => {
+  const input = { ...override, expectedRevision: 2 };
+  const f = fixture({ admin: true, entry: submitted });
+  expect(await f.service.overrideCoachingHours(token, input)).toEqual({
+    kind: "ready",
+    value: { month, revision: 3 },
+  });
+  const appended = f.query.mock.calls.find(([q]) =>
+    q.includes("INSERT INTO coaching_submissions"),
+  )![1]!;
+  expect(appended.slice(0, 3)).toEqual([id, month, 3]);
+  expect(JSON.parse(appended[3] as string)).toEqual({
+    ...snapshot,
+    minutes: 60,
+    subtotalCents: 12000,
+  });
+  expect(
+    f.query.mock.calls.find(([q]) =>
+      q.startsWith("UPDATE coaching_months"),
+    )![0],
+  ).toContain("submitted_revision=CASE WHEN state='submitted' THEN $4");
+  expect(
+    f.query.mock.calls
+      .find(([q]) => q.includes("INSERT INTO coaching_hours_overrides"))![1]!
+      .slice(3, 8),
+  ).toEqual([90, 60, override.reason, "submitted", 3]);
+  // A submitted month with no retained snapshot, or an amount beyond the
+  // invoice limit, is refused.
+  expect(
+    (
+      await fixture({
+        admin: true,
+        entry: submitted,
+        snapshot: null,
+      }).service.overrideCoachingHours(token, input)
+    ).kind,
+  ).toBe("conflict");
+  expect(
+    (
+      await fixture({
+        admin: true,
+        entry: submitted,
+        snapshot: { ...snapshot, rate: { ...rate, cents: 1000000000 } },
+      }).service.overrideCoachingHours(token, { ...input, minutes: 600 })
+    ).kind,
+  ).toBe("invalid");
+});
+it("OVR832-07 the overview lists each change for the month, naming the administrator only to administrators", async () => {
+  const row = {
+    previousMinutes: 90,
+    minutes: 60,
+    reason: override.reason,
+    state: "draft",
+    changedAt: new Date("2026-11-12T12:00:00Z"),
+    actorName: null,
+  };
+  for (const admin of [false, true]) {
+    const f = fixture({ admin, overrides: [row] });
+    const r = await f.service.coachingOverview(
+      token,
+      month,
+      admin ? id : undefined,
+    );
+    if (r.kind !== "ready") throw Error("Expected overview");
+    expect(r.value.overrides).toEqual([row]);
+    expect(
+      f.query.mock.calls.find(([q]) => q.includes("o.reason,o.state"))![1],
+    ).toEqual([id, month, admin]);
+  }
 });

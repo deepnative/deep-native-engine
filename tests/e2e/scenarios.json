@@ -3009,6 +3009,15 @@
       "expected": "The form starts from 60 and 15 and explains the bounds; both people see 45 minutes and 2 exchanges; the conversation is complete at 2 pairs and stays complete after the limit is raised, while a new conversation offers 3; the 90-minute value is refused with the bounds and version 2 is unchanged",
       "issues": [823],
       "critical": false
+    },
+    {
+      "id": "L338",
+      "actor": "Student and platform administrator",
+      "preconditions": "Dedicated synthetic PostgreSQL database dropped afterwards, local staff entry, sample invoicing, invented student, rate, hours and reason, port0 server; desktop/mobile Chromium",
+      "steps": "OVR832-01/03/06/07/08: the student registers; the administrator opens their coaching page before any hours are saved, then sets a rate; the student saves 10 hours and requests the invoice; the administrator changes the hours to 8, first without and then with a reason; the student reopens Monthly coaching hours and downloads their records; the administrator issues the invoice, reopens the month and opens Change history",
+      "expected": "No way to enter hours is offered before the student saves them; a change needs a reason; the month stays awaiting review at 8 hours and CAD 960.00 at the confirmed rate; the student sees the earlier figure, the new figure and the reason without the administrator, on the page and in the download; the invoice is for the changed figure; an invoiced month offers no change; Change history names the change",
+      "issues": [832],
+      "critical": false
     }
   ],
   "fullMvp": [

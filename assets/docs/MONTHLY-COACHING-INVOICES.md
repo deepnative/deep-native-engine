@@ -61,3 +61,17 @@ Monthly coaching hours lists saved months as a table ([#646](https://github.com/
 - **Invoice:** a link to the issued invoice.
 
 The administrator's member view shows the same table, with links to the admin invoice pages. HOURTABLE-01–03 are unit tests; L273 and L284 check the table in the browser.
+
+## Administrator changes to reported hours
+
+Owner decision of 12 November 2026 ([#832](https://github.com/deepnative/deep-native-engine/issues/832)): an administrator can change hours a student has reported, and cannot enter hours for a student.
+
+- **Where:** Administration → Monthly coaching → the student → the month. Under **Change this student's hours**, enter the hours and minutes and a **Reason for the change**, then choose **Change hours**.
+- **When it is offered:** only while the month is a draft or awaiting review. If the student has not saved hours for the month, the page says so and offers no form; a posted change is refused, and the database refuses a change record for a month with no saved hours. An invoiced month offers no form: void the unpaid invoice and return the month first, as before.
+- **What changes:** a draft takes the new hours and stays the student's to submit. A month awaiting review stays awaiting review, at the rate version the student confirmed, with the subtotal recalculated; the student's own submission stays in the retained history. The invoice is then issued on the changed figure.
+- **What is kept:** each change records the earlier figure, the new figure, the reason, the administrator and the time. It can't be edited or removed, except with the student's account.
+- **What the student sees:** **Hours changed by an administrator** on Monthly coaching hours, with the date, both figures and the reason, never the administrator's name. Saved months marks the month "changed by an administrator". Download my records lists each change (`coachingHoursOverrides`, export v51).
+- **Who and when:** Change history (`/operator/changes`) says which administrator changed which student's hours for which month, without the reason.
+- **Stale forms:** a change advances the month's revision, so a save, change or issue form opened before it is refused and must be reopened.
+
+Scenarios OVR832-01..08: `tests/unit/coaching-store.test.ts`, `tests/unit/coaching-routes.test.ts`, `tests/unit/member-export.test.ts`, `tests/integration/coaching-hours-overrides.test.ts` and browser journey L338 (`tests/e2e/coaching-hours-override.spec.ts`, desktop and Pixel 7). Migration 140.

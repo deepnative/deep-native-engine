@@ -375,6 +375,7 @@ const overview = {
   rateVersion: 0,
   entry: null,
   months: [],
+  overrides: [],
   sample: true,
 };
 function routes(

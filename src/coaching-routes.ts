@@ -42,6 +42,7 @@ import {
   type CoachingAgreedChangesStore,
 } from "./coaching-agreed-changes.ts";
 import type {
+  CoachingHoursOverride,
   InvoiceFailure,
   SavedCoachingMonth,
   SimpleInvoiceStore,
@@ -117,6 +118,24 @@ export function coachingStatus(m: {
   return m.returned ? "Returned for correction" : "Draft";
 }
 
+const changedOn = (at: Date) =>
+  at.toLocaleDateString("en-CA", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "America/Toronto",
+  });
+/** OVR832-07: each administrator change, with the figure it replaced. */
+function hoursChangesSection(rows: CoachingHoursOverride[], admin: boolean) {
+  if (!rows.length) return "";
+  return `<h2 id="hours-changes">Hours changed by an administrator</h2><p>${admin ? "The student sees each change and its reason, without the administrator’s name." : "An administrator changed the hours you reported for this month. Your earlier figure is kept below."}</p><ul class="portal-list hours-changes">${rows
+    .map(
+      (r) =>
+        `<li>${changedOn(r.changedAt)} · from <strong>${coachingDuration(r.previousMinutes)}</strong> to <strong>${coachingDuration(r.minutes)}</strong>${admin ? ` · by ${r.actorName ? escape(r.actorName) : "an administrator"}` : ""}<p>Reason: ${escape(r.reason)}</p></li>`,
+    )
+    .join("")}</ul>`;
+}
+
 function savedMonthsTable(
   months: SavedCoachingMonth[],
   rates: CoachingRate[],
@@ -147,7 +166,7 @@ function savedMonthsTable(
     const invoice = m.invoiceId
       ? `<a href="${invoicePath}${escape(m.invoiceId)}">View invoice</a>`
       : "—";
-    return `<tr><th scope="row"><a href="${base}?month=${m.month}">${monthLabel(m.month)}</a></th><td>${hours(m.minutes)}</td><td>${amount}</td><td>${status}</td><td>${invoice}</td></tr>`;
+    return `<tr><th scope="row"><a href="${base}?month=${m.month}">${monthLabel(m.month)}</a></th><td>${hours(m.minutes)}${m.overridden ? ' <span class="small">changed by an administrator</span>' : ""}</td><td>${amount}</td><td>${status}</td><td>${invoice}</td></tr>`;
   });
   return `<div class="table-scroll" role="region" aria-labelledby="saved-months" tabindex="0"><table class="coaching-months"><thead><tr><th scope="col">Month</th><th scope="col">Hours</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Invoice</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
 }
@@ -320,6 +339,7 @@ export function mountCoachingRoutes(
       }
       if (admin)
         body += `<h2>Set member rate</h2><form method="post" action="${base}/rate">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.rateVersion)}<label>Effective month<input type="month" name="effectiveMonth" value="${v.month}" required></label><label>Hourly rate (CAD)<input name="rate" inputmode="decimal" required></label><button>Save hourly rate</button></form>`;
+      body += hoursChangesSection(v.overrides, admin);
       if (e)
         body += `<p>Saved duration: ${coachingDuration(e.minutes)}</p><p>Invoice recipient: ${escape(e.name)}${e.company ? ` · ${escape(e.company)}` : ""} · ${e.email ? escape(e.email) : "no invoice email yet"}</p>`;
       if (snapshot)
@@ -352,6 +372,12 @@ export function mountCoachingRoutes(
           body += `<p role="status">${snapshot?.sample !== v.sample ? "The submitted billing mode differs from current configuration. Return it and ask the member to explicitly confirm the current mode." : "This zero-total submission is retained. No invoice can be issued."}</p>`;
         body += `<h2>Return for correction</h2><p>An issued month can only be returned after its invoice is void and unpaid, with no delivery in progress or unconfirmed. Other financial corrections require administrator review outside this action.</p><form method="post" action="${base}/return">${form("return", e.revision)}<label>Correction reason<input name="reason" maxlength="500" required></label><button class="secondary">Return month for correction</button></form>`;
       }
+      // #832 OVR832-01..03/06: change hours the student saved or submitted.
+      if (admin && e && e.state !== "invoiced")
+        body += `<h2>Change this student’s hours</h2><p>Correct hours the student has saved or submitted. The student sees the earlier figure, the new figure and your reason on their coaching page and in Download my records. ${e.state === "submitted" ? "The month stays awaiting review at the rate the student confirmed, and its subtotal is recalculated." : "The draft stays the student’s to submit."}</p><form method="post" action="${base}/override">${form("override", e.revision)}<label>Whole hours<input name="hours" type="number" min="0" max="744" step="1" value="${Math.floor(e.minutes / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${e.minutes % 60}" required></label><label>Reason for the change<input name="reason" maxlength="500" required></label><button>Change hours</button></form>`;
+      else if (admin && !e)
+        body +=
+          "<p>The student has not saved hours for this month. An administrator cannot enter new hours for a student; once the student saves hours, you can change them here.</p>";
       body += `<h2 id="saved-months">Saved months</h2>${savedMonthsTable(v.months, v.rates, base, admin ? "/operator/invoices/" : "/account/purchases/invoices/")}${
         admin
           ? portalActions([
@@ -451,6 +477,38 @@ export function mountCoachingRoutes(
           `${adminPath}/${(req.params as Record<string, string>).ownerId!}`,
         )
       : failure(res, r.kind, true, req.body.operationId);
+  });
+  // #832 OVR832-01..06/08: a platform administrator changes saved hours.
+  app.post(`${adminPath}/:ownerId/override`, async (req, res) => {
+    if (!valid(req, res, ["month", "action", "hours", "minutes", "reason"]))
+      return;
+    if (!store) return failure(res, "unavailable", true);
+    const minutes = parseCoachingDuration(req.body.hours, req.body.minutes),
+      ownerId = (req.params as Record<string, string>).ownerId!;
+    if (req.body.action !== "override" || minutes === null)
+      return failure(res, "invalid", true);
+    const r = await store.overrideCoachingHours(token(res), {
+      ownerId,
+      month: req.body.month,
+      minutes,
+      reason: req.body.reason,
+      expectedRevision: Number(req.body.revision),
+      operationId: req.body.operationId,
+    });
+    return r.kind === "ready"
+      ? res.redirect(
+          303,
+          `${adminPath}/${ownerId}?month=${encodeURIComponent(req.body.month)}#hours-changes`,
+        )
+      : failure(
+          res,
+          r.kind,
+          true,
+          req.body.operationId,
+          r.kind === "not-found"
+            ? "The student has not saved hours for this month, so there is nothing to change. An administrator cannot enter new hours for a student."
+            : "The hours were not changed. Give a reason, and hours that fit the month and differ from the current figure.",
+        );
   });
   for (const action of ["save", "submit", "return", "issue"] as const) {
     const admin = action === "return" || action === "issue",

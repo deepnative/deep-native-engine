@@ -131,6 +131,8 @@ export function changeText(entry: ChangeEntry) {
     "billing:plan_offered": `offered ${person} a course plan${money(entry.amountCents)}`,
     "billing:rate_set": `set the coaching rate for ${person} to${money(entry.amountCents).replace(" of", "")} per hour from ${month}`,
     "billing:hours_returned": `returned the coaching hours for ${person} for ${month}`,
+    // OVR832-08: the reason stays on the student's coaching page.
+    "billing:hours_overridden": `changed the coaching hours ${person} reported for ${month}`,
     // TERMSINV318: a coaching-terms invoice is logged with no month.
     "billing:coaching_invoice_issued": month
       ? `issued ${person} a coaching invoice${money(entry.amountCents)} for ${month}`
