@@ -214,7 +214,7 @@ async function save(f: Fixture, p: Page, hours = "1", minutes = "30") {
   await p.getByLabel("Invoice email").fill("billing@example.invalid");
   // Confirm the redirected document before callers reload or submit it.
   await Promise.all([
-    p.waitForURL(`${f.origin}/account/coaching?month=${f.month}`, {
+    p.waitForURL(`${f.origin}/account/coaching?month=${f.month}&done=saved`, {
       waitUntil: "load",
     }),
     p.getByRole("button", { name: "Save coaching draft" }).click(),
@@ -352,9 +352,7 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
     ).toHaveValue("1");
     await recovered.waitForLoadState("load");
     await submit(recovered);
-    await expect(
-      recovered.getByText("Status: submitted · revision 2"),
-    ).toBeVisible();
+    await expect(recovered.getByText("Status: Awaiting review")).toBeVisible();
     await recovered.screenshot({
       path: info.outputPath("coaching-past-month-request.png"),
       fullPage: true,
@@ -481,7 +479,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await s.getByLabel("Invoice email").fill("billing@example.invalid");
     await friendly(s, "student-hours-form");
     await Promise.all([
-      s.waitForURL(`${f.origin}/account/coaching?month=${month}`, {
+      s.waitForURL(`${f.origin}/account/coaching?month=${month}&done=saved`, {
         waitUntil: "load",
       }),
       s.getByRole("button", { name: "Save coaching draft" }).click(),

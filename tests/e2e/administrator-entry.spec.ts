@@ -585,11 +585,16 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
       .getByLabel("Company name (optional)")
       .fill("Invented Coaching Co");
     await page.getByRole("button", { name: "Save coaching draft" }).click();
-    await expect(
-      page.getByText(
-        "Invoice recipient: Invented coaching recipient · Invented Coaching Co · billing@example.invalid",
-      ),
-    ).toBeVisible();
+    // NEXTSTEP-03: the save is confirmed and the draft keeps the recipient.
+    await expect(page.getByRole("status")).toContainText(
+      "Saved 2 hours 0 minutes",
+    );
+    await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
+      "Invented coaching recipient",
+    );
+    await expect(page.getByLabel("Company name (optional)")).toHaveValue(
+      "Invented Coaching Co",
+    );
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,

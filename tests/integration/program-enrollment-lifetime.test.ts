@@ -22,8 +22,9 @@ import {
 
 // Each fixture database is dropped after its test, outside the behavior budget.
 // A drop queued after a timed-out test's hook still runs, and fails, at the end.
-afterEach(() => dropDeferredProgramFixtures());
-afterAll(() => dropDeferredProgramFixtures());
+// Dropping each test-owned database can wait on other lanes under load.
+afterEach(() => dropDeferredProgramFixtures(), 60_000);
+afterAll(() => dropDeferredProgramFixtures(), 60_000);
 
 const intent = {
   programVersion: 1,

@@ -9,8 +9,9 @@ import {
 
 // #121 PROGWD-01..04: a dated withdrawal from the program term, distinct from
 // account deletion, against real PostgreSQL. Each test owns its database.
-afterEach(() => dropDeferredProgramFixtures());
-afterAll(() => dropDeferredProgramFixtures());
+// Dropping each test-owned database can wait on other lanes under load.
+afterEach(() => dropDeferredProgramFixtures(), 60_000);
+afterAll(() => dropDeferredProgramFixtures(), 60_000);
 
 const intent = {
   programVersion: 1,
