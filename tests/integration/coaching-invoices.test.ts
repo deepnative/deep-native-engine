@@ -131,7 +131,7 @@ it("HOUR01/04 an existing registered member can reach its private monthly coachi
       .set("Cookie", `${COOKIE}=${token}`),
   );
   expect(response.status).toBe(200);
-  expect(response.text).toContain("Monthly coaching hours");
+  expect(response.text).toContain("Coaching hours");
   expect((await invoices.overview(token)).kind).toBe("ready");
   expect(ready(await invoices.overview(token)).invoices).toEqual([]);
 });

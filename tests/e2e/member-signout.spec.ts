@@ -195,7 +195,7 @@ test("[L239] MOUT-01/02 a linked member signs out and deliberately returns by em
       await expect(
         header.getByRole("link", { name: "Sign in", exact: true }),
       ).toBeVisible();
-      for (const label of ["Account", "Monthly coaching hours", "Sign out"])
+      for (const label of ["Account", "Coaching hours", "Sign out"])
         await expect(
           header.getByRole("link", { name: label, exact: true }),
         ).toHaveCount(0);
@@ -355,12 +355,7 @@ test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without
     const navigation = page.getByRole("navigation", {
       name: "Main navigation",
     });
-    for (const label of [
-      "Learning",
-      "Account",
-      "Monthly coaching hours",
-      "Sign out",
-    ])
+    for (const label of ["Learning", "Account", "Coaching hours", "Sign out"])
       await expect(
         navigation.getByRole("link", { name: label, exact: true }),
       ).toBeVisible();
@@ -386,7 +381,7 @@ test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without
       fullPage: true,
     });
     await navigation
-      .getByRole("link", { name: "Monthly coaching hours", exact: true })
+      .getByRole("link", { name: "Coaching hours", exact: true })
       .click();
     await expect(
       page.getByRole("heading", { name: "How to enter coaching hours" }),

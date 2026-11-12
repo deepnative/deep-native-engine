@@ -2,7 +2,7 @@
 
 **Issue:** [#316](https://github.com/deepnative/deep-native-engine/issues/316), under Tom's [#35](https://github.com/deepnative/deep-native-engine/issues/35). Owner decisions of 9 November 2026.
 
-There is no fixed coaching offer. A platform administrator sets each student's terms on the student's page under **Administration → Monthly coaching** (`/operator/coaching/<student>`):
+There is no fixed coaching offer. A platform administrator sets each student's terms on the student's page under **Administration → Coaching administration** (`/operator/coaching/<student>`):
 
 - price (CAD), which is the student's own coaching price and covers their allowances;
 - start and end date of the coaching period, and the renewal date;
@@ -11,7 +11,7 @@ There is no fixed coaching offer. A platform administrator sets each student's t
 
 Each save is a new version (migration 126, `coaching_terms`). Earlier versions can't be changed or deleted. A form opened before someone else saved is refused as out of date (409), and the same operation replayed returns the same version. Saves need a platform administrator, the page's CSRF token and the site's own origin.
 
-The student sees their current terms, read-only, on **Monthly coaching hours** (`/account/coaching`), with: "There are no cancellation or refund rules. To ask about changes, contact info@deepnative.io." Every version is in Download my records (`coachingTerms`, export v45), without the administrator. Deleting the account removes them.
+The student sees their current terms, read-only, on **Coaching hours** (`/account/coaching`), with: "There are no cancellation or refund rules. To ask about changes, contact info@deepnative.io." Every version is in Download my records (`coachingTerms`, export v45), without the administrator. Deleting the account removes them.
 
 ## Session length and practice-conversation limit (#823)
 
@@ -42,7 +42,7 @@ A later version keeps the units in line with the new numbers:
 - **Overlapping, different dates** (a correction): the earlier period's unused units are written off, and what was already held or used counts towards the new number.
 - **A later, separate period** (a renewal): granted on its own; the current period's units keep running to its end.
 
-Nothing is granted for a period that has ended or for a student whose account isn't active (signed out more than 30 days); saving again later grants what's missing. A replayed save grants nothing twice. The student's Monthly coaching hours page and the administrator's page show, for the current terms, what's left, held and used. The units also appear under the student's test units and in Download my records (`testUnitGrants`, `testUnitEvents`).
+Nothing is granted for a period that has ended or for a student whose account isn't active (signed out more than 30 days); saving again later grants what's missing. A replayed save grants nothing twice. The student's Coaching hours page and the administrator's page show, for the current terms, what's left, held and used. The units also appear under the student's test units and in Download my records (`testUnitGrants`, `testUnitEvents`).
 
 Limits: coaching sessions stay an agreed number, because no ledger category counts sessions. If a reservation on a written-off grant is later released, those units return to that grant as the ledger does today.
 
@@ -78,6 +78,6 @@ Tests: AGREED94-01..06 in `tests/integration/coaching-agreed-changes.test.ts` an
 ## What this doesn't do
 
 - The renewal date is shown and listed for administrators, never acted on: no automatic renewal, acceptance, charge, grant or invoice. There is no cancellation flow (#319); an agreed change is a staff record and takes effect only through new terms or a recorded refund.
-- Nothing is invoiced automatically. An administrator issues a terms invoice on the student's page (#318). Monthly coaching hours and their invoices work as before ([MONTHLY-COACHING-INVOICES.md](MONTHLY-COACHING-INVOICES.md)).
+- Nothing is invoiced automatically. An administrator issues a terms invoice on the student's page (#318). Coaching hours and their invoices work as before ([MONTHLY-COACHING-INVOICES.md](MONTHLY-COACHING-INVOICES.md)).
 
 Tests: TERMS316-01..07 in `tests/integration/coaching-terms.test.ts`; export index in `tests/unit/member-export.test.ts`. Allowance units: ALLOW27-01..08 in `tests/integration/coaching-allowances.test.ts` and `tests/unit/coaching-allowances.test.ts`; browser journey L330 in `tests/e2e/coaching-invoices.spec.ts`. TERMSINV318-01..06 and -08 in `tests/integration/coaching-terms-invoices.test.ts`, TERMSINV318-07 and -08 in `tests/unit/coaching-terms.test.ts` and browser journey L331 in `tests/e2e/coaching-terms-invoice.spec.ts`. Calendar edges of the period (clock changes, leap day, month end, today and yesterday in Toronto, the renewals list's UTC turnover): TERMDATE42-01..05 in `tests/integration/coaching-term-date-boundaries.test.ts` (QA-004 M15).

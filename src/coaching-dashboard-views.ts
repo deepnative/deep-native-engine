@@ -24,6 +24,8 @@ export type CoachingDashboard = {
     status: CoachingStatus;
     sent: boolean | null;
     balanceCents: number | null;
+    /** #832: the period the name opens; null opens the student's current one. */
+    periodKey?: string | null;
   }>;
 };
 export const DASHBOARD_SORTS = ["name", "hours", "year", "status"] as const;
@@ -92,12 +94,12 @@ export function coachingDashboardSection(
   const body = rows
     .map(
       (r) =>
-        `<tr><th scope="row"><a href="${path}/${escape(r.id)}?month=${d.month}">${escape(r.displayName ?? "Name needed")}</a><span>${escape(r.id.slice(0, 8))}</span></th><td>${r.rateCents === null ? "No rate" : money(r.rateCents)}</td><td>${hours(r.minutes)}</td><td>${hours(r.previousMinutes)}</td><td>${hours(r.yearMinutes)}</td><td>${STATUS[r.status]}</td><td>${r.sent === null ? "—" : r.sent ? "Sent" : "Not sent"}</td><td>${r.balanceCents === null ? "—" : r.balanceCents === 0 ? "Paid" : money(r.balanceCents)}</td></tr>`,
+        `<tr><th scope="row"><a href="${path}/${escape(r.id)}${r.periodKey === null ? "" : `?month=${escape(r.periodKey ?? d.month)}`}">${escape(r.displayName ?? "Name needed")}</a><span>${escape(r.id.slice(0, 8))}</span></th><td>${r.rateCents === null ? "No rate" : money(r.rateCents)}</td><td>${hours(r.minutes)}</td><td>${hours(r.previousMinutes)}</td><td>${hours(r.yearMinutes)}</td><td>${STATUS[r.status]}</td><td>${r.sent === null ? "—" : r.sent ? "Sent" : "Not sent"}</td><td>${r.balanceCents === null ? "—" : r.balanceCents === 0 ? "Paid" : money(r.balanceCents)}</td></tr>`,
     )
     .join("");
   return `<section class="hours-dashboard" aria-labelledby="hours-title"><h2 id="hours-title">Hours for ${monthName(d.month)}</h2><form class="month-picker" method="get" action="${path}"><label>Month<input type="month" name="month" value="${d.month}" max="${d.today}" required></label><input type="hidden" name="sort" value="${sort}"><button class="secondary">Show month</button></form><dl class="hours-summary">${card("Hours submitted", hours(s.submittedMinutes), plural(s.contractorsSubmitted, "contractor"))}${card("Awaiting review", String(s.awaitingReview), `all months · ${waiting}`)}${card("Invoiced", money(s.invoicedCents), s.invoicedCents === 0 ? "No invoices yet" : s.invoicesNotSent ? `${s.invoicesNotSent} not yet sent` : "All sent")}${card("Outstanding", money(s.outstandingCents), "on this month’s invoices")}</dl>${
     rows.length
       ? `<div class="table-scroll" role="region" aria-labelledby="contractors-caption" tabindex="0"><table class="contractor-hours"><caption id="contractors-caption">Contractors · ${monthName(d.month)}</caption><thead><tr>${header("name", "Name")}<th scope="col">Rate</th>${header("hours", "Hours")}<th scope="col">Previous month</th>${header("year", "Year to date")}${header("status", "Status")}<th scope="col">Invoice email</th><th scope="col">Balance</th></tr></thead><tbody>${body}</tbody></table></div>${rows.length >= 100 ? "<p>Showing the first 100 contractors.</p>" : ""}`
       : "<p>No contractor has a rate or submitted hours for this period.</p>"
-  }<p class="small">Hours count once a month is submitted; drafts are excluded. Invoice figures leave out voided invoices.</p></section>`;
+  }<p class="small">Hours count once they are submitted; drafts are excluded. A billing period shorter or longer than a calendar month counts in the month it ends, which is when it can be invoiced; a student with several periods ending in the month shows their total hours and the status of the period that most needs attention. Invoice figures leave out voided invoices.</p></section>`;
 }

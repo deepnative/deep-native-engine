@@ -199,9 +199,7 @@ it("WHOSEES-05 contributions appear when the feature is on or something is publi
 it("WHOSEES-06 coach and administrator access is stated without naming anyone", async () => {
   const two = text((await open(server(ready({ coaches: 2 })))).text);
   expect(two).toContain("You have 2 coaches");
-  expect(two).toContain(
-    "display name, monthly coaching hours and their status",
-  );
+  expect(two).toContain("display name, coaching hours and their status");
   expect(two).toContain("Account administrators");
   expect(two).toContain("enrollment and billing summaries");
   expect(two).toContain("don't show your private writing or files");

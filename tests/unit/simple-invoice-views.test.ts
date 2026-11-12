@@ -115,6 +115,36 @@ it("HOUR04/08 prints explicit coaching quantity, rate version and preserved repl
   }
 });
 
+it("PERIOD832-03 a coaching invoice for a defined billing period names its dates; a calendar month reads as before", () => {
+  const coaching = {
+    month: "2026-10-19",
+    minutes: 90,
+    rateCents: 12000,
+    rateVersion: 2,
+    rateId: "invented-rate",
+    submissionRevision: 4,
+    replacesInvoiceId: null,
+  };
+  const period = simpleInvoiceDocument({
+    ...invoice,
+    coaching: {
+      ...coaching,
+      periodStart: "2026-10-19",
+      periodEnd: "2026-11-01",
+    },
+  });
+  expect(period).toContain(
+    "<h2>Coaching hours</h2><p>Billing period: 19 Oct 2026 to 1 Nov 2026 · 1 hour 30 minutes",
+  );
+  expect(period).not.toContain("Monthly coaching");
+  expect(
+    simpleInvoiceDocument({
+      ...invoice,
+      coaching: { ...coaching, month: "2026-10" },
+    }),
+  ).toContain("<h2>Monthly coaching</h2><p>Month: October 2026 · ");
+});
+
 it("TERMSINV318-01 an invoice issued from coaching terms names the version and period", () => {
   const html = simpleInvoiceDocument({
     ...invoice,

@@ -122,7 +122,12 @@ export function changeText(entry: ChangeEntry) {
   const who = actorText(entry),
     person = personText(entry),
     holder = holderText(entry),
-    month = entry.month ? escape(entry.month) : "";
+    // #832: a calendar month, or a defined period named by its first day.
+    month = !entry.month
+      ? ""
+      : entry.month.length === 10
+        ? `the period starting ${escape(entry.month)}`
+        : escape(entry.month);
   const change: Record<string, string> = {
     "role:granted": `gave ${holder} the ${roleName(entry.role)} role`,
     "role:removed": `removed the ${roleName(entry.role)} role from ${holder}`,
@@ -131,6 +136,7 @@ export function changeText(entry: ChangeEntry) {
     "billing:plan_offered": `offered ${person} a course plan${money(entry.amountCents)}`,
     "billing:rate_set": `set the coaching rate for ${person} to${money(entry.amountCents).replace(" of", "")} per hour from ${month}`,
     "billing:hours_returned": `returned the coaching hours for ${person} for ${month}`,
+    "billing:billing_period_set": `set the coaching billing period for ${person}${entry.month ? `, starting ${escape(entry.month)}` : ""}`,
     // OVR832-08: the reason stays on the student's coaching page.
     "billing:hours_overridden": `changed the coaching hours ${person} reported for ${month}`,
     // TERMSINV318: a coaching-terms invoice is logged with no month.

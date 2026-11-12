@@ -37,6 +37,8 @@ const snapshot: CoachingSnapshot = {
 };
 const draft: CoachingMonth = {
   month,
+  periodStart: "2026-10-01",
+  periodEnd: "2026-10-31",
   minutes: 90,
   name: snapshot.name,
   email: snapshot.email,
@@ -102,6 +104,9 @@ function fixture(
     dashboard?: { summary: unknown; rows: unknown[] };
     studentGone?: boolean;
     overrides?: unknown[];
+    schedules?: unknown[];
+    lastSaved?: string;
+    date?: string;
   } = {},
 ) {
   const query = vi.fn(async (sql: string, _args?: unknown[]) => {
@@ -126,7 +131,12 @@ function fixture(
     else if (sql.includes('AS "submittedMinutes"'))
       rows = [o.dashboard?.summary];
     else if (sql.includes('AS "yearMinutes"')) rows = o.dashboard?.rows ?? [];
-    else if (sql.includes("AS month")) rows = [{ month }];
+    else if (sql.includes("FROM coaching_billing_schedules"))
+      rows = o.schedules ?? [];
+    else if (sql.includes("max(period_end)"))
+      rows = [{ last: o.lastSaved ?? null }];
+    else if (sql.includes("AS month"))
+      rows = [{ month, date: o.date ?? month + "-31" }];
     else if (sql.includes("AS today")) rows = [{ today: month + "-31" }];
     else if (sql.includes("FROM coaching_rates")) rows = o.rates ?? [rate];
     else if (sql.includes("o.reason,o.state")) rows = o.overrides ?? [];
@@ -216,7 +226,13 @@ it("HOUR02 overview shows inherited current rates and saved state privately, wit
     ["2999-01", undefined],
   ])
     expect(
-      (await fixture().service.coachingOverview(token, selected, owner)).kind,
+      (
+        await fixture({ entry: null }).service.coachingOverview(
+          token,
+          selected,
+          owner,
+        )
+      ).kind,
     ).toBe("invalid");
 });
 it("HOUR02/06 rate changes are positive, version-bound and original-operation recoverable", async () => {
@@ -285,8 +301,13 @@ it("HOUR03/05 draft saving preserves exact duration/recipient, rejects closed or
       (await fixture({ entry }).service.saveCoaching(token, save)).kind,
     ).toBe("conflict");
   expect(
-    (await fixture().service.saveCoaching(token, { ...save, month: "2999-01" }))
-      .kind,
+    (
+      await fixture({ entry: null }).service.saveCoaching(token, {
+        ...save,
+        expectedRevision: 0,
+        month: "2999-01",
+      })
+    ).kind,
   ).toBe("invalid");
   const receipt = {
     digest: invoiceDigest({ action: "coaching-save", input: save }),
@@ -344,14 +365,15 @@ it("HOUR03/05/09 submission freezes accepted values and mode, rejecting stale ra
       }).service.submitCoaching(token, submit)
     ).kind,
   ).toBe("invalid");
+  // A month that has not started has no saved hours to submit.
   expect(
     (
-      await fixture().service.submitCoaching(token, {
+      await fixture({ entry: null }).service.submitCoaching(token, {
         ...submit,
         month: "2999-01",
       })
     ).kind,
-  ).toBe("invalid");
+  ).toBe("not-found");
   const receipt = {
     digest: invoiceDigest({ action: "coaching-submit", input: submit }),
     result: { month, revision: 2 },
@@ -555,8 +577,9 @@ it("DASH-01/02 maps one month's records to manager figures and contractor status
       },
       rows: [
         row({}),
-        row({ state: "draft" }),
-        row({ state: "draft", returned: true }),
+        row({ state: "draft", periodKey: "2026-09-07", scheduled: true }),
+        row({ state: "draft", returned: true, periodKey: "2026-09" }),
+        row({ state: null, scheduled: true }),
         row({ state: "submitted" }),
         row({ state: "invoiced", invoiceId: id }),
         row({
@@ -564,12 +587,14 @@ it("DASH-01/02 maps one month's records to manager figures and contractor status
           invoiceId: id,
           delivery: "sent",
           balanceCents: "0",
+          notSent: 0,
         }),
         row({
           state: "invoiced",
           invoiceId: id,
           delivery: "not_sent",
           balanceCents: "11000",
+          notSent: 1,
         }),
       ],
     },
@@ -593,10 +618,19 @@ it("DASH-01/02 maps one month's records to manager figures and contractor status
     ["not_started", null, null],
     ["draft", null, null],
     ["returned", null, null],
+    ["not_started", null, null],
     ["submitted", null, null],
     ["voided", null, null],
     ["invoiced", true, 0],
     ["invoiced", false, 11000],
+  ]);
+  // PERIOD832-08: a name opens the period shown, else the calendar month,
+  // else (a student on defined periods with none here) their current period.
+  expect(result.value.contractors.slice(0, 4).map((c) => c.periodKey)).toEqual([
+    "2026-09",
+    "2026-09-07",
+    "2026-09",
+    null,
   ]);
   // The previous, current and year-start months reach the contractor query.
   expect(
@@ -678,6 +712,8 @@ it("RECIPIENT-03/05 a saved draft keeps an optional company, updates the reusabl
     snapshot.email,
     1,
     "Invented Co",
+    "2026-10-01",
+    "2026-10-31",
   ]);
   // The reusable recipient follows the saved draft; the sign-in email is untouched.
   expect(sql(f, "INSERT INTO billing_profiles")?.[1]).toEqual([
@@ -952,4 +988,401 @@ it("OVR832-07 the overview lists each change for the month, naming the administr
       f.query.mock.calls.find(([q]) => q.includes("o.reason,o.state"))![1],
     ).toEqual([id, month, admin]);
   }
+});
+
+// #832 slice B: administrator-defined billing periods. Two weeks from
+// Monday 5 October 2026; "today" is 20 October unless a case says otherwise.
+const twoWeeks = {
+    version: 1,
+    unit: "days",
+    days: 14,
+    startsOn: "2026-10-05",
+    setOn: "2026-10-01",
+  },
+  today = "2026-10-20",
+  setting = {
+    ownerId: id,
+    unit: "days" as const,
+    days: 14,
+    startsOn: "2026-11-02",
+    expectedVersion: 0,
+    operationId: key,
+  },
+  periodDraft: CoachingMonth = {
+    ...draft,
+    month: "2026-10-19",
+    periodStart: "2026-10-19",
+    periodEnd: "2026-11-01",
+  };
+it("PERIOD832-01 the first billing period needs a start date after everything the student saved, within a year", async () => {
+  const f = fixture({ admin: true, date: today, lastSaved: "2026-10-31" });
+  expect(await f.service.setBillingSchedule(token, setting)).toEqual({
+    kind: "ready",
+    value: { version: 1, startsOn: "2026-11-02" },
+  });
+  expect(
+    f.query.mock.calls
+      .find(([q]) => q.includes("INSERT INTO coaching_billing_schedules"))![1]!
+      .slice(1),
+  ).toEqual([id, 1, "days", 14, "2026-11-02", id]);
+  expect(
+    f.query.mock.calls.find(([q]) =>
+      q.includes("INSERT INTO billing_change_events"),
+    )![1],
+  ).toEqual([id, "billing_period_set", id, "2026-11-02", null]);
+  const month = fixture({ admin: true, date: today });
+  expect(
+    (
+      await month.service.setBillingSchedule(token, {
+        ownerId: id,
+        unit: "month",
+        startsOn: "2026-10-15",
+        expectedVersion: 0,
+        operationId: key,
+      })
+    ).kind,
+  ).toBe("ready");
+  expect(
+    month.query.mock.calls
+      .find(([q]) => q.includes("INSERT INTO coaching_billing_schedules"))![1]!
+      .slice(3, 6),
+  ).toEqual(["month", null, "2026-10-15"]);
+  for (const startsOn of [
+    undefined,
+    "2026-10-31",
+    "2026-10-01",
+    "2025-10-18",
+    "2027-10-22",
+  ])
+    expect(
+      (
+        await fixture({
+          admin: true,
+          date: today,
+          lastSaved: "2026-10-31",
+        }).service.setBillingSchedule(token, { ...setting, startsOn })
+      ).kind,
+    ).toBe("invalid");
+  for (const change of [
+    null,
+    { ownerId: "bad" },
+    { operationId: "bad" },
+    { expectedVersion: -1 },
+    { days: 0 },
+    { days: 32 },
+    { days: 1.5 },
+    { days: undefined },
+    { unit: "week" },
+    { unit: "month" },
+    { startsOn: "2026-02-30" },
+    { startsOn: "2026-11" },
+  ])
+    expect(
+      (
+        await fixture({ admin: true, date: today }).service.setBillingSchedule(
+          token,
+          change === null
+            ? (null as never)
+            : ({ ...setting, ...change } as never),
+        )
+      ).kind,
+    ).toBe("invalid");
+  expect(
+    (
+      await fixture({
+        admin: true,
+        date: today,
+        schedules: [twoWeeks],
+      }).service.setBillingSchedule(token, setting)
+    ).kind,
+  ).toBe("conflict");
+  expect(
+    (await fixture().service.setBillingSchedule(token, setting)).kind,
+  ).toBe("denied");
+  const receipt = {
+    digest: invoiceDigest({ action: "coaching-period", input: setting }),
+    result: { version: 1, startsOn: "2026-11-02" },
+  };
+  expect(
+    await fixture({ admin: true, receipt }).service.setBillingSchedule(
+      token,
+      setting,
+    ),
+  ).toEqual({ kind: "ready", value: receipt.result });
+});
+it("PERIOD832-04 once periods have started only the length changes, from the day after the current period", async () => {
+  const started = () =>
+    fixture({ admin: true, date: today, schedules: [twoWeeks] });
+  const weekly = {
+    ownerId: id,
+    unit: "days" as const,
+    days: 7,
+    expectedVersion: 1,
+    operationId: key,
+  };
+  // 20 October is in the period 19 October to 1 November.
+  const f = started();
+  expect(await f.service.setBillingSchedule(token, weekly)).toEqual({
+    kind: "ready",
+    value: { version: 2, startsOn: "2026-11-02" },
+  });
+  // No saved period is read or rewritten for a change of length.
+  expect(
+    f.query.mock.calls.some(
+      ([q]) =>
+        q.includes("max(period_end)") || q.includes("UPDATE coaching_months"),
+    ),
+  ).toBe(false);
+  expect(
+    (
+      await started().service.setBillingSchedule(token, {
+        ...weekly,
+        startsOn: "2026-10-26",
+      })
+    ).kind,
+  ).toBe("invalid");
+  // The same length again is not a change.
+  expect(
+    (await started().service.setBillingSchedule(token, { ...weekly, days: 14 }))
+      .kind,
+  ).toBe("invalid");
+  // A pending change is replaced by a newer one from the same day.
+  const pending = [
+    twoWeeks,
+    {
+      ...twoWeeks,
+      version: 2,
+      days: 7,
+      startsOn: "2026-11-02",
+      setOn: "2026-10-19",
+    },
+  ];
+  expect(
+    await fixture({
+      admin: true,
+      date: today,
+      schedules: pending,
+    }).service.setBillingSchedule(token, {
+      ownerId: id,
+      unit: "month",
+      expectedVersion: 2,
+      operationId: key,
+    }),
+  ).toEqual({ kind: "ready", value: { version: 3, startsOn: "2026-11-02" } });
+  // Before a first period starts, the start date can still be moved, but
+  // the same setting again is refused.
+  const unstarted = [{ ...twoWeeks, startsOn: "2026-11-02" }];
+  const again = { ...setting, expectedVersion: 1 };
+  expect(
+    (
+      await fixture({
+        admin: true,
+        date: today,
+        schedules: unstarted,
+      }).service.setBillingSchedule(token, again)
+    ).kind,
+  ).toBe("invalid");
+  expect(
+    await fixture({
+      admin: true,
+      date: today,
+      schedules: unstarted,
+    }).service.setBillingSchedule(token, { ...again, startsOn: "2026-11-09" }),
+  ).toEqual({ kind: "ready", value: { version: 2, startsOn: "2026-11-09" } });
+});
+it("PERIOD832-02/05 the overview opens the current period, lists started periods and refuses keys that are not the student's periods", async () => {
+  const open = (selected?: string, schedules: unknown[] = [twoWeeks]) =>
+    fixture({ entry: null, date: today, schedules }).service.coachingOverview(
+      token,
+      selected,
+    );
+  const current = await open();
+  if (current.kind !== "ready") throw Error("Expected overview");
+  expect(current.value).toMatchObject({
+    month: "2026-10-19",
+    date: today,
+    period: {
+      key: "2026-10-19",
+      start: "2026-10-19",
+      end: "2026-11-01",
+      days: 14,
+    },
+    billing: { version: 1, nextStart: "2026-11-02", schedules: [twoWeeks] },
+  });
+  expect(current.value.periods.map((p) => p.key)).toEqual([
+    "2026-10-19",
+    "2026-10-05",
+  ]);
+  expect((await open("2026-10-05")).kind).toBe("ready");
+  // Not a period start, not started yet, and a month the periods reach into.
+  for (const selected of ["2026-10-12", "2026-11-02", "2026-10", "2026-11"])
+    expect((await open(selected)).kind).toBe("invalid");
+  // A calendar month wholly before the first period is still reportable.
+  const earlier = await open("2026-09");
+  expect(earlier.kind === "ready" && earlier.value.period).toEqual({
+    key: "2026-09",
+    start: "2026-09-01",
+    end: "2026-09-30",
+    days: 30,
+  });
+  // Saved hours keep their own dates whatever the setting says now.
+  const saved = await fixture({
+    entry: periodDraft,
+    date: today,
+    schedules: [],
+  }).service.coachingOverview(token, "2026-10-19");
+  expect(saved.kind === "ready" && saved.value.period).toEqual({
+    key: "2026-10-19",
+    start: "2026-10-19",
+    end: "2026-11-01",
+    days: 14,
+  });
+  // Before a first period starts mid-month, the opening view has no period.
+  const waiting = await open(undefined, [
+    { ...twoWeeks, startsOn: "2026-10-26" },
+  ]);
+  expect(waiting.kind === "ready" && waiting.value).toMatchObject({
+    month: "2026-10",
+    period: null,
+    periods: [],
+    billing: { nextStart: null },
+  });
+  // With no setting at all, the calendar month as before.
+  const legacy = await open(undefined, []);
+  expect(legacy.kind === "ready" && legacy.value).toMatchObject({
+    month: "2026-10",
+    period: { key: "2026-10", days: 31 },
+    periods: [],
+    billing: { version: 0, nextStart: null, schedules: [] },
+  });
+});
+it("PERIOD832-02/06 hours are saved for a started period within its length, and submitted at the rate for its first day", async () => {
+  const input = {
+    ...save,
+    month: "2026-10-19",
+    minutes: 14 * 1440,
+    expectedRevision: 0,
+  };
+  const f = fixture({ entry: null, date: today, schedules: [twoWeeks] });
+  expect((await f.service.saveCoaching(token, input)).kind).toBe("ready");
+  expect(
+    f.query.mock.calls
+      .find(([q]) => q.includes("INSERT INTO coaching_months"))![1]!
+      .slice(-2),
+  ).toEqual(["2026-10-19", "2026-11-01"]);
+  for (const change of [
+    { minutes: 14 * 1440 + 1 },
+    { month: "2026-10-20" },
+    { month: "2026-11-02" },
+    { month: "2026-10" },
+    { minutes: 1.5 },
+  ])
+    expect(
+      (
+        await fixture({
+          entry: null,
+          date: today,
+          schedules: [twoWeeks],
+        }).service.saveCoaching(token, { ...input, ...change })
+      ).kind,
+    ).toBe("invalid");
+  // A saved one-day period keeps its own length.
+  expect(
+    (
+      await fixture({
+        entry: { ...periodDraft, periodEnd: "2026-10-19" },
+        date: today,
+      }).service.saveCoaching(token, {
+        ...input,
+        minutes: 1441,
+        expectedRevision: 1,
+      })
+    ).kind,
+  ).toBe("invalid");
+  const s = fixture({ entry: periodDraft, date: today });
+  expect(
+    (await s.service.submitCoaching(token, { ...submit, month: "2026-10-19" }))
+      .kind,
+  ).toBe("ready");
+  expect(
+    s.query.mock.calls.find(
+      ([q]) =>
+        q.includes("FROM coaching_rates") && q.includes("effective_month<=$2"),
+    )![1],
+  ).toEqual([id, "2026-10"]);
+  expect(
+    JSON.parse(
+      s.query.mock.calls.find(([q]) =>
+        q.includes("INSERT INTO coaching_submissions"),
+      )![1]![3] as string,
+    ),
+  ).toMatchObject({
+    month: "2026-10-19",
+    periodStart: "2026-10-19",
+    periodEnd: "2026-11-01",
+  });
+  // An administrator's change must fit the period too.
+  expect(
+    (
+      await fixture({
+        admin: true,
+        entry: { ...periodDraft, periodEnd: "2026-10-19" },
+      }).service.overrideCoachingHours(token, {
+        ...override,
+        month: "2026-10-19",
+        minutes: 1441,
+      })
+    ).kind,
+  ).toBe("invalid");
+});
+it("PERIOD832-03 a defined period is invoiced only after its last day, and the invoice names its dates", async () => {
+  const entry = {
+    ...submitted,
+    month: "2026-10-19",
+    periodStart: "2026-10-19",
+    periodEnd: "2026-11-01",
+  };
+  const input = { ...action, month: "2026-10-19" };
+  const issue = input;
+  for (const date of ["2026-10-20", "2026-11-01"])
+    expect(
+      (
+        await fixture({ admin: true, entry, date }).service.issueCoaching(
+          token,
+          issue,
+        )
+      ).kind,
+    ).toBe("invalid");
+  const f = fixture({ admin: true, entry, date: "2026-11-02" });
+  expect((await f.service.issueCoaching(token, issue)).kind).toBe("ready");
+  const inserted = f.query.mock.calls.find(([q]) =>
+    q.includes("INSERT INTO simple_invoices"),
+  )![1]!;
+  expect(inserted.at(-1)).toBe("2026-10-19");
+  expect(JSON.parse(inserted[2] as string)).toMatchObject({
+    lines: [{ description: "Coaching · 2026-10-19 to 2026-11-01" }],
+    coaching: {
+      month: snapshot.month,
+      periodStart: "2026-10-19",
+      periodEnd: "2026-11-01",
+    },
+  });
+  // A calendar month is unchanged: invoiced during the month, named by month.
+  const legacy = fixture({ admin: true, entry: submitted, date: today });
+  const monthly = action;
+  expect((await legacy.service.issueCoaching(token, monthly)).kind).toBe(
+    "ready",
+  );
+  const document = JSON.parse(
+    legacy.query.mock.calls.find(([q]) =>
+      q.includes("INSERT INTO simple_invoices"),
+    )![1]![2] as string,
+  );
+  expect(document.lines[0].description).toBe("Coaching · 2026-10");
+  expect(document.coaching).not.toHaveProperty("periodStart");
+  // Returning a period for correction takes its key like any other.
+  expect(
+    (await fixture({ admin: true, entry }).service.returnCoaching(token, input))
+      .kind,
+  ).toBe("ready");
 });

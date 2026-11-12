@@ -291,6 +291,7 @@ export async function migrate(pool: Pool) {
       "138-coaching-agreed-changes.sql",
       "139-student-session-practice-limits.sql",
       "140-coaching-hours-overrides.sql",
+      "141-coaching-billing-periods.sql",
     ].map((name) =>
       readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8"),
     ),

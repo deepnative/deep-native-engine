@@ -29,8 +29,13 @@ CREATE TRIGGER coaching_hours_overrides_immutable BEFORE UPDATE OR DELETE ON coa
  FOR EACH ROW EXECUTE FUNCTION preserve_coaching_history();
 -- Staff change history names who changed a student's hours and when; the
 -- reason stays on the record above. Migration 110 is guarded on this one.
+-- Every migration re-runs at each start; 141 widens this, and its rows must survive a restart.
+DO $$ BEGIN
+IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=141) THEN
 ALTER TABLE billing_change_events DROP CONSTRAINT IF EXISTS billing_change_events_action_check;
 ALTER TABLE billing_change_events ADD CONSTRAINT billing_change_events_action_check
  CHECK(action IN ('plan_offered','rate_set','hours_returned','hours_overridden','coaching_invoice_issued','monthly_invoice_issued','payment_recorded','payment_refunded','invoice_voided','test_payment_received','test_payment_failed','test_refund_recorded'));
+END IF;
+END $$;
 INSERT INTO schema_migrations(version) VALUES(140) ON CONFLICT DO NOTHING;
 COMMIT;

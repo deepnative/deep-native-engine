@@ -603,7 +603,7 @@ it("ADMIN-LAYOUT-01 groups session controls and tool links as spaced button rows
   expectPortalActions(page.text, [
     ["/operator", "Administration console"],
     ["/operator/invoices", "Courses and invoices"],
-    ["/operator/coaching", "Monthly coaching"],
+    ["/operator/coaching", "Coaching administration"],
     ["/staff", "Staff tools"],
     ["/account", "My learning account"],
   ]);
@@ -670,9 +670,9 @@ it("ADMIN-LAYOUT-02 separates console areas into cards with button actions and w
   expectPortalActions(selected, [
     ["#learners", "Learners"],
     [`/operator/invoices?ownerId=${id}`, "Compose courses for this learner"],
-    [`/operator/coaching/${id}`, "Monthly coaching and rates"],
+    [`/operator/coaching/${id}`, "Coaching hours and rates"],
     ["/operator/invoices", "Courses and invoices"],
-    ["/operator/coaching", "Monthly coaching"],
+    ["/operator/coaching", "Coaching administration"],
     // DIAG-02: read-only checks are one step from the console.
     ["/operator/diagnostics", "Diagnostics"],
     ["/admin", "Administrator session"],

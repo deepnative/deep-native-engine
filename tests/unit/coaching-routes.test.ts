@@ -44,6 +44,10 @@ const value = {
   entry,
   months: [{ month, state: "draft" }],
   overrides: [],
+  period: { key: "2026-10", start: "2026-10-01", end: "2026-10-31", days: 31 },
+  periods: [],
+  date: "2026-10-20",
+  billing: { schedules: [], version: 0, nextStart: null },
   sample: true,
 };
 const contractor = (over: Record<string, unknown>) => ({
@@ -123,6 +127,9 @@ function fixture(disabled = false) {
     overrideCoachingHours: vi
       .fn()
       .mockResolvedValue(ready({ month, revision: 2 })),
+    setBillingSchedule: vi
+      .fn()
+      .mockResolvedValue(ready({ version: 1, startsOn: "2026-11-02" })),
     issueCoaching: vi.fn().mockResolvedValue(ready({ invoiceId: id })),
   };
   const app = express();
@@ -174,12 +181,12 @@ it("HOUR01/02/09 keeps empty, disabled, sample and configured states honest and 
   expect((await f.get("/account/coaching")).text).toContain(
     "Request coaching invoice",
   );
-  expect((await f.get("/operator/coaching")).text).toContain("Pending months");
+  expect((await f.get("/operator/coaching")).text).toContain("Pending periods");
   f.service.adminOverview.mockResolvedValueOnce(
     ready({ members: [], coachingPending: [] }),
   );
   expect((await f.get("/operator/coaching")).text).toContain(
-    "No submitted months",
+    "No submitted hours await review",
   );
   for (const path of ["/account/coaching", `/operator/coaching/${id}`]) {
     const r = await f.get(path);
@@ -347,7 +354,7 @@ it("DASH-01/02 shows the month's summary and a contractor table above the existi
   expect(html.indexOf("Hours for September 2026")).toBeLessThan(
     html.indexOf("<h2>Members</h2>"),
   );
-  expect(html).toContain("<h2>Pending months</h2>");
+  expect(html).toContain("<h2>Pending periods</h2>");
   const sorted = async (sort: string) =>
     order((await f.get(`/operator/coaching?month=2026-09&sort=${sort}`)).text);
   expect(await sorted("hours")).toEqual([
@@ -701,7 +708,7 @@ it("ADMIN-LAYOUT-02 coaching administration groups its lists in cards and naviga
   );
   expect(main).toContain('<section class="portal-card"><h2>Members</h2>');
   expect(main).toContain(
-    '<section class="portal-card"><h2>Pending months</h2>',
+    '<section class="portal-card"><h2>Pending periods</h2>',
   );
   const review = (await f.get(`/operator/coaching/${id}`)).text;
   expectPortalActions(review, [
@@ -784,7 +791,7 @@ it("HOURTABLE-01/02/03 lists saved months as a table with hours, amount, status 
   )?.[0];
   expect(table).toBeDefined();
   expect(page).toContain('<div class="table-scroll" role="region"');
-  for (const header of ["Month", "Hours", "Amount", "Status", "Invoice"])
+  for (const header of ["Period", "Hours", "Amount", "Status", "Invoice"])
     expect(table).toContain(`<th scope="col">${header}</th>`);
   const row = (label: string) =>
     table!.match(
@@ -812,7 +819,7 @@ it("HOURTABLE-01/02/03 lists saved months as a table with hours, amount, status 
   expect(row("May 2026")).toContain("Void");
   // No rate applies to a month before the first effective rate.
   expect(row("January 2025")).toContain("No rate");
-  expect(page).not.toContain("<h2>Saved months</h2><ul>");
+  expect(page).not.toContain("<h2>Saved periods</h2><ul>");
 
   // HOURTABLE-03: the administrator's member view links admin invoices.
   const admin = mainHtml(
@@ -846,7 +853,7 @@ it("HOURTABLE-01 prices drafts at the newest applicable rate and labels an invoi
   f.service.coachingOverview.mockResolvedValue(ready({ ...value, months: [] }));
   expect(
     mainHtml((await f.get(`/account/coaching?month=${month}`)).text),
-  ).toContain("<p>No saved months.</p>");
+  ).toContain("<p>No saved periods.</p>");
 });
 
 it("GAPS-03 tells the administrator to set a missing rate, and the member to ask for one", async () => {
@@ -1116,7 +1123,7 @@ it("OVR832-01/02/07 an administrator gets a change-hours form for saved or submi
   expect(member).not.toContain("Change this student");
   expect(member).not.toContain("Ada");
   expect(member).toContain(
-    "An administrator changed the hours you reported for this month. Your earlier figure is kept below.",
+    "An administrator changed the hours you reported here. Your earlier figure is kept below.",
   );
   expect(member).toContain(
     "November 12, 2026 · from <strong>10 hours 0 minutes</strong> to <strong>8 hours 0 minutes</strong><p>Reason: Two &lt;sessions&gt; were cancelled</p>",
@@ -1220,13 +1227,13 @@ it("OVR832-01/04/05/08 a posted change carries exact minutes, reason and revisio
   const missing = await f.post(`/operator/coaching/${id}/override`, fields);
   expect(missing.status).toBe(404);
   expect(missing.text).toContain(
-    "The student has not saved hours for this month, so there is nothing to change. An administrator cannot enter new hours for a student.",
+    "The student has not saved hours for this period, so there is nothing to change. An administrator cannot enter new hours for a student.",
   );
   f.service.overrideCoachingHours.mockResolvedValueOnce({ kind: "invalid" });
   const invalid = await f.post(`/operator/coaching/${id}/override`, fields);
   expect(invalid.status).toBe(422);
   expect(invalid.text).toContain(
-    "The hours were not changed. Give a reason, and hours that fit the month and differ from the current figure.",
+    "The hours were not changed. Give a reason, and hours that fit the period and differ from the current figure.",
   );
   f.service.overrideCoachingHours.mockResolvedValueOnce({ kind: "conflict" });
   const stale = await f.post(`/operator/coaching/${id}/override`, fields);
@@ -1236,4 +1243,395 @@ it("OVR832-01/04/05/08 a posted change carries exact minutes, reason and revisio
   expect(
     (await off.post(`/operator/coaching/${id}/override`, fields)).status,
   ).toBe(503);
+});
+
+// #832 slice B: administrator-defined billing periods.
+const twoWeeks = {
+    version: 1,
+    unit: "days",
+    days: 14,
+    startsOn: "2026-10-05",
+    setOn: "2026-10-01",
+  },
+  current = {
+    key: "2026-10-19",
+    start: "2026-10-19",
+    end: "2026-11-01",
+    days: 14,
+  },
+  first = {
+    key: "2026-10-05",
+    start: "2026-10-05",
+    end: "2026-10-18",
+    days: 14,
+  },
+  periodic = {
+    ...value,
+    month: "2026-10-19",
+    entry: null,
+    months: [],
+    period: current,
+    periods: [current, first],
+    date: "2026-10-20",
+    billing: { schedules: [twoWeeks], version: 1, nextStart: "2026-11-02" },
+  },
+  periodEntry = {
+    ...entry,
+    month: "2026-10-19",
+    periodStart: "2026-10-19",
+    periodEnd: "2026-11-01",
+  };
+it("PERIOD832-01/04 the administrator sees the billing period and a form that asks for a start date only before periods have started", async () => {
+  const f = fixture();
+  const none = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(none).toContain('<h2 id="billing-period">Billing period</h2>');
+  expect(none).toContain(
+    "No billing period is set, so this student reports hours by calendar month. Set one to have them report per period; 2 weeks is the usual choice.",
+  );
+  expect(none).toContain(
+    `<form method="post" action="/operator/coaching/${id}/billing-period">`,
+  );
+  // Two weeks is the default; the others are offered.
+  expect(none).toContain(
+    '<option value="14" selected>2 weeks</option><option value="7">1 week</option><option value="month">1 month</option><option value="custom">Custom number of days</option>',
+  );
+  expect(none).toContain(
+    '<label>First period starts on (UTC date)<input name="startsOn" type="date" value="" required></label>',
+  );
+  expect(none).toContain("<button>Save billing period</button>");
+  // The student is told nothing about a setting that does not exist.
+  expect((await f.get("/account/coaching")).text).not.toContain(
+    "billing-period",
+  );
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...periodic,
+      billing: {
+        ...periodic.billing,
+        version: 2,
+        schedules: [
+          twoWeeks,
+          { ...twoWeeks, version: 2, days: 10, startsOn: "2026-11-02" },
+        ],
+      },
+    }),
+  );
+  const set = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(set).toContain(
+    "This student’s billing period: <strong>2 weeks, from 5 Oct 2026; then 10 days from 2 Nov 2026</strong>.",
+  );
+  expect(set).toContain(
+    "A new length applies from 2 Nov 2026, the day after the current period ends. Periods already saved, submitted or invoiced are not changed.",
+  );
+  expect(set).not.toContain('name="startsOn"');
+  expect(set).toContain('<option value="custom" selected>');
+  expect(set).toContain(
+    'name="days" type="number" min="1" max="31" step="1" value="10"',
+  );
+  expect(set).toContain('name="revision" value="2"');
+  const member = (await f.get("/account/coaching")).text;
+  expect(member).toContain('<h2 id="billing-period">Your billing period</h2>');
+  expect(member).toContain(
+    "Your administrator set your billing period: <strong>2 weeks, from 5 Oct 2026; then 10 days from 2 Nov 2026</strong>.",
+  );
+  expect(member).not.toContain("Save billing period");
+  // A one-month setting that has not started yet.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      billing: {
+        version: 1,
+        nextStart: null,
+        schedules: [
+          { ...twoWeeks, unit: "month", days: null, startsOn: "2026-11-15" },
+        ],
+      },
+    }),
+  );
+  const pending = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(pending).toContain("<strong>1 month from 15 Nov 2026</strong>");
+  expect(pending).toContain('<option value="month" selected>');
+  expect(pending).toContain('name="startsOn" type="date" value="2026-11-15"');
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...periodic,
+      billing: {
+        ...periodic.billing,
+        schedules: [{ ...twoWeeks, days: 7 }],
+      },
+    }),
+  );
+  expect((await f.get(`/operator/coaching/${id}`)).text).toContain(
+    '<option value="7" selected>1 week</option>',
+  );
+});
+it("PERIOD832-02 a student on defined periods picks a started period, saves within its length and sees period wording", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(ready(periodic));
+  const page = (await f.get("/account/coaching")).text;
+  expect(page).toContain(
+    '<label>Billing period<select name="month"><option value="2026-10-19" selected>19 Oct 2026 to 1 Nov 2026 (current)</option><option value="2026-10-05">5 Oct 2026 to 18 Oct 2026</option></select></label><button class="secondary">Open period</button>',
+  );
+  expect(page).not.toContain("Calendar month (UTC)");
+  expect(page).toContain("<h2>19 Oct 2026 to 1 Nov 2026</h2>");
+  expect(page).toContain(
+    "Choose the billing period you want to invoice, enter your coaching hours and minutes",
+  );
+  expect(page).toContain(
+    "Requesting an invoice submits the saved period for administrator review",
+  );
+  expect(page).toContain('name="hours" type="number" min="0" max="336"');
+  expect(page).toContain('name="month" value="2026-10-19"');
+  expect(page).toContain("reusable billing recipient for later periods");
+  expect(page).toContain("effective October 2026");
+  // An earlier calendar month the student saved stays in the picker.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...periodic,
+      month,
+      period: value.period,
+      entry,
+      months: [
+        { month, state: "draft", minutes: 90 },
+        {
+          month: "2026-10-19",
+          periodStart: "2026-10-19",
+          periodEnd: "2026-11-01",
+          state: "draft",
+          minutes: 60,
+        },
+      ],
+    }),
+  );
+  const earlier = (await f.get("/account/coaching?month=2026-10")).text;
+  expect(earlier).toContain(
+    '<option value="2026-10" selected>October 2026</option><option value="2026-10-19">19 Oct 2026 to 1 Nov 2026 (current)</option>',
+  );
+  expect(earlier).toContain('max="744"');
+  expect(earlier).toContain(
+    `<a href="/account/coaching?month=2026-10-19">19 Oct 2026 to 1 Nov 2026</a>`,
+  );
+  expect(earlier).toContain(
+    `<a href="/account/coaching?month=2026-10">October 2026</a>`,
+  );
+  // Confirming a saved period names its dates.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...periodic, entry: periodEntry }),
+  );
+  expect((await f.get("/account/coaching")).text).toContain(
+    "I confirm this saved duration, recipient and exact rate version for 19 Oct 2026 to 1 Nov 2026.",
+  );
+  // Before the first period starts mid-month there is nothing to report yet.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      entry: null,
+      months: [],
+      period: null,
+      billing: {
+        version: 1,
+        nextStart: null,
+        schedules: [{ ...twoWeeks, startsOn: "2026-10-26" }],
+      },
+    }),
+  );
+  for (const [path, whose] of [
+    ["/account/coaching", "Your"],
+    [`/operator/coaching/${id}`, "This student’s"],
+  ]) {
+    const waiting = (await f.get(path!)).text;
+    expect(waiting).toContain(
+      `<h2>No billing period has started</h2><p role="status">${whose} first billing period starts on 26 Oct 2026. Hours can be reported from that day.</p>`,
+    );
+    expect(waiting).not.toContain("Save coaching draft");
+    expect(waiting).not.toContain("An administrator cannot enter");
+  }
+});
+it("PERIOD832-03 the administrator is offered the invoice only after the period's last day", async () => {
+  const f = fixture();
+  const review = {
+    ...periodic,
+    entry: {
+      ...periodEntry,
+      state: "submitted",
+      revision: 2,
+      submittedRevision: 2,
+      snapshot: {
+        ...snapshot,
+        month: "2026-10-19",
+        periodStart: "2026-10-19",
+        periodEnd: "2026-11-01",
+      },
+    },
+  };
+  for (const date of ["2026-10-20", "2026-11-01"]) {
+    f.service.coachingOverview.mockResolvedValue(ready({ ...review, date }));
+    const early = (await f.get(`/operator/coaching/${id}`)).text;
+    expect(early).toContain(
+      '<p role="status">This period ends on 1 Nov 2026. Its invoice can be issued from 2 Nov 2026 (UTC date); until then you can change the hours or return them for correction.</p>',
+    );
+    expect(early).not.toContain("Issue coaching invoice");
+    expect(early).toContain("Return period for correction");
+    expect(early).toContain(
+      "The period stays awaiting review at the rate the student confirmed",
+    );
+    expect(early).toContain(
+      "<h2>Submitted snapshot</h2><p>19 Oct 2026 to 1 Nov 2026 · ",
+    );
+  }
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...review, date: "2026-11-02" }),
+  );
+  const ended = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(ended).toContain("<button>Issue coaching invoice</button>");
+  expect(ended).not.toContain("Its invoice can be issued from");
+  // A crafted or racing post is refused with the reason.
+  f.service.issueCoaching.mockResolvedValueOnce({ kind: "invalid" });
+  const refused = await f.post(`/operator/coaching/${id}/issue`, {
+    month: "2026-10-19",
+    action: "issue",
+    confirm: "issue",
+    tax: "0.00",
+  });
+  expect(refused.status).toBe(422);
+  expect(refused.text).toContain(
+    "The invoice was not issued. A billing period can be invoiced only after its last day (UTC date)",
+  );
+  // An invoiced period words its correction by period; with no hours saved,
+  // the administrator is told so by period.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...review,
+      entry: { ...review.entry, state: "invoiced", revision: 3, invoiceId: id },
+    }),
+  );
+  expect((await f.get(`/operator/coaching/${id}`)).text).toContain(
+    "To correct an issued period, the administrator must first void its unpaid invoice.",
+  );
+  f.service.coachingOverview.mockResolvedValue(ready(periodic));
+  const empty = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(empty).toContain(
+    "The student has not saved hours for this period. An administrator cannot enter new hours",
+  );
+});
+it("PERIOD832-01/04/10 a posted billing period carries the exact length, start date and version; refusals say why", async () => {
+  const f = fixture();
+  const path = `/operator/coaching/${id}/billing-period`;
+  const sent = async (fields: Record<string, string>) => {
+    f.service.setBillingSchedule.mockClear();
+    const response = await f.post(path, { revision: "0", ...fields });
+    return [response.status, f.service.setBillingSchedule.mock.calls[0]?.[1]];
+  };
+  expect(
+    await sent({ length: "14", days: "", startsOn: "2026-11-02" }),
+  ).toEqual([
+    303,
+    {
+      ownerId: id,
+      unit: "days",
+      days: 14,
+      startsOn: "2026-11-02",
+      expectedVersion: 0,
+      operationId: id,
+    },
+  ]);
+  expect((await sent({ length: "7", revision: "3" }))[1]).toEqual({
+    ownerId: id,
+    unit: "days",
+    days: 7,
+    expectedVersion: 3,
+    operationId: id,
+  });
+  expect((await sent({ length: "month", days: "" }))[1]).toMatchObject({
+    unit: "month",
+  });
+  expect((await sent({ length: "month" }))[1]).not.toHaveProperty("days");
+  expect((await sent({ length: "custom", days: "31" }))[1]).toMatchObject({
+    unit: "days",
+    days: 31,
+  });
+  const ok = await f.post(path, { length: "14", revision: "0" });
+  expect(ok.headers.location).toBe(`/operator/coaching/${id}#billing-period`);
+  const refusals: Record<string, string>[] = [
+    { length: "21" },
+    { length: "custom", days: "" },
+    { length: "custom", days: "0" },
+    { length: "custom", days: "32" },
+    { length: "custom", days: "1.5" },
+    { length: "7", days: "9" },
+    { days: "9" },
+    { length: "14", revision: "x" },
+  ];
+  for (const bad of refusals) {
+    const [status, call] = await sent(bad);
+    expect(status).toBe(422);
+    expect(call).toBeUndefined();
+  }
+  const invalid = await f.post(path, { length: "custom", days: "40" });
+  expect(invalid.text).toContain(
+    "The billing period was not saved. Choose 1 week, 2 weeks or 1 month, or choose a custom number of days and enter 1 to 31",
+  );
+  f.service.setBillingSchedule.mockResolvedValueOnce({ kind: "invalid" });
+  const late = await f.post(path, { length: "14", startsOn: "2026-10-01" });
+  expect(late.status).toBe(422);
+  expect(late.text).toContain(
+    "A first period must start on a valid date within a year of today, after the last month or period the student already saved hours for.",
+  );
+  f.service.setBillingSchedule.mockResolvedValueOnce({ kind: "conflict" });
+  expect((await f.post(path, { length: "14" })).status).toBe(409);
+  expect(
+    (await f.post(path, { length: "14" }, "https://attacker.invalid")).status,
+  ).toBe(403);
+  expect((await f.post(path, { length: "14", extra: "1" })).status).toBe(403);
+  expect(
+    (await f.post("/account/coaching/billing-period", { length: "14" })).status,
+  ).toBe(404);
+  expect((await fixture(true).post(path, { length: "14" })).status).toBe(503);
+});
+it("PERIOD832-08 pending periods and the dashboard name and open the right period", async () => {
+  const f = fixture();
+  f.service.adminOverview.mockResolvedValue(
+    ready({
+      members: [{ id }],
+      coachingPending: [
+        {
+          ownerId: id,
+          month: "2026-10-05",
+          periodStart: "2026-10-05",
+          periodEnd: "2026-10-18",
+          displayName: "Ada",
+        },
+        { ownerId: id, month, displayName: null },
+      ],
+    }),
+  );
+  f.service.coachingDashboard.mockResolvedValue(
+    ready({
+      ...dashboard,
+      contractors: [
+        contractor({ displayName: "Period shown", periodKey: "2026-09-21" }),
+        contractor({ displayName: "Current period", periodKey: null }),
+        contractor({ displayName: "Earlier shape" }),
+      ],
+    }),
+  );
+  const page = (await f.get("/operator/coaching")).text;
+  expect(page).toContain(
+    `<a href="/operator/coaching/${id}?month=2026-10-05">Ada · 5 Oct 2026 to 18 Oct 2026</a>`,
+  );
+  expect(page).toContain(
+    `<a href="/operator/coaching/${id}?month=${month}">Name needed · October 2026</a>`,
+  );
+  expect(page).toContain(
+    `<a href="/operator/coaching/${id}?month=2026-09-21">Period shown</a>`,
+  );
+  expect(page).toContain(
+    `<a href="/operator/coaching/${id}">Current period</a>`,
+  );
+  expect(page).toContain(
+    `<a href="/operator/coaching/${id}?month=2026-09">Earlier shape</a>`,
+  );
+  expect(page).toContain(
+    "A billing period shorter or longer than a calendar month counts in the month it ends",
+  );
 });

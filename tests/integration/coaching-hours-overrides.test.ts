@@ -299,7 +299,7 @@ it("OVR832-03 an administrator cannot enter hours for a month the student has no
   });
   expect(refused.status).toBe(404);
   expect(refused.text).toContain(
-    "The student has not saved hours for this month, so there is nothing to change.",
+    "The student has not saved hours for this period, so there is nothing to change.",
   );
   expect(
     (
@@ -456,7 +456,7 @@ it("OVR832-07 the student reads the change with their earlier figure, it is in D
       records[key] = [...(records[key] ?? []), ...rows];
     cursor = result.payload.page.nextCursor ?? undefined;
   } while (cursor);
-  expect(version).toBe("local-member-records-v51");
+  expect(version).toBe("local-member-records-v52");
   expect(records.coachingHoursOverrides).toEqual([
     {
       month,

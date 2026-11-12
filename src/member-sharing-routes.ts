@@ -82,7 +82,7 @@ function sharingPage(v: SharingSummary, contributionsOn: boolean) {
   }</section>
 <section class="reading" aria-labelledby="sharing-staff"><h2 id="sharing-staff">Coaches and administrators</h2><p>${
     v.coaches
-      ? `You have ${plural(v.coaches, "coach", "coaches")}. A coach sees your display name, monthly coaching hours and their status.`
+      ? `You have ${plural(v.coaches, "coach", "coaches")}. A coach sees your display name, coaching hours and their status.`
       : "No coach is assigned to you."
   }</p><p>Account administrators see your display name, starting point, goal, coaching summary, and enrollment and billing summaries. They can also check whether an email address belongs to an account.</p><p>These pages don't show your private writing or files.</p><p>${
     v.staffWithAccess

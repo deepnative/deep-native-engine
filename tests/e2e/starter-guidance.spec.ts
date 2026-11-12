@@ -119,7 +119,7 @@ for (const journey of journeys)
       const accountActions = page.getByRole("navigation", {
         name: "Learning account",
       });
-      for (const label of ["My account", "Sign out", "Monthly coaching hours"])
+      for (const label of ["My account", "Sign out", "Coaching hours"])
         await expect(
           accountActions.getByRole("link", { name: label, exact: true }),
         ).toBeVisible();

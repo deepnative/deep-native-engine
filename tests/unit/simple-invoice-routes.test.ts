@@ -708,7 +708,7 @@ it("ADMIN-LAYOUT-02 course billing administration titles each task card and offe
   const html = (await f.get("/operator/invoices")).text;
   expectPortalActions(html, [
     ["/operator", "Administration console"],
-    ["/operator/coaching", "Monthly coaching"],
+    ["/operator/coaching", "Coaching administration"],
   ]);
   const main = mainHtml(html);
   expect(main).toContain(

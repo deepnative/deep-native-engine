@@ -3018,6 +3018,15 @@
       "expected": "No way to enter hours is offered before the student saves them; a change needs a reason; the month stays awaiting review at 8 hours and CAD 960.00 at the confirmed rate; the student sees the earlier figure, the new figure and the reason without the administrator, on the page and in the download; the invoice is for the changed figure; an invoiced month offers no change; Change history names the change",
       "issues": [832],
       "critical": false
+    },
+    {
+      "id": "L339",
+      "actor": "Student and platform administrator",
+      "preconditions": "Dedicated synthetic PostgreSQL database dropped afterwards, local staff entry, sample invoicing, invented student, rate and hours, dates relative to the database's UTC date, port0 server; desktop/mobile Chromium",
+      "steps": "PERIOD832-01/02/03/04/10: the student registers and opens Coaching hours; the administrator sets a rate and a two-week billing period that started 20 days ago; the student opens the ended and the running period, saves hours for each and requests both invoices; the administrator opens both from Pending periods, issues the ended one, then changes the length to one week; the student reopens Coaching hours and the invoice; the administrator opens Change history",
+      "expected": "Two weeks is preselected and a first start date is asked once; the student sees their billing period and a period picker in place of the month field; the running period says from when it can be invoiced and offers no issue button; the ended period's invoice names its dates and is for 10 hours; one week is shown as starting the day after the running period ends, and the saved periods and picker are unchanged; Change history names both settings",
+      "issues": [832],
+      "critical": false
     }
   ],
   "fullMvp": [

@@ -3,7 +3,13 @@ import { coachingMonth } from "./coaching-values.ts";
 import { hash } from "./store.ts";
 
 /** One person's saved month as a coach sees it: hours only, no billing. */
-export type CoachRow = { name: string | null; minutes: number; status: string };
+export type CoachRow = {
+  name: string | null;
+  minutes: number;
+  status: string;
+  /** #832: the dates of an administrator-defined period; absent for a month. */
+  period?: { key: string; start: string; end: string };
+};
 export type CoachSummaryResult =
   | {
       kind: "ready";
@@ -57,19 +63,24 @@ export function coachViewStore(pool: Pool): CoachView {
           minutes: number;
           state: string;
           returned: boolean;
+          key: string;
+          start: string;
+          end: string;
         }>(
           `SELECT l.display_name AS "displayName",m.minutes,m.state,
-                  m.return_reason IS NOT NULL AS returned
+                  m.return_reason IS NOT NULL AS returned,m.month AS key,
+                  to_char(m.period_start,'YYYY-MM-DD') AS start,to_char(m.period_end,'YYYY-MM-DD') AS "end"
              FROM coaching_months m
              JOIN learners l ON l.id=m.owner_id
              JOIN workspaces w ON w.owner_principal_id=l.id AND w.deleting_at IS NULL
-            WHERE m.month=$1 AND m.owner_id IN (
+            -- #832: a billing period counts in the month it ends in.
+            WHERE to_char(m.period_end,'YYYY-MM')=$1 AND m.owner_id IN (
               -- #684 COACHLINK-02: only learners assigned to this coach.
               SELECT a.learner_id FROM coach_assignments a
                 JOIN member_email_identities i ON i.email_hash=a.coach_email_hash
                 JOIN principals c ON c.id=i.principal_id
                WHERE c.token_hash=$2)
-            ORDER BY l.display_name NULLS LAST,l.id LIMIT 200`,
+            ORDER BY l.display_name NULLS LAST,l.id,m.period_start LIMIT 200`,
           [selected, hash(memberToken)],
         );
         return {
@@ -82,6 +93,9 @@ export function coachViewStore(pool: Pool): CoachView {
               name: r.displayName,
               minutes: r.minutes,
               status: status(r.state, r.returned),
+              ...(r.key.length === 10
+                ? { period: { key: r.key, start: r.start, end: r.end } }
+                : {}),
             })),
           },
         };

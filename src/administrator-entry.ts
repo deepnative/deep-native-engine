@@ -16,6 +16,9 @@ export const LEARNERS_PER_PAGE = 25;
 /** One saved coaching month, as the console summarises it. */
 export interface LatestCoaching {
   month: string;
+  /** #832: the period's first and last day (a calendar month for YYYY-MM). */
+  periodStart?: string;
+  periodEnd?: string;
   minutes: number;
   state: string;
   returned: boolean;
@@ -221,17 +224,17 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
           // CONSOLEMONTHS-01..03: this month, last month and the latest
           // earlier month come with the page of learners, in one statement.
           const summary = (where: string) =>
-            `(SELECT json_build_object('month',m.month,'minutes',m.minutes,'state',m.state,
+            `(SELECT json_build_object('month',m.month,'periodStart',to_char(m.period_start,'YYYY-MM-DD'),'periodEnd',to_char(m.period_end,'YYYY-MM-DD'),'minutes',m.minutes,'state',m.state,
                 'returned',m.return_reason IS NOT NULL,'totalCents',i.total_cents::text,
                 'paidCents',i.paid_cents::text,'refundedCents',i.refunded_cents::text,'voided',i.voided_at IS NOT NULL)
               FROM coaching_months m LEFT JOIN simple_invoices i ON i.id=m.invoice_id
-              WHERE m.owner_id=l.id AND ${where} ORDER BY m.month DESC LIMIT 1)`;
+              WHERE m.owner_id=l.id AND ${where} ORDER BY m.period_start DESC LIMIT 1)`;
           const members = (
             await tx.query<AdministratorConsole["members"][number]>(
               `SELECT ${columns},
-                 ${summary("m.month=$5")} AS "thisMonth",
-                 ${summary("m.month=$6")} AS "lastMonth",
-                 ${summary("m.month<$6")} AS coaching
+                 ${summary("to_char(m.period_end,'YYYY-MM')=$5")} AS "thisMonth",
+                 ${summary("to_char(m.period_end,'YYYY-MM')=$6")} AS "lastMonth",
+                 ${summary("to_char(m.period_end,'YYYY-MM')<$6")} AS coaching
                ${matching}
                ORDER BY lower(l.display_name) NULLS LAST,l.display_name,l.id
                LIMIT $3 OFFSET $4`,

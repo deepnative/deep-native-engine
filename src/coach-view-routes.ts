@@ -1,7 +1,7 @@
 import type { Express, Request, Response } from "express";
 import type { CoachView } from "./coach-view.ts";
 import { hours } from "./coaching-dashboard-views.ts";
-import { monthLabel } from "./coaching-values.ts";
+import { monthLabel, periodLabel } from "./coaching-values.ts";
 import { COOKIE } from "./session.ts";
 import { uniqueCookie } from "./staff-entry-selection.ts";
 import { shiftMonth } from "./simple-invoice-store.ts";
@@ -60,7 +60,7 @@ export function mountCoachView(app: Express, store: CoachView | undefined) {
     const rows = v.rows
       .map(
         (r) =>
-          `<tr><td>${escape(r.name ?? "Name needed")}</td><td>${hours(r.minutes)}</td><td>${escape(r.status)}</td></tr>`,
+          `<tr><td>${escape(r.name ?? "Name needed")}${r.period ? `<span>${periodLabel(r.period)}</span>` : ""}</td><td>${hours(r.minutes)}</td><td>${escape(r.status)}</td></tr>`,
       )
       .join("");
     const table = rows
@@ -71,7 +71,7 @@ export function mountCoachView(app: Express, store: CoachView | undefined) {
     res.send(
       page(
         "Coaching",
-        `<section class="portal-workspace"><h1>Coaching</h1><p>Monthly coaching hours people have saved for ${monthLabel(v.month)}. Rates, amounts and invoices stay in Administration.</p><form class="portal-search" method="get" action="/coach"><label for="coach-month">Month</label><div><input id="coach-month" name="month" type="month" value="${v.month}" max="${v.today}"><button type="submit">Show month</button></div></form><p class="portal-actions"><a href="/coach?month=${previous}">Previous month</a>${next <= v.today ? ` <a href="/coach?month=${next}">Next month</a>` : ""}</p><section class="portal-card"><h2>${monthLabel(v.month)}</h2>${table}</section></section>`,
+        `<section class="portal-workspace"><h1>Coaching</h1><p>Coaching hours people have saved for ${monthLabel(v.month)}. A billing period shorter or longer than a calendar month is listed in the month it ends. Rates, amounts and invoices stay in Administration.</p><form class="portal-search" method="get" action="/coach"><label for="coach-month">Month</label><div><input id="coach-month" name="month" type="month" value="${v.month}" max="${v.today}"><button type="submit">Show month</button></div></form><p class="portal-actions"><a href="/coach?month=${previous}">Previous month</a>${next <= v.today ? ` <a href="/coach?month=${next}">Next month</a>` : ""}</p><section class="portal-card"><h2>${monthLabel(v.month)}</h2>${table}</section></section>`,
       ),
     );
   });

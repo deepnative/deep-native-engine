@@ -217,7 +217,7 @@ it("EXPCOV-03 a member's held and withdrawn sample sessions are in Download my r
   await holds.withdraw(owner.token, withdrawn.requestId);
   const theirs = await heldBy(other, (await slot()).id);
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v51");
+  expect(version).toBe("local-member-records-v52");
   const rows = all.sampleHolds!;
   expect(rows.map((row) => row.id).sort()).toEqual(
     [kept.requestId, withdrawn.requestId].sort(),
@@ -314,7 +314,7 @@ it("EXPCOV-05 how many coaches the member has, and since when, is in Download my
   ).rows[0]!.n;
   expect(coaches).toBeGreaterThanOrEqual(1);
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v51");
+  expect(version).toBe("local-member-records-v52");
   expect(all.coachAssignments).toEqual([
     {
       coaches,
@@ -497,7 +497,7 @@ it("EXPCOV-09/10 moderation decisions on a member's own circle posts and their r
   expect(restored.kind).toBe("ready");
 
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v51");
+  expect(version).toBe("local-member-records-v52");
   expect(all.circleModerationDecisions).toEqual([
     {
       id: expect.anything(),
@@ -669,7 +669,7 @@ it("EXPCOV-12 what happened to a member's own support requests is in Download my
   );
 
   const { version, all } = await records(owner.token);
-  expect(version).toBe("local-member-records-v51");
+  expect(version).toBe("local-member-records-v52");
   const rows = all.supportRequestEvents!;
   expect(rows.map((row) => row.action).sort()).toEqual([...shown].sort());
   for (const row of rows) {
