@@ -1009,7 +1009,7 @@ it("RECIPIENT-01/05 shows a submitted company and starts empty without a billing
     'name="name" autocomplete="name" maxlength="200" value="" required',
   );
   expect(text).toContain(
-    'name="email" type="email" autocomplete="email" maxlength="254" value="" required',
+    'name="email" type="email" autocomplete="email" maxlength="254" value=""',
   );
 });
 
@@ -1030,4 +1030,44 @@ it("WALK44-01 an administrator opening a student reference no account has is tol
   const own = await f.get("/account/coaching");
   expect(own.status).toBe(404);
   expect(own.text).toContain("Coaching request not confirmed");
+});
+it("DRAFTEMAIL-01/03 lets a member save hours with no invoice email and asks for one before requesting the invoice", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: null }),
+  );
+  f.profiles.suggest.mockResolvedValue(
+    ready({ name: "Registered", email: "", revision: 0 }),
+  );
+  let text = (await f.get("/account/coaching")).text;
+  expect(text).toContain(
+    '<label>Invoice email<input name="email" type="email" autocomplete="email" maxlength="254" value=""></label>',
+  );
+  expect(text).toContain(
+    "You can save your hours now and add the invoice email before you request the invoice.",
+  );
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: { ...entry, email: "" } }),
+  );
+  text = (await f.get("/account/coaching")).text;
+  expect(text).toContain(
+    "Invoice recipient: Invented &lt;member&gt; · no invoice email yet",
+  );
+  expect(text).not.toContain("Request coaching invoice");
+  expect(text).toContain(
+    '<p role="alert">Add your invoice email and save the draft before you request the invoice.</p>',
+  );
+  await f.post("/account/coaching/save", {
+    action: "save",
+    month,
+    hours: "100",
+    minutes: "0",
+    name: "Registered",
+    email: "",
+    company: "",
+  });
+  expect(f.service.saveCoaching).toHaveBeenLastCalledWith(
+    token,
+    expect.objectContaining({ minutes: 6000, email: "" }),
+  );
 });

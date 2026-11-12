@@ -757,3 +757,26 @@ it("WALK44-01 an administrator's overview of a student reference no account has 
     own.query.mock.calls.some(([sql]) => sql.includes("AS student_present")),
   ).toBe(false);
 });
+it("DRAFTEMAIL-01/02 saves hours without an invoice email, keeps the reusable recipient and refuses to submit until one is given", async () => {
+  const f = fixture();
+  expect(
+    (await f.service.saveCoaching(token, { ...save, email: "  " })).kind,
+  ).toBe("ready");
+  const month = f.query.mock.calls.find(([sql]) =>
+    sql.startsWith("INSERT INTO coaching_months"),
+  );
+  expect(month?.[1]?.[4]).toBe("");
+  // No email yet: the reusable billing recipient is left as it was.
+  expect(
+    f.query.mock.calls.some(([sql]) =>
+      sql.startsWith("INSERT INTO billing_profiles"),
+    ),
+  ).toBe(false);
+  const g = fixture({ entry: { ...draft, email: "" } });
+  expect((await g.service.submitCoaching(token, submit)).kind).toBe("invalid");
+  expect(
+    g.query.mock.calls.some(([sql]) =>
+      sql.startsWith("INSERT INTO coaching_submissions"),
+    ),
+  ).toBe(false);
+});
