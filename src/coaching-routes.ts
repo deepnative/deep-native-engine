@@ -129,6 +129,85 @@ const changedOn = (at: Date) =>
     year: "numeric",
     timeZone: "America/Toronto",
   });
+const STEPS = [
+  "Save hours",
+  "Rate set",
+  "Request invoice",
+  "Administrator review",
+  "Invoice issued",
+];
+/**
+ * #836 NEXTSTEP-01/02: where the student's month stands and the one thing
+ * to do next. It reads the same entry and rate as the forms; it decides
+ * nothing the store does not.
+ */
+function studentNextStep(s: {
+  e: {
+    minutes: number;
+    email: string;
+    state: string;
+    returnReason?: string | null;
+    invoiceId?: string | null;
+  } | null;
+  rate: { cents: number } | null;
+  amount: number | null;
+  label: string;
+  unit: string;
+  rateLine: string;
+  periodEnd: string | null;
+}) {
+  const { e, rate, amount, label } = s,
+    hours = e ? coachingDuration(e.minutes) : "";
+  const button = (href: string, text: string) =>
+    `<a class="button" href="${href}">${text}</a>`;
+  let step: number,
+    status: string,
+    message: string,
+    action = "";
+  if (!e) {
+    [step, status] = [0, "Nothing saved yet"];
+    message = `Enter your coaching hours for ${label} and save them.`;
+    action = button("#hours-form", "Enter your hours");
+  } else if (e.state === "submitted") {
+    [step, status] = [3, "Awaiting review"];
+    message = `Your invoice request is with your administrator for review. The invoice appears here once it is issued; nothing is charged on this site.${s.periodEnd ? ` The invoice can be issued after this ${s.unit} ends on ${dayLabel(s.periodEnd)}.` : ""}`;
+  } else if (e.state === "invoiced") {
+    [step, status] = [4, "Invoice issued"];
+    message = "Your invoice has been issued.";
+    if (e.invoiceId)
+      action = button(
+        `/account/purchases/invoices/${escape(e.invoiceId)}`,
+        "View the invoice",
+      );
+  } else if (e.returnReason) {
+    [step, status] = [0, "Returned for correction"];
+    message = `Your administrator returned these hours: ${escape(e.returnReason)}. Correct them and save, then request the invoice again.`;
+    action = button("#hours-form", "Correct your hours");
+  } else if (!rate) {
+    [step, status] = [1, "Draft, not sent yet"];
+    message = `Your ${hours} are saved. Your administrator needs to set your hourly rate before you can request the invoice. You can still change your hours.`;
+  } else if (!e.email) {
+    [step, status] = [2, "Draft, not sent yet"];
+    message = "Add your invoice email and save, then request the invoice.";
+    action = button("#invoice-email", "Add invoice email");
+  } else if (amount === null) {
+    [step, status] = [2, "Draft, not sent yet"];
+    message =
+      "The saved hours at this rate exceed the invoice amount limit. Correct your hours or ask your administrator to review the rate.";
+  } else {
+    [step, status] = [2, "Draft, not sent yet"];
+    message = `Ready to request: ${hours} at ${money(rate.cents)} per hour is ${money(amount)} before tax.${amount === 0 ? " A zero total creates no invoice." : ""}`;
+    action = button("#request-invoice", "Request the invoice");
+  }
+  const steps = STEPS.map((name, i) =>
+    i === step
+      ? `<li aria-current="step">${name}</li>`
+      : i < step
+        ? `<li class="done">${name}</li>`
+        : `<li>${name}</li>`,
+  ).join("");
+  return `<section class="portal-card next-step" aria-labelledby="next-step"><h3 id="next-step">Next step</h3><ol class="coaching-steps">${steps}</ol><p class="next-step-message">${message}</p>${action}<p class="small">Status: ${status}</p>${s.rateLine.replace("<p>", '<p class="small">')}</section>`;
+}
 /** OVR832-07: each administrator change, with the figure it replaced. */
 function hoursChangesSection(rows: CoachingHoursOverride[], admin: boolean) {
   if (!rows.length) return "";
@@ -308,7 +387,13 @@ export function mountCoachingRoutes(
   for (const admin of [false, true]) {
     const path = admin ? `${adminPath}/:ownerId` : memberPath;
     app.get(path, async (req, res) => {
-      if (!valid(req, res)) return;
+      // NEXTSTEP-03: the student's page also reads which action just finished.
+      if (!valid(req, res, [], admin ? ["month"] : ["month", "done"])) return;
+      if (
+        req.query.done !== undefined &&
+        !["saved", "requested"].includes(req.query.done as string)
+      )
+        return failure(res, "denied", admin);
       if (!store)
         return res
           .status(admin ? 503 : 200)
@@ -364,13 +449,26 @@ export function mountCoachingRoutes(
         ...v.periods,
       ];
       const picker = periodic
-        ? `<form method="get" action="${base}"><label>Billing period<select name="month">${choices.map((p) => `<option value="${p.key}"${p.key === v.month ? " selected" : ""}>${periodLabel(p)}${p.key === v.periods[0]!.key ? " (current)" : ""}</option>`).join("")}</select></label><button class="secondary">Open period</button></form>`
-        : `<form method="get" action="${base}"><label>Calendar month (UTC)<input type="month" name="month" value="${v.month.slice(0, 7)}" max="${v.today}" required></label><button class="secondary">Open month</button></form>`;
-      let body = `<section class="invoice-workspace${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review coaching hours" : "Coaching hours"}</h1><p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p><p>${admin ? `Member: <strong>${escape(v.displayName ?? "Name needed")}</strong> · account reference <code>${escape(v.ownerId)}</code>` : `Choose the ${periodic ? "billing period" : "month"} you want to invoice, enter your coaching hours and minutes, then review the rate set by your administrator. Requesting an invoice submits the saved ${periodic ? "period" : "month"} for administrator review; it does not take payment. Coaching is optional; your learning access does not depend on a rate or invoice.`}</p>${picker}${
+        ? `<form class="period-picker" method="get" action="${base}"><label>Billing period<select name="month">${choices.map((p) => `<option value="${p.key}"${p.key === v.month ? " selected" : ""}>${periodLabel(p)}${p.key === v.periods[0]!.key ? " (current)" : ""}</option>`).join("")}</select></label><button class="secondary">Open period</button></form>`
+        : `<form class="period-picker" method="get" action="${base}"><label>Calendar month (UTC)<input type="month" name="month" value="${v.month.slice(0, 7)}" max="${v.today}" required></label><button class="secondary">Open month</button></form>`;
+      const rateLine = `<p>${v.rate ? `Applicable rate: ${money(v.rate.cents)} per hour · version ${v.rate.version} · effective ${periodLabel({ key: v.rate.effectiveMonth })}` : admin ? `No rate is set for this ${unit}. Set the rate below.` : `No rate is set for this ${unit}. Ask the administrator to enter your agreed rate before submitting; you can save a draft now.`}</p>`;
+      // NEXTSTEP-03: a plain confirmation after the student's save or request.
+      const done =
+        !admin && e && req.query.done === "saved"
+          ? `Saved ${coachingDuration(e.minutes)} for ${label}.`
+          : !admin && req.query.done === "requested"
+            ? `Invoice requested for ${label}. Your administrator will review it.`
+            : "";
+      let body = `<section class="invoice-workspace${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review coaching hours" : "Coaching hours"}</h1>${done ? `<p class="notice" role="status">${done}</p>` : ""}${admin || v.sample ? `<p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p>` : ""}<p>${admin ? `Member: <strong>${escape(v.displayName ?? "Name needed")}</strong> · account reference <code>${escape(v.ownerId)}</code>` : `Choose the ${periodic ? "billing period" : "month"} you want to invoice, enter your coaching hours and minutes, then request the invoice. Your administrator reviews it before it is issued; nothing is charged on this site. Coaching is optional; your learning access does not depend on a rate or invoice.`}</p>${picker}${
         period
-          ? `<h2>${label}</h2><p>Status: ${e ? escape(e.state) : "No saved draft or submission"}${e ? ` · revision ${e.revision}` : ""}</p>${e?.returnReason ? `<p role="status">Returned for correction: ${escape(e.returnReason)}</p>` : ""}<p>${v.rate ? `Applicable rate: ${money(v.rate.cents)} per hour · version ${v.rate.version} · effective ${periodLabel({ key: v.rate.effectiveMonth })}` : admin ? `No rate is set for this ${unit}. Set the rate below.` : `No rate is set for this ${unit}. Ask the administrator to enter your agreed rate before submitting; you can save a draft now.`}</p>`
+          ? admin
+            ? `<h2>${label}</h2><p>Status: ${e ? escape(e.state) : "No saved draft or submission"}${e ? ` · revision ${e.revision}` : ""}</p>${e?.returnReason ? `<p role="status">Returned for correction: ${escape(e.returnReason)}</p>` : ""}${rateLine}`
+            : `<h2>${label}</h2>${studentNextStep({ e, rate: v.rate, amount, label, unit, rateLine, periodEnd: defined && period.end >= v.date ? period.end : null })}`
           : `<h2>No billing period has started</h2><p role="status">${admin ? "This student’s" : "Your"} first billing period starts on ${dayLabel(v.billing.schedules[0]!.startsOn)}. Hours can be reported from that day.</p>`
       }`;
+      // NEXTSTEP-04: the student's reference material follows the hours form.
+      const head = body;
+      if (!admin) body = "";
       // PERIOD832-01/02: the billing period, beside the hours.
       body += admin
         ? adminBillingSection(
@@ -380,6 +478,8 @@ export function mountCoachingRoutes(
             `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.billing.version)}`,
           )
         : memberBillingSection(v.billing, v.date);
+      const billing = admin ? "" : body;
+      if (!admin) body = "";
       // #316 TERMS316-01/06: per-student coaching terms, beside the hours.
       if (options.coachingTerms) {
         const t = admin
@@ -429,19 +529,24 @@ export function mountCoachingRoutes(
       }
       if (admin)
         body += `<h2>Set member rate</h2><form method="post" action="${base}/rate">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.rateVersion)}<label>Effective month<input type="month" name="effectiveMonth" value="${v.month.slice(0, 7)}" required></label><label>Hourly rate (CAD)<input name="rate" inputmode="decimal" required></label><button>Save hourly rate</button></form>`;
-      body += hoursChangesSection(v.overrides, admin);
-      if (e)
+      const reference = admin ? "" : body;
+      if (!admin) body = head;
+      if (admin) body += hoursChangesSection(v.overrides, admin);
+      if (e && (admin || e.state !== "draft"))
         body += `<p>Saved duration: ${coachingDuration(e.minutes)}</p><p>Invoice recipient: ${escape(e.name)}${e.company ? ` · ${escape(e.company)}` : ""} · ${e.email ? escape(e.email) : "no invoice email yet"}</p>`;
       if (snapshot)
-        body += `<h2>Submitted snapshot</h2><p>${periodLabel({ key: snapshot.month, start: snapshot.periodStart, end: snapshot.periodEnd })} · ${coachingDuration(snapshot.minutes)} · ${money(snapshot.rate.cents)} per hour · rate version ${snapshot.rate.version} · subtotal ${money(snapshot.subtotalCents)}</p><p>Recipient: ${escape(snapshot.name)}${snapshot.company ? ` · ${escape(snapshot.company)}` : ""} · ${escape(snapshot.email)} · ${snapshot.sample ? "Sample, not payable" : "Configured offline invoice"}</p><p>Submitted revision ${e!.submittedRevision}. This snapshot stays retained after correction.</p>`;
+        body += `<h2>Submitted snapshot</h2><p>${periodLabel({ key: snapshot.month, start: snapshot.periodStart, end: snapshot.periodEnd })} · ${coachingDuration(snapshot.minutes)} · ${money(snapshot.rate.cents)} per hour · rate version ${snapshot.rate.version} · subtotal ${money(snapshot.subtotalCents)}</p><p>Recipient: ${escape(snapshot.name)}${snapshot.company ? ` · ${escape(snapshot.company)}` : ""} · ${escape(snapshot.email)} · ${snapshot.sample ? "Sample, not payable" : "Configured offline invoice"}</p><p>${admin ? `Submitted revision ${e!.submittedRevision}. This snapshot stays retained after correction.` : "This record of what you submitted is kept, even if the hours are corrected later."}</p>`;
       if (!admin && period && (!e || e.state === "draft")) {
-        body += `<h2>Save your draft</h2><form method="post" action="${base}/save">${form("save", e?.revision ?? 0)}<label>Whole hours<input name="hours" type="number" min="0" max="${defined ? period.days * 24 : 744}" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label><label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="${escape(e?.name ?? recipient.value?.name ?? "")}" required></label><label>Invoice email<input name="email" type="email" autocomplete="email" maxlength="254" value="${escape(e?.email ?? recipient.value?.email ?? "")}"></label><label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value="${escape((e ? e.company : recipient.value?.company) ?? "")}"></label><p>Changes here are saved as your reusable billing recipient for later ${periodic ? "periods" : "months"}. <a href="/account/billing">Edit reusable billing recipient</a>. This email is only the billing recipient; it does not change your sign-in identity.${(e?.email ?? recipient.value?.email) ? "" : " You can save your hours now and add the invoice email before you request the invoice."}</p><button>Save coaching draft</button></form>`;
+        body += `<h2>Your hours</h2><form id="hours-form" method="post" action="${base}/save">${form("save", e?.revision ?? 0)}<label>Whole hours<input name="hours" type="number" min="0" max="${defined ? period.days * 24 : 744}" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label><label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="${escape(e?.name ?? recipient.value?.name ?? "")}" required></label><label>Invoice email<input id="invoice-email" name="email" type="email" autocomplete="email" maxlength="254" value="${escape(e?.email ?? recipient.value?.email ?? "")}"></label><label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value="${escape((e ? e.company : recipient.value?.company) ?? "")}"></label><p>Changes here are saved as your reusable billing recipient for later ${periodic ? "periods" : "months"}. <a href="/account/billing">Edit reusable billing recipient</a>. This email is only the billing recipient; it does not change your sign-in identity.${(e?.email ?? recipient.value?.email) ? "" : " You can save your hours now and add the invoice email before you request the invoice."}</p><button>Save coaching draft</button></form>`;
+        // NEXTSTEP-02: why the request is not offered yet, where it would be.
+        if (e && !v.rate)
+          body += `<p>You can request the invoice once your administrator sets your hourly rate.</p>`;
         // DRAFTEMAIL-03: no invoice request until the draft has an email.
         if (e && !e.email)
           body +=
             '<p role="alert">Add your invoice email and save the draft before you request the invoice.</p>';
         else if (e && v.rate && amount !== null)
-          body += `<h2>Confirm this saved draft</h2><p>Subtotal before ${hst ? escape(hst.label) : "separately supplied tax"}: <strong>${money(amount)}</strong>. ${amount === 0 ? "A zero-total submission creates no invoice." : hst ? `${escape(hst.label)} at ${taxRate(hst)} is added when the invoice is issued.` : "The administrator supplies tax when reviewing the invoice."}</p><form method="post" action="${base}/submit">${form("submit", e.revision)}${hidden("rateId", v.rate.id)}${hidden("sample", String(v.sample))}<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm this saved duration, recipient and exact rate version for ${defined ? label : v.month}. ${v.sample ? "This is a sample, not payable." : "I submit for configured offline invoicing; issued financial records may be retained after account deletion."}</span></label><button>Request coaching invoice</button></form>`;
+          body += `<section id="request-invoice"><h2>Request the invoice</h2><p>Subtotal before ${hst ? escape(hst.label) : "separately supplied tax"}: <strong>${money(amount)}</strong>. ${amount === 0 ? "A zero-total submission creates no invoice." : hst ? `${escape(hst.label)} at ${taxRate(hst)} is added when the invoice is issued.` : "The administrator supplies tax when reviewing the invoice."}</p><form method="post" action="${base}/submit">${form("submit", e.revision)}${hidden("rateId", v.rate.id)}${hidden("sample", String(v.sample))}<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm this saved duration, recipient and exact rate version for ${defined ? label : v.month}. ${v.sample ? "This is a sample, not payable." : "I submit for configured offline invoicing; issued financial records may be retained after account deletion."}</span></label><button>Request coaching invoice</button></form></section>`;
         if (e && v.rate && amount === null)
           body +=
             '<p role="alert">The saved duration at this rate exceeds the invoice amount limit. Correct the draft or ask the administrator to review the rate.</p>';
@@ -470,6 +575,8 @@ export function mountCoachingRoutes(
         body += `<h2>Change this student’s hours</h2><p>Correct hours the student has saved or submitted. The student sees the earlier figure, the new figure and your reason on their coaching page and in Download my records. ${e.state === "submitted" ? `The ${unit} stays awaiting review at the rate the student confirmed, and its subtotal is recalculated.` : "The draft stays the student’s to submit."}</p><form method="post" action="${base}/override">${form("override", e.revision)}<label>Whole hours<input name="hours" type="number" min="0" max="${defined ? period!.days * 24 : 744}" step="1" value="${Math.floor(e.minutes / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${e.minutes % 60}" required></label><label>Reason for the change<input name="reason" maxlength="500" required></label><button>Change hours</button></form>`;
       else if (admin && !e && period)
         body += `<p>The student has not saved hours for this ${unit}. An administrator cannot enter new hours for a student; once the student saves hours, you can change them here.</p>`;
+      if (!admin)
+        body += `${hoursChangesSection(v.overrides, admin)}${billing}${reference ? `<details class="coaching-details"><summary>Coaching terms and agreed changes</summary>${reference}</details>` : ""}`;
       body += `<h2 id="saved-months">Saved periods</h2>${savedMonthsTable(v.months, v.rates, base, admin ? "/operator/invoices/" : "/account/purchases/invoices/")}${
         admin
           ? portalActions([
@@ -707,7 +814,7 @@ export function mountCoachingRoutes(
         303,
         "invoiceId" in r.value
           ? `/operator/invoices/${r.value.invoiceId}`
-          : `${admin ? `${adminPath}/${(req.params as Record<string, string>).ownerId!}` : memberPath}?month=${encodeURIComponent(req.body.month)}`,
+          : `${admin ? `${adminPath}/${(req.params as Record<string, string>).ownerId!}` : memberPath}?month=${encodeURIComponent(req.body.month)}${admin ? "" : action === "save" ? "&done=saved" : "&done=requested"}`,
       );
     });
   }

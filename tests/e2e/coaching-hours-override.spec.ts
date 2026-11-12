@@ -54,7 +54,7 @@ test("[L338] OVR832-01/03/06/07/08 an administrator changes a student's submitte
       .getByRole("checkbox", { name: /I confirm this saved duration/ })
       .check();
     await s.getByRole("button", { name: "Request coaching invoice" }).click();
-    await expect(s.getByText("Status: submitted · revision 2")).toBeVisible();
+    await expect(s.getByText("Status: Awaiting review")).toBeVisible();
 
     // 4. The administrator must give a reason, then changes 10 hours to 8.
     await a.reload();

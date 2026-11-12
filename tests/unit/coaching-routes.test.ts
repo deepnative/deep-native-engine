@@ -1052,7 +1052,7 @@ it("DRAFTEMAIL-01/03 lets a member save hours with no invoice email and asks for
   );
   let text = (await f.get("/account/coaching")).text;
   expect(text).toContain(
-    '<label>Invoice email<input name="email" type="email" autocomplete="email" maxlength="254" value=""></label>',
+    '<label>Invoice email<input id="invoice-email" name="email" type="email" autocomplete="email" maxlength="254" value=""></label>',
   );
   expect(text).toContain(
     "You can save your hours now and add the invoice email before you request the invoice.",
@@ -1061,8 +1061,10 @@ it("DRAFTEMAIL-01/03 lets a member save hours with no invoice email and asks for
     ready({ ...value, entry: { ...entry, email: "" } }),
   );
   text = (await f.get("/account/coaching")).text;
+  // NEXTSTEP-02: the draft's own form shows the recipient; the next step
+  // names the missing email.
   expect(text).toContain(
-    "Invoice recipient: Invented &lt;member&gt; · no invoice email yet",
+    "Add your invoice email and save, then request the invoice.",
   );
   expect(text).not.toContain("Request coaching invoice");
   expect(text).toContain(
@@ -1378,7 +1380,7 @@ it("PERIOD832-02 a student on defined periods picks a started period, saves with
     "Choose the billing period you want to invoice, enter your coaching hours and minutes",
   );
   expect(page).toContain(
-    "Requesting an invoice submits the saved period for administrator review",
+    "then request the invoice. Your administrator reviews it before it is issued",
   );
   expect(page).toContain('name="hours" type="number" min="0" max="336"');
   expect(page).toContain('name="month" value="2026-10-19"');
@@ -1634,4 +1636,187 @@ it("PERIOD832-08 pending periods and the dashboard name and open the right perio
   expect(page).toContain(
     "A billing period shorter or longer than a calendar month counts in the month it ends",
   );
+});
+
+// #836 NEXTSTEP: the student always sees where the month stands and one next
+// action, beside the hours form; reference material moves below it.
+const card = (html: string) =>
+  html.slice(
+    html.indexOf('<section class="portal-card next-step"'),
+    html.indexOf(
+      "</section>",
+      html.indexOf('<section class="portal-card next-step"'),
+    ),
+  );
+const currentStep = (html: string) =>
+  /<li aria-current="step">([^<]+)<\/li>/.exec(card(html))?.[1];
+it("NEXTSTEP-01 shows the five steps and starts at saving hours for a month with nothing saved", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: null }),
+  );
+  const text = mainHtml((await f.get("/account/coaching")).text);
+  expect(card(text)).toContain('<h3 id="next-step">Next step</h3>');
+  expect(card(text)).toContain(
+    '<ol class="coaching-steps"><li aria-current="step">Save hours</li><li>Rate set</li><li>Request invoice</li><li>Administrator review</li><li>Invoice issued</li></ol>',
+  );
+  expect(card(text)).toContain(
+    "Enter your coaching hours for October 2026 and save them.",
+  );
+  expect(card(text)).toContain(
+    '<a class="button" href="#hours-form">Enter your hours</a>',
+  );
+  expect(text).toContain('<form id="hours-form" method="post"');
+  expect(text).toContain("Status: Nothing saved yet");
+});
+it("NEXTSTEP-02 names one plain next action for each state of the month", async () => {
+  const f = fixture();
+  const show = async (v: unknown) => {
+    f.service.coachingOverview.mockResolvedValueOnce(ready(v));
+    return mainHtml((await f.get("/account/coaching")).text);
+  };
+  // Saved, but no rate yet: waiting on the administrator, no button.
+  let text = await show({ ...value, rate: null });
+  expect(currentStep(text)).toBe("Rate set");
+  expect(card(text)).toContain('<li class="done">Save hours</li>');
+  expect(card(text)).toContain(
+    "Your 1 hour 30 minutes are saved. Your administrator needs to set your hourly rate before you can request the invoice. You can still change your hours.",
+  );
+  expect(card(text)).not.toContain('class="button"');
+  // Rate set, but no invoice email.
+  text = await show({ ...value, entry: { ...entry, email: "" } });
+  expect(currentStep(text)).toBe("Request invoice");
+  expect(card(text)).toContain(
+    "Add your invoice email and save, then request the invoice.",
+  );
+  expect(card(text)).toContain(
+    '<a class="button" href="#invoice-email">Add invoice email</a>',
+  );
+  expect(text).toContain('<input id="invoice-email" name="email"');
+  // Ready to request.
+  text = await show(value);
+  expect(currentStep(text)).toBe("Request invoice");
+  expect(card(text)).toContain(
+    "Ready to request: 1 hour 30 minutes at CAD 120.00 per hour is CAD 180.00 before tax.",
+  );
+  expect(card(text)).toContain(
+    '<a class="button" href="#request-invoice">Request the invoice</a>',
+  );
+  expect(text).toContain('<section id="request-invoice">');
+  // Returned for correction.
+  text = await show({
+    ...value,
+    entry: { ...entry, returnReason: "Correct <time>" },
+  });
+  expect(currentStep(text)).toBe("Save hours");
+  expect(card(text)).toContain(
+    "Your administrator returned these hours: Correct &lt;time&gt;. Correct them and save, then request the invoice again.",
+  );
+  expect(text).toContain("Status: Returned for correction");
+  // Submitted.
+  text = await show({
+    ...value,
+    entry: {
+      ...entry,
+      state: "submitted",
+      revision: 2,
+      submittedRevision: 2,
+      snapshot,
+    },
+  });
+  expect(currentStep(text)).toBe("Administrator review");
+  expect(card(text)).toContain(
+    "Your invoice request is with your administrator for review. The invoice appears here once it is issued; nothing is charged on this site.",
+  );
+  expect(text).toContain("Status: Awaiting review");
+  expect(text).not.toContain("revision 2");
+  // Invoiced.
+  text = await show({
+    ...value,
+    entry: { ...entry, state: "invoiced", snapshot, invoiceId: id },
+  });
+  expect(currentStep(text)).toBe("Invoice issued");
+  expect(card(text)).toContain(
+    `<a class="button" href="/account/purchases/invoices/${id}">View the invoice</a>`,
+  );
+  expect(text).toContain("Status: Invoice issued");
+});
+it("NEXTSTEP-03 confirms a save or an invoice request after the redirect", async () => {
+  const f = fixture();
+  const saved = await f.post("/account/coaching/save", {
+    action: "save",
+    month,
+    hours: "1",
+    minutes: "30",
+    name: "Invented",
+    email: "recipient@example.invalid",
+    company: "",
+  });
+  expect(saved.headers.location).toBe(
+    `/account/coaching?month=${month}&done=saved`,
+  );
+  const requested = await f.post("/account/coaching/submit", {
+    action: "submit",
+    month,
+    rateId: id,
+    sample: "true",
+    confirm: "submit",
+  });
+  expect(requested.headers.location).toBe(
+    `/account/coaching?month=${month}&done=requested`,
+  );
+  let text = mainHtml(
+    (await f.get(`/account/coaching?month=${month}&done=saved`)).text,
+  );
+  expect(text).toContain(
+    '<p class="notice" role="status">Saved 1 hour 30 minutes for October 2026.</p>',
+  );
+  text = mainHtml(
+    (await f.get(`/account/coaching?month=${month}&done=requested`)).text,
+  );
+  expect(text).toContain(
+    '<p class="notice" role="status">Invoice requested for October 2026. Your administrator will review it.</p>',
+  );
+  expect(
+    (await f.get(`/account/coaching?month=${month}&done=other`)).status,
+  ).not.toBe(200);
+  // The administrator's own pages keep their redirect.
+  expect(
+    (await f.get(`/operator/coaching/${id}?month=${month}&done=saved`)).status,
+  ).not.toBe(200);
+});
+it("NEXTSTEP-04 shows the student a plain status and moves reference material below the hours form", async () => {
+  const f = fixture();
+  // Coaching terms are reference material: kept, but folded below the form.
+  const terms = express();
+  terms.use((_req, res, next) => {
+    res.locals.token = token;
+    next();
+  });
+  mountCoachingRoutes(terms, f.service as unknown as SimpleInvoiceStore, {
+    origin,
+    secret,
+    coachingTerms: {
+      own: vi.fn().mockResolvedValue(ready(null)),
+    } as never,
+  });
+  const text = mainHtml(
+    (await withLoopback(terms, (s) => request(s).get("/account/coaching")))
+      .text,
+  );
+  expect(text).toContain("Status: Draft, not sent yet");
+  expect(text).not.toContain("revision 1");
+  expect(text).toContain(
+    '<details class="coaching-details"><summary>Coaching terms and agreed changes</summary><section class="portal-card" aria-labelledby="coaching-terms">',
+  );
+  expect(text.indexOf('id="hours-form"')).toBeLessThan(
+    text.indexOf('<details class="coaching-details">'),
+  );
+  expect(text.indexOf('<section class="portal-card next-step"')).toBeLessThan(
+    text.indexOf('id="hours-form"'),
+  );
+  // The administrator's review page is unchanged.
+  const staff = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  expect(staff).toContain("Status: draft · revision 1");
+  expect(staff).not.toContain("next-step");
 });

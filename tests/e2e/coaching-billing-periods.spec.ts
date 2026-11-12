@@ -94,7 +94,7 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
         .getByRole("checkbox", { name: /I confirm this saved duration/ })
         .check();
       await s.getByRole("button", { name: "Request coaching invoice" }).click();
-      await expect(s.getByText("Status: submitted · revision 2")).toBeVisible();
+      await expect(s.getByText("Status: Awaiting review")).toBeVisible();
     };
     await report(ended, "10");
     await expect(s.getByRole("heading", { name: ended })).toBeVisible();
