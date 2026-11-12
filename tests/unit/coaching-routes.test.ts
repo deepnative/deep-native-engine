@@ -1820,3 +1820,45 @@ it("NEXTSTEP-04 shows the student a plain status and moves reference material be
   expect(staff).toContain("Status: draft · revision 1");
   expect(staff).not.toContain("next-step");
 });
+it("NEXTSTEP-02 covers the amount limit, a zero total, an invoice still being linked and a period still running", async () => {
+  const f = fixture();
+  const show = async (v: unknown, q = "") => {
+    f.service.coachingOverview.mockResolvedValueOnce(ready(v));
+    return mainHtml((await f.get(`/account/coaching${q}`)).text);
+  };
+  let text = await show({
+    ...value,
+    entry: { ...entry, minutes: 44640 },
+    rate: { ...rate, cents: 1000000000 },
+  });
+  expect(card(text)).toContain(
+    "The saved hours at this rate exceed the invoice amount limit.",
+  );
+  expect(card(text)).not.toContain('class="button"');
+  text = await show({ ...value, entry: { ...entry, minutes: 0 } });
+  expect(card(text)).toContain("A zero total creates no invoice.");
+  text = await show({
+    ...value,
+    entry: { ...entry, state: "invoiced", snapshot, invoiceId: null },
+  });
+  expect(card(text)).toContain("Your invoice has been issued.");
+  expect(card(text)).not.toContain('class="button"');
+  text = await show({
+    ...value,
+    month: "2026-10-19",
+    date: "2026-10-20",
+    period: {
+      key: "2026-10-19",
+      start: "2026-10-19",
+      end: "2026-11-01",
+      days: 14,
+    },
+    entry: { ...entry, state: "submitted", snapshot },
+  });
+  expect(card(text)).toContain(
+    "The invoice can be issued after this period ends on",
+  );
+  // A stale "saved" link to a month with nothing saved confirms nothing.
+  text = await show({ ...value, entry: null }, `?month=${month}&done=saved`);
+  expect(text).not.toContain('class="notice"');
+});
