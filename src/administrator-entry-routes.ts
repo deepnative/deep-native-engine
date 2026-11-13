@@ -273,6 +273,16 @@ export function mountAdministratorEntry(
       )
         return fail(res, 403);
       const result = await attempt(action, token);
+      // ADMINEXP-01: name the earlier session and offer the button that ends it.
+      if (result?.kind === "unended")
+        return res
+          .status(409)
+          .send(
+            page(
+              "End your earlier administrator session",
+              `<section class="reading"><h1>End your earlier administrator session</h1><p>An administrator session lasts up to eight hours. Your earlier one for this sign-in was not ended, so it has to be ended before you enter again. Nothing was changed.</p><form method="post" action="/admin/end"><input type="hidden" name="csrf" value="${csrf(token, options.secret)}"><button type="submit">End administration for this sign-in</button></form><p>Then choose Enter administration on the next page.</p></section>`,
+            ),
+          );
       if (!result || result.kind !== "ready")
         return fail(res, result?.kind === "denied" ? 403 : 503);
       if (action === "enter") {

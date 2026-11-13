@@ -89,11 +89,9 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
       await s
         .getByLabel("Invoice email")
         .fill("period-student@example.invalid");
-      await s.getByRole("button", { name: "Save coaching draft" }).click();
-      await s
-        .getByRole("checkbox", { name: /I confirm this saved duration/ })
-        .check();
-      await s.getByRole("button", { name: "Request coaching invoice" }).click();
+      await s.getByRole("button", { name: "Save draft" }).click();
+      await s.getByRole("checkbox", { name: /I confirm these hours/ }).check();
+      await s.getByRole("button", { name: "Save and request invoice" }).click();
       await expect(s.getByText("Status: Awaiting review")).toBeVisible();
     };
     await report(ended, "10");

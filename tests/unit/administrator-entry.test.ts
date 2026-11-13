@@ -99,8 +99,13 @@ it("ADMINONLY02/03 denies malformed, unverified, missing and already-entered ide
       false,
     );
   }
+  // ADMINEXP-01: an earlier entry is named, and nothing new is created.
   f.state.previous = true;
-  expect(await f.store.enter(token)).toEqual({ kind: "denied" });
+  f.query.mockClear();
+  expect(await f.store.enter(token)).toEqual({ kind: "unended" });
+  expect(f.query.mock.calls.some(([sql]) => sql.startsWith("INSERT"))).toBe(
+    false,
+  );
 });
 it("ADMINONLY03/04 explicit ending revokes only current-session bindings and preserves identities/history", async () => {
   const f = fixture();

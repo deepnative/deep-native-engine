@@ -2319,3 +2319,29 @@ td code {
 .period-picker + h2 {
   margin-top: 32px;
 }
+
+/* #838 ONEPAGE: the hours form ends with its two actions side by side. */
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+.form-actions button {
+  margin: 0;
+}
+.form-actions button:disabled {
+  background: #e7ebf3;
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+#hours-form h3 {
+  margin-top: 28px;
+}
+.rate-missing {
+  padding: 12px 14px;
+  border: 1px solid #cc9c4d;
+  border-radius: 9px;
+  background: #fff4df;
+}

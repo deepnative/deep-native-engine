@@ -103,7 +103,8 @@ it("ADMINONLY01/04 enters both exact normalized verified owner identities withou
     expect(await members.progress(f.id)).toMatchObject({
       instruction: "Invented retained draft",
     });
-    expect(await entry.enter(f.token)).toEqual({ kind: "denied" });
+    // ADMINEXP-01: an earlier entry must be ended first, and the reason is told.
+    expect(await entry.enter(f.token)).toEqual({ kind: "unended" });
     expect(await entry.end(f.token)).toEqual({ kind: "ready" });
     expect((await invoices.adminOverview(r.credential)).kind).toBe("denied");
     expect((await members.session(f.token)).kind).toBe("active");
@@ -220,7 +221,7 @@ it("ADMINONLY05 an acknowledged database commit with lost transport never return
       )
     ).rowCount,
   ).toBe(1);
-  expect(await entry.enter(f.token)).toEqual({ kind: "denied" });
+  expect(await entry.enter(f.token)).toEqual({ kind: "unended" });
   expect(await entry.end(f.token)).toEqual({ kind: "ready" });
 });
 
