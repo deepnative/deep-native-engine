@@ -834,8 +834,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             )
           ).rows[0];
         if (!entry) return fail("not-found");
-        // DRAFTEMAIL-02: an invoice needs somewhere to go.
-        if (!entry.email) return fail("invalid");
+        // #842 NOEMAIL-02: an invoice without an email is still issued; the
+        // student opens it under Courses and invoices.
         if (!rate) return fail("unavailable");
         if (
           entry.state !== "draft" ||
@@ -2162,6 +2162,9 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             row.delivery !== "not_sent"
           )
             return fail("conflict");
+          // #842 NOEMAIL-03: nothing to send to without an email.
+          if (!(row.document as { recipientEmail?: string }).recipientEmail)
+            return fail("invalid");
           await tx.query(
             "UPDATE simple_invoices SET delivery='sending',delivery_operation=$2,revision=revision+1 WHERE id=$1",
             [row.id, input.operationId],

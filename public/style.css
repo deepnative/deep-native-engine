@@ -2383,3 +2383,19 @@ td code {
 .coaching-more {
   margin-top: 20px;
 }
+.month-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 0;
+}
+.month-nav a {
+  font-weight: 600;
+}
+.invoice-to {
+  margin: 8px 0 16px;
+}
+.coaching-main #hours-form {
+  max-width: 560px;
+}
