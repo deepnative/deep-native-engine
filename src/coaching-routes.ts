@@ -543,7 +543,8 @@ export function mountCoachingRoutes(
           )
         : memberBillingSection(v.billing, v.date);
       // #840 SIMPLE-02: packages and agreed changes are optional and live on
-      // their own page; the student sees them only when there are some.
+      // their own page; the student keeps their terms card, with the contact
+      // line, and the folded agreed changes beside the hours.
       if (admin)
         side += `<p class="coaching-more"><a href="${base}/package">Coaching package and agreed changes (optional)</a></p>`;
       else {
@@ -555,7 +556,7 @@ export function mountCoachingRoutes(
               t.kind === "invalid" ? "denied" : t.kind,
               admin,
             );
-          if (t.value) side += memberTermsSection(t.value);
+          side += memberTermsSection(t.value);
         }
         if (options.agreedChanges) {
           const a = await options.agreedChanges.own(token(res));
@@ -565,8 +566,7 @@ export function mountCoachingRoutes(
               a.kind === "invalid" ? "denied" : a.kind,
               admin,
             );
-          if (a.value.length)
-            side += `<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>${memberAgreedSection(a.value)}</details>`;
+          side += `<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>${memberAgreedSection(a.value)}</details>`;
         }
       }
       body = `<section class="invoice-workspace coaching-page${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review coaching hours" : "Coaching hours"}</h1>${done ? `<p class="notice" role="status">${done}</p>` : ""}${admin || v.sample ? `<p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p>` : ""}<p>${admin ? `Member: <strong>${escape(v.displayName ?? "Name needed")}</strong> · account reference <code>${escape(v.ownerId)}</code>` : `Choose the ${periodic ? "billing period" : "month"} you want to invoice, enter your coaching hours and minutes, then request the invoice. Your administrator reviews it before it is issued; nothing is charged on this site. Coaching is optional; your learning access does not depend on a rate or invoice.`}</p><div class="coaching-layout"><div class="coaching-main">${body}</div>${side ? `<aside class="coaching-side">${side}</aside>` : ""}</div>${

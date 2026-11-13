@@ -2255,16 +2255,20 @@ it("SIMPLE-02 the package page refuses extra queries, a missing student and stor
     200,
   );
 });
-it("SIMPLE-04 the student sees terms and agreed changes only when there are some, in the wide layout", async () => {
-  let f = simpleFixture();
-  let html = mainHtml((await f.get("/account/coaching")).text);
+it("SIMPLE-04 the student keeps their terms card and folded agreed changes beside the hours", async () => {
+  const f = simpleFixture();
+  const html = mainHtml((await f.get("/account/coaching")).text);
   expect(html).toContain('<div class="coaching-layout">');
-  expect(html).not.toContain("coaching terms yet");
-  expect(html).not.toContain("Agreed changes, early release and refunds");
-  f = simpleFixture(packageTerms, [agreedRow]);
-  html = mainHtml((await f.get("/account/coaching")).text);
-  expect(html).toContain("Your coaching terms");
-  expect(html).toContain("Agreed changes, early release and refunds");
+  const side = html.slice(html.indexOf('<aside class="coaching-side">'));
+  expect(side).toContain(
+    "Your administrator hasn't set your coaching terms yet.",
+  );
+  expect(side).toContain(
+    '<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>',
+  );
+  expect(html.indexOf('id="hours-form"')).toBeLessThan(
+    html.indexOf('<aside class="coaching-side">'),
+  );
 });
 it("SIMPLE-01/02/04 covers no period yet, the student's refused reads and a package page without coaching invoicing", async () => {
   const f = simpleFixture();

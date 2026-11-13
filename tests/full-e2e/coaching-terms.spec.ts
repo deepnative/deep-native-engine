@@ -451,7 +451,9 @@ test("[F-ROADMAP-04-C] a passed renewal date only shows the student as due; rene
       const due = renewalsDue(j)
         .locator("li")
         .filter({
-          has: j.admin.locator(`a[href="/operator/coaching/${j.reference}"]`),
+          has: j.admin.locator(
+            `a[href="/operator/coaching/${j.reference}/package"]`,
+          ),
         });
       await expect(due).toContainText(
         `renewal date ${readableDay(first.renewsOn)}`,
@@ -512,7 +514,9 @@ test("[F-ROADMAP-04-C] a passed renewal date only shows the student as due; rene
       // The student is no longer listed as due.
       await j.admin.goto(j.f.origin + "/operator/coaching");
       await expect(
-        renewalsDue(j).locator(`a[href="/operator/coaching/${j.reference}"]`),
+        renewalsDue(j).locator(
+          `a[href="/operator/coaching/${j.reference}/package"]`,
+        ),
       ).toHaveCount(0);
       expect(await unitsShown(j.student, j.f.origin, "review_minutes")).toEqual(
         { usable: "120", future: "240" },
@@ -681,7 +685,9 @@ test("[F-BUILD-04-B] after the coaching period and renewal date pass with no new
         renewalsDue(j)
           .locator("li")
           .filter({
-            has: j.admin.locator(`a[href="/operator/coaching/${j.reference}"]`),
+            has: j.admin.locator(
+              `a[href="/operator/coaching/${j.reference}/package"]`,
+            ),
           }),
       ).toContainText(/due today|\d+ days? overdue/);
       expect(before).toEqual([
