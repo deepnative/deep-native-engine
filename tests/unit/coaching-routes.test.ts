@@ -2044,3 +2044,41 @@ it("ONEPAGE-01 requests a draft saved exactly as posted without saving it again"
   expect(stale.text).toContain("This form is out of date");
   expect(stale.text).not.toContain("Your hours were saved");
 });
+it("ONEPAGE-02 covers the request's remaining refusals and the first-visit wording without a rate", async () => {
+  const f = fixture();
+  expect(
+    (
+      await f.post("/account/coaching/request", {
+        ...requestFields,
+        action: "save",
+      })
+    ).status,
+  ).toBe(422);
+  const { company: _company, ...noCompany } = requestFields;
+  await f.post("/account/coaching/request", noCompany);
+  expect(f.service.saveCoaching).toHaveBeenLastCalledWith(
+    token,
+    expect.objectContaining({ company: "" }),
+  );
+  for (const [kind, text] of [
+    ["unavailable", "The outcome is uncertain"],
+    ["invalid", "Check the period, rate and invoice email"],
+  ] as const) {
+    f.service.submitCoaching.mockResolvedValueOnce({ kind });
+    const r = await f.post("/account/coaching/request", requestFields);
+    expect(r.text).toContain(
+      "Your hours were saved, but the invoice was not requested.",
+    );
+    expect(r.text).toContain(text);
+  }
+  f.service.coachingOverview.mockResolvedValueOnce(
+    ready({ ...value, entry: null, rate: null, rates: [] }),
+  );
+  expect(mainHtml((await f.get("/account/coaching")).text)).toContain(
+    "Enter your coaching hours for October 2026 below and save them. Your hourly rate isn't set yet; ask your coach or administrator to set it, then request the invoice here.",
+  );
+  const disabled = fixture(true);
+  expect(
+    (await disabled.post("/account/coaching/request", requestFields)).status,
+  ).toBe(503);
+});
