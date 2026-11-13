@@ -42,7 +42,7 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
     const a = (await f.staff("platform_admin")).page;
     await a.goto(`${f.origin}/operator/coaching/${id}`);
     await a.getByLabel("Hourly rate (CAD)").fill("120.00");
-    await a.getByLabel("Effective month").fill(day(-400).slice(0, 7));
+    await a.getByLabel("Applies from").fill(day(-400).slice(0, 7));
     await a.getByRole("button", { name: "Save hourly rate" }).click();
     const billing = a.getByRole("region", { name: "Billing period" });
     await expect(billing).toContainText(

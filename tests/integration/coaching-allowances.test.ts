@@ -274,7 +274,9 @@ it("ALLOW27-07 the student sees what's left, held and used of this period's allo
   expect(
     text((await get("/account/coaching", other.token)).text),
   ).not.toContain("Allowances left this period");
-  const staffView = text((await get(`/operator/coaching/${m.id}`, admin)).text);
+  const staffView = text(
+    (await get(`/operator/coaching/${m.id}/package`, admin)).text,
+  );
   expect(staffView).toContain("AI requests 193 of 200 left, 2 held, 5 used");
 });
 

@@ -376,7 +376,7 @@ it("AGREED94-01/03/04/05 routes show the sections, record through the store and 
   expect(text(member.text)).toContain("Changes agreed with you");
   expect(text(member.text)).toContain("Early release · recorded");
   expect(member.text).not.toContain("/agreed-change");
-  const admin = await r.get(`/operator/coaching/${id}`);
+  const admin = await r.get(`/operator/coaching/${id}/package`);
   expect(admin.text).toContain(
     `action="/operator/coaching/${id}/agreed-change"`,
   );
@@ -384,13 +384,15 @@ it("AGREED94-01/03/04/05 routes show the sections, record through the store and 
   store.own.mockResolvedValueOnce({ kind: "unavailable" });
   expect((await r.get("/account/coaching")).status).toBe(503);
   store.forStudent.mockResolvedValueOnce({ kind: "invalid" });
-  expect((await r.get(`/operator/coaching/${id}`)).status).toBe(403);
+  expect((await r.get(`/operator/coaching/${id}/package`)).status).toBe(403);
   store.forStudent.mockResolvedValueOnce({ kind: "denied" });
-  expect((await r.get(`/operator/coaching/${id}`)).status).toBe(403);
+  expect((await r.get(`/operator/coaching/${id}/package`)).status).toBe(403);
 
   const ok = await r.post({});
   expect(ok.status).toBe(303);
-  expect(ok.headers.location).toBe(`/operator/coaching/${id}#agreed-changes`);
+  expect(ok.headers.location).toBe(
+    `/operator/coaching/${id}/package#agreed-changes`,
+  );
   expect(store.record).toHaveBeenCalledWith(token, {
     ...values,
     ownerId: id,

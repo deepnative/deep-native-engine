@@ -256,7 +256,7 @@ afterAll(() => pool.end());
 
 it("LIMITS823-01 an administrator saves a student's session length and practice-conversation limit with the other terms, and both people see them", async () => {
   const m = await member();
-  const blank = await get(`/operator/coaching/${m.id}`, admin.token);
+  const blank = await get(`/operator/coaching/${m.id}/package`, admin.token);
   expect(blank.status).toBe(200);
   expect(blank.text).toMatch(
     /<input name="sessionMinutes" type="number" min="15" max="60" step="1" value="60" required>/,
@@ -276,7 +276,7 @@ it("LIMITS823-01 an administrator saves a student's session length and practice-
     { version: 1, minutes: 45, exchanges: 3 },
   ]);
   for (const page of [
-    await get(`/operator/coaching/${m.id}`, admin.token),
+    await get(`/operator/coaching/${m.id}/package`, admin.token),
     await get("/account/coaching", m.token),
   ]) {
     expect(page.status).toBe(200);
@@ -286,14 +286,14 @@ it("LIMITS823-01 an administrator saves a student's session length and practice-
     );
   }
   // The form now starts from the saved values.
-  const again = await get(`/operator/coaching/${m.id}`, admin.token);
+  const again = await get(`/operator/coaching/${m.id}/package`, admin.token);
   expect(again.text).toMatch(/name="sessionMinutes"[^>]* value="45"/);
   expect(again.text).toMatch(/name="practiceExchanges"[^>]* value="3"/);
 });
 
 it("LIMITS823-02 values outside 15 to 60 minutes or 1 to 50 exchanges are refused, and the form explains the bounds", async () => {
   const m = await member();
-  const page = await get(`/operator/coaching/${m.id}`, admin.token);
+  const page = await get(`/operator/coaching/${m.id}/package`, admin.token);
   expect(text(page.text)).toContain(
     "Session length is 15 to 60 minutes, because an expert's time slot is one hour.",
   );

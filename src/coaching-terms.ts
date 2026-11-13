@@ -506,7 +506,7 @@ function renewalState(n: number) {
 }
 /** RENEW317-01/03: administrators' list of renewals that have passed or are near. */
 export function renewalsSection(rows: RenewalDue[], path: string) {
-  return `<section class="portal-card" aria-labelledby="renewals-due"><h2 id="renewals-due">Renewals due</h2><p>Students whose renewal date has passed or is within ${RENEWAL_WINDOW_DAYS} days. ${NO_AUTOMATIC_RENEWAL} To renew, open the student and save new terms.</p><ul class="portal-list">${rows.map((r) => `<li><a href="${path}/${escape(r.ownerId)}">${escape(r.displayName ?? "Name needed")}</a> · renewal date ${readable(r.renewsOn)} · ${renewalState(r.days)}</li>`).join("") || `<li>No renewal dates have passed or fall within the next ${RENEWAL_WINDOW_DAYS} days.</li>`}</ul>${rows.length >= 200 ? "<p>Showing the first 200 students.</p>" : ""}</section>`;
+  return `<section class="portal-card" aria-labelledby="renewals-due"><h2 id="renewals-due">Renewals due</h2><p>Students whose renewal date has passed or is within ${RENEWAL_WINDOW_DAYS} days. ${NO_AUTOMATIC_RENEWAL} To renew, open the student's coaching package and save new terms.</p><ul class="portal-list">${rows.map((r) => `<li><a href="${path}/${escape(r.ownerId)}/package">${escape(r.displayName ?? "Name needed")}</a> · renewal date ${readable(r.renewsOn)} · ${renewalState(r.days)}</li>`).join("") || `<li>No renewal dates have passed or fall within the next ${RENEWAL_WINDOW_DAYS} days.</li>`}</ul>${rows.length >= 200 ? "<p>Showing the first 200 students.</p>" : ""}</section>`;
 }
 function termsList(t: CoachingTerms) {
   const limits = sessionLimits(t);

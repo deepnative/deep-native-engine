@@ -295,7 +295,10 @@ it("TERMDATE42-05 a one-day period with a same-day renewal date is valid, and th
     /<section[^>]*aria-labelledby="renewals-due".*?<\/section>/,
   )![0];
   const row = (id: string) =>
-    text(page.match(new RegExp(`<li><a href="[^"]*${id}".*?</li>`))?.[0] ?? "");
+    text(
+      page.match(new RegExp(`<li><a href="[^"]*${id}/package".*?</li>`))?.[0] ??
+        "",
+    );
   expect(row(made[0]!.id)).toContain("1 day overdue");
   expect(row(made[1]!.id)).toContain("due today");
   expect(row(made[2]!.id)).toContain("due in 1 day");

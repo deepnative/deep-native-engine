@@ -118,7 +118,7 @@ afterAll(() => pool.end());
 
 it("TERMS316-01 an administrator saves a student's terms on the student's coaching page, and they show as current", async () => {
   const m = await member();
-  const page = await get(`/operator/coaching/${m.id}`, admin);
+  const page = await get(`/operator/coaching/${m.id}/package`, admin);
   expect(page.status).toBe(200);
   expect(text(page.text)).toContain(
     "No coaching terms are set for this student.",
@@ -132,8 +132,10 @@ it("TERMS316-01 an administrator saves a student's terms on the student's coachi
     operationId: randomUUID(),
   });
   expect(saved.status).toBe(303);
-  expect(saved.headers.location).toBe(`/operator/coaching/${m.id}`);
-  const after = text((await get(`/operator/coaching/${m.id}`, admin)).text);
+  expect(saved.headers.location).toBe(`/operator/coaching/${m.id}/package`);
+  const after = text(
+    (await get(`/operator/coaching/${m.id}/package`, admin)).text,
+  );
   for (const shown of [
     "Current terms, version 1:",
     "Price CAD 1,200.00",
@@ -259,10 +261,9 @@ it("TERMS316-05 only a platform administrator with a valid form can save", async
 it("TERMS316-06 the student sees their own current terms read-only, with the contact line, and nobody else's", async () => {
   const m = await member(),
     other = await member();
+  // #840 SIMPLE-04: with no terms, the student's page shows no section.
   const none = text((await get("/account/coaching", m.token)).text);
-  expect(none).toContain(
-    "Your administrator hasn't set your coaching terms yet.",
-  );
+  expect(none).not.toContain("Your coaching terms");
   ready(await terms.save(admin, input(m.id)));
   const page = await get("/account/coaching", m.token);
   expect(page.status).toBe(200);
@@ -285,9 +286,9 @@ it("TERMS316-06 the student sees their own current terms read-only, with the con
   expect(page.text).not.toContain('name="price"');
   expect(ready(await terms.own(m.token))).toMatchObject({ version: 1 });
   expect(ready(await terms.own(other.token))).toBeNull();
-  expect(text((await get("/account/coaching", other.token)).text)).toContain(
-    "Your administrator hasn't set your coaching terms yet.",
-  );
+  expect(
+    text((await get("/account/coaching", other.token)).text),
+  ).not.toContain("Your coaching terms");
 });
 
 it("TERMS316-07 the student's download has every version without the administrator, and deleting the account removes them", async () => {
@@ -385,7 +386,7 @@ it("RENEW317-01/02 administrators see current renewal dates that have passed or 
   const section = page.text.match(
     /<section[^>]*aria-labelledby="renewals-due".*?<\/section>/,
   )![0];
-  expect(section).toContain(`href="/operator/coaching/${soon.id}"`);
+  expect(section).toContain(`href="/operator/coaching/${soon.id}/package"`);
   for (const hidden of [later, moved, gone])
     expect(section).not.toContain(hidden.id);
   // Listing changes nothing: no new version, charge or invoice.

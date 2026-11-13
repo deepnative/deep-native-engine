@@ -471,7 +471,7 @@ export function mountCoachingRoutes(
       const picker = periodic
         ? `<form class="period-picker" method="get" action="${base}"><label>Billing period<select name="month">${choices.map((p) => `<option value="${p.key}"${p.key === v.month ? " selected" : ""}>${periodLabel(p)}${p.key === v.periods[0]!.key ? " (current)" : ""}</option>`).join("")}</select></label><button class="secondary">Open period</button></form>`
         : `<form class="period-picker" method="get" action="${base}"><label>Calendar month (UTC)<input type="month" name="month" value="${v.month.slice(0, 7)}" max="${v.today}" required></label><button class="secondary">Open month</button></form>`;
-      const rateLine = `<p>${v.rate ? `Applicable rate: ${money(v.rate.cents)} per hour · version ${v.rate.version} · effective ${periodLabel({ key: v.rate.effectiveMonth })}` : admin ? `No rate is set for this ${unit}. Set the rate below.` : `No rate is set for this ${unit}. Ask the administrator to enter your agreed rate before submitting; you can save a draft now.`}</p>`;
+      const rateLine = `<p>${v.rate ? `Applicable rate: ${money(v.rate.cents)} per hour · version ${v.rate.version} · effective ${periodLabel({ key: v.rate.effectiveMonth })}` : admin ? `No rate is set for this ${unit}. Set it under Hourly rate.` : `No rate is set for this ${unit}. Ask the administrator to enter your agreed rate before submitting; you can save a draft now.`}</p>`;
       // NEXTSTEP-03: a plain confirmation after the student's save or request.
       const done =
         !admin && e && req.query.done === "saved"
@@ -479,81 +479,15 @@ export function mountCoachingRoutes(
           : !admin && req.query.done === "requested"
             ? `Invoice requested for ${label}. Your administrator will review it.`
             : "";
-      let body = `<section class="invoice-workspace${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review coaching hours" : "Coaching hours"}</h1>${done ? `<p class="notice" role="status">${done}</p>` : ""}${admin || v.sample ? `<p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p>` : ""}<p>${admin ? `Member: <strong>${escape(v.displayName ?? "Name needed")}</strong> · account reference <code>${escape(v.ownerId)}</code>` : `Choose the ${periodic ? "billing period" : "month"} you want to invoice, enter your coaching hours and minutes, then request the invoice. Your administrator reviews it before it is issued; nothing is charged on this site. Coaching is optional; your learning access does not depend on a rate or invoice.`}</p>${picker}${
+      // #840 SIMPLE-03: a wide page, the hours on the left and the settings
+      // beside them, with no card inside another.
+      let body = `${picker}${
         period
           ? admin
             ? `<h2>${label}</h2><p>Status: ${e ? escape(e.state) : "No saved draft or submission"}${e ? ` · revision ${e.revision}` : ""}</p>${e?.returnReason ? `<p role="status">Returned for correction: ${escape(e.returnReason)}</p>` : ""}${rateLine}`
             : `<h2>${label}</h2>${studentNextStep({ e, rate: v.rate, amount, label, unit, rateLine, periodEnd: defined && period.end >= v.date ? period.end : null })}`
           : `<h2>No billing period has started</h2><p role="status">${admin ? "This student’s" : "Your"} first billing period starts on ${dayLabel(v.billing.schedules[0]!.startsOn)}. Hours can be reported from that day.</p>`
       }`;
-      // NEXTSTEP-04: the student's reference material follows the hours form.
-      const head = body;
-      if (!admin) body = "";
-      // PERIOD832-01/02: the billing period, beside the hours.
-      body += admin
-        ? adminBillingSection(
-            v.billing,
-            v.date,
-            `${base}/billing-period`,
-            `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.billing.version)}`,
-          )
-        : memberBillingSection(v.billing, v.date);
-      const billing = admin ? "" : body;
-      if (!admin) body = "";
-      // #316 TERMS316-01/06: per-student coaching terms, beside the hours.
-      if (options.coachingTerms) {
-        const t = admin
-          ? await options.coachingTerms.forStudent(token(res), v.ownerId)
-          : await options.coachingTerms.own(token(res));
-        if (t.kind !== "ready")
-          return failure(res, t.kind === "invalid" ? "denied" : t.kind, admin);
-        body += admin
-          ? adminTermsSection(
-              t.value,
-              `${base}/terms`,
-              `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", t.value?.version ?? 0)}`,
-            )
-          : memberTermsSection(t.value);
-        // #318 TERMSINV318-01/03: invoice the current terms version.
-        if (admin && store) {
-          const i = await store.coachingTermsInvoice(token(res), v.ownerId);
-          if (i.kind !== "ready")
-            return failure(
-              res,
-              i.kind === "invalid" ? "denied" : i.kind,
-              admin,
-            );
-          body += adminTermsInvoiceSection(
-            i.value,
-            `${base}/terms-invoice`,
-            `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", i.value.terms?.version ?? 0)}`,
-            hst,
-            v.sample,
-          );
-        }
-      }
-      // NEXTSTEP-04: the student's terms and allowances stay in view.
-      const terms = admin ? "" : body;
-      if (!admin) body = "";
-      // #94 AGREED94-01/03: what staff and the student agreed, append-only.
-      if (options.agreedChanges) {
-        const a = admin
-          ? await options.agreedChanges.forStudent(token(res), v.ownerId)
-          : await options.agreedChanges.own(token(res));
-        if (a.kind !== "ready")
-          return failure(res, a.kind === "invalid" ? "denied" : a.kind, admin);
-        body += admin
-          ? adminAgreedSection(
-              a.value,
-              `${base}/agreed-change`,
-              `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}`,
-            )
-          : memberAgreedSection(a.value);
-      }
-      if (admin)
-        body += `<h2>Set member rate</h2><form method="post" action="${base}/rate">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.rateVersion)}<label>Effective month<input type="month" name="effectiveMonth" value="${v.month.slice(0, 7)}" required></label><label>Hourly rate (CAD)<input name="rate" inputmode="decimal" required></label><button>Save hourly rate</button></form>`;
-      const reference = admin ? "" : body;
-      if (!admin) body = head;
       if (admin) body += hoursChangesSection(v.overrides, admin);
       if (e && (admin || e.state !== "draft"))
         body += `<p>Saved duration: ${coachingDuration(e.minutes)}</p><p>Invoice recipient: ${escape(e.name)}${e.company ? ` · ${escape(e.company)}` : ""} · ${e.email ? escape(e.email) : "no invoice email yet"}</p>`;
@@ -593,9 +527,49 @@ export function mountCoachingRoutes(
         body += `<h2>Change this student’s hours</h2><p>Correct hours the student has saved or submitted. The student sees the earlier figure, the new figure and your reason on their coaching page and in Download my records. ${e.state === "submitted" ? `The ${unit} stays awaiting review at the rate the student confirmed, and its subtotal is recalculated.` : "The draft stays the student’s to submit."}</p><form method="post" action="${base}/override">${form("override", e.revision)}<label>Whole hours<input name="hours" type="number" min="0" max="${defined ? period!.days * 24 : 744}" step="1" value="${Math.floor(e.minutes / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${e.minutes % 60}" required></label><label>Reason for the change<input name="reason" maxlength="500" required></label><button>Change hours</button></form>`;
       else if (admin && !e && period)
         body += `<p>The student has not saved hours for this ${unit}. An administrator cannot enter new hours for a student; once the student saves hours, you can change them here.</p>`;
-      if (!admin)
-        body += `${hoursChangesSection(v.overrides, admin)}${billing}${terms}${reference ? `<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>${reference}</details>` : ""}`;
-      body += `<h2 id="saved-months">Saved periods</h2>${savedMonthsTable(v.months, v.rates, base, admin ? "/operator/invoices/" : "/account/purchases/invoices/")}${
+      if (!admin) body += hoursChangesSection(v.overrides, admin);
+      body += `<h2 id="saved-months">Saved periods</h2>${savedMonthsTable(v.months, v.rates, base, admin ? "/operator/invoices/" : "/account/purchases/invoices/")}`;
+      let side = "";
+      // #840 SIMPLE-01: one hourly rate, first in the side column.
+      if (admin)
+        side += `<section class="portal-card" aria-labelledby="hourly-rate"><h2 id="hourly-rate">Hourly rate</h2><p class="rate-now">${v.rate ? `<strong>${money(v.rate.cents)} per hour</strong> from ${periodLabel({ key: v.rate.effectiveMonth })}` : `No hourly rate set${label ? ` for ${label}` : ""}.`}</p><form method="post" action="${base}/rate">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.rateVersion)}<label>Hourly rate (CAD)<input name="rate" inputmode="decimal" value="${v.rate ? (v.rate.cents / 100).toFixed(2) : ""}" required></label><label>Applies from<input type="month" name="effectiveMonth" value="${v.month.slice(0, 7)}" required></label><button>Save hourly rate</button></form><p class="small">The rate applies from that month on. Hours a student already requested keep the rate they confirmed.</p></section>`;
+      // PERIOD832-01/02: the billing period, beside the hours.
+      side += admin
+        ? adminBillingSection(
+            v.billing,
+            v.date,
+            `${base}/billing-period`,
+            `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", v.billing.version)}`,
+          )
+        : memberBillingSection(v.billing, v.date);
+      // #840 SIMPLE-02: packages and agreed changes are optional and live on
+      // their own page; the student sees them only when there are some.
+      if (admin)
+        side += `<p class="coaching-more"><a href="${base}/package">Coaching package and agreed changes (optional)</a></p>`;
+      else {
+        if (options.coachingTerms) {
+          const t = await options.coachingTerms.own(token(res));
+          if (t.kind !== "ready")
+            return failure(
+              res,
+              t.kind === "invalid" ? "denied" : t.kind,
+              admin,
+            );
+          if (t.value) side += memberTermsSection(t.value);
+        }
+        if (options.agreedChanges) {
+          const a = await options.agreedChanges.own(token(res));
+          if (a.kind !== "ready")
+            return failure(
+              res,
+              a.kind === "invalid" ? "denied" : a.kind,
+              admin,
+            );
+          if (a.value.length)
+            side += `<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>${memberAgreedSection(a.value)}</details>`;
+        }
+      }
+      body = `<section class="invoice-workspace coaching-page${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review coaching hours" : "Coaching hours"}</h1>${done ? `<p class="notice" role="status">${done}</p>` : ""}${admin || v.sample ? `<p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p>` : ""}<p>${admin ? `Member: <strong>${escape(v.displayName ?? "Name needed")}</strong> · account reference <code>${escape(v.ownerId)}</code>` : `Choose the ${periodic ? "billing period" : "month"} you want to invoice, enter your coaching hours and minutes, then request the invoice. Your administrator reviews it before it is issued; nothing is charged on this site. Coaching is optional; your learning access does not depend on a rate or invoice.`}</p><div class="coaching-layout"><div class="coaching-main">${body}</div>${side ? `<aside class="coaching-side">${side}</aside>` : ""}</div>${
         admin
           ? portalActions([
               [adminPath, "Choose another member"],
@@ -606,6 +580,53 @@ export function mountCoachingRoutes(
       res.send(page(admin ? "Review coaching hours" : "Coaching hours", body));
     });
   }
+  // #840 SIMPLE-02: the optional coaching package, its invoice and agreed
+  // changes, off the student's hours page.
+  app.get(`${adminPath}/:ownerId/package`, async (req, res) => {
+    if (!valid(req, res, [], [])) return;
+    if (!store) return failure(res, "unavailable", true);
+    const ownerId = (req.params as Record<string, string>).ownerId!;
+    const r = await store.coachingOverview(token(res), undefined, ownerId);
+    if (r.kind === "not-found") return res.status(404).send(studentGonePage());
+    if (r.kind !== "ready") return failure(res, r.kind, true);
+    const refused = (kind: string) =>
+      failure(res, (kind === "invalid" ? "denied" : kind) as never, true);
+    const base = `${adminPath}/${ownerId}`,
+      anti = csrf(token(res), options.secret),
+      fields = (revision?: number) =>
+        `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${revision === undefined ? "" : hidden("revision", revision)}`;
+    let main = "",
+      side = "";
+    if (options.coachingTerms) {
+      const t = await options.coachingTerms.forStudent(token(res), ownerId);
+      if (t.kind !== "ready") return refused(t.kind);
+      const i = await store.coachingTermsInvoice(token(res), ownerId);
+      if (i.kind !== "ready") return refused(i.kind);
+      main = adminTermsSection(
+        t.value,
+        `${base}/terms`,
+        fields(t.value?.version ?? 0),
+      );
+      side = adminTermsInvoiceSection(
+        i.value,
+        `${base}/terms-invoice`,
+        fields(i.value.terms?.version ?? 0),
+        store.tax,
+        r.value.sample,
+      );
+    }
+    if (options.agreedChanges) {
+      const a = await options.agreedChanges.forStudent(token(res), ownerId);
+      if (a.kind !== "ready") return refused(a.kind);
+      side += adminAgreedSection(a.value, `${base}/agreed-change`, fields());
+    }
+    res.send(
+      page(
+        "Coaching package",
+        `<section class="invoice-workspace portal-workspace coaching-page"><h1>Coaching package</h1><p>Member: <strong>${escape(r.value.displayName ?? "Name needed")}</strong></p><p>Optional. Most students only need an hourly rate, which you set on their <a href="${base}">hours page</a>. Use this page for a prepaid coaching package with allowances, its invoice, or a change you agreed with the student.</p><div class="coaching-layout"><div class="coaching-main">${main}</div><aside class="coaching-side">${side}</aside></div><p class="account-links"><a class="button secondary" href="${base}">Back to hours and rate</a></p></section>`,
+      ),
+    );
+  });
   // #316 TERMS316-01..05: a platform administrator saves a new terms version.
   app.post(`${adminPath}/:ownerId/terms`, async (req, res) => {
     if (!valid(req, res, [...TERMS_FIELDS])) return;
@@ -630,7 +651,7 @@ export function mountCoachingRoutes(
       operationId: req.body.operationId,
     });
     return r.kind === "ready"
-      ? res.redirect(303, `${adminPath}/${ownerId}`)
+      ? res.redirect(303, `${adminPath}/${ownerId}/package`)
       : failure(res, r.kind, true);
   });
   // #94 AGREED94-01/02/04/05: a platform administrator records an agreed change.
@@ -646,7 +667,7 @@ export function mountCoachingRoutes(
       operationId: req.body.operationId,
     });
     return r.kind === "ready"
-      ? res.redirect(303, `${adminPath}/${ownerId}#agreed-changes`)
+      ? res.redirect(303, `${adminPath}/${ownerId}/package#agreed-changes`)
       : failure(res, r.kind, true);
   });
   // #318 TERMSINV318-01..06: one invoice for the current terms version.

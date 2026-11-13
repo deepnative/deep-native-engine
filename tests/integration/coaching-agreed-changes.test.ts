@@ -112,7 +112,7 @@ afterAll(() => pool.end());
 
 it("AGREED94-01 an administrator records an agreed early release and an agreed refund on the student's coaching page, newest first", async () => {
   const m = await member();
-  const page = await get(`/operator/coaching/${m.id}`, admin.token);
+  const page = await get(`/operator/coaching/${m.id}/package`, admin.token);
   expect(page.status).toBe(200);
   expect(text(page.text)).toContain(
     "No agreed changes are recorded for this student.",
@@ -125,7 +125,7 @@ it("AGREED94-01 an administrator records an agreed early release and an agreed r
   });
   expect(saved.status).toBe(303);
   expect(saved.headers.location).toBe(
-    `/operator/coaching/${m.id}#agreed-changes`,
+    `/operator/coaching/${m.id}/package#agreed-changes`,
   );
   expect(
     (
@@ -138,7 +138,7 @@ it("AGREED94-01 an administrator records an agreed early release and an agreed r
   ).toBe(303);
   expect(await stored(m.id)).toEqual([release, refund]);
   const after = text(
-    (await get(`/operator/coaching/${m.id}`, admin.token)).text,
+    (await get(`/operator/coaching/${m.id}/package`, admin.token)).text,
   );
   expect(after).toContain(`Agreed: ${release.agreed}`);
   expect(after).toContain(`Reason: ${release.reason}`);
@@ -184,9 +184,10 @@ it("AGREED94-03 the student sees their own records read-only with the contact li
   expect(page.text).not.toContain(admin.id);
   expect(ready(await changes.own(m.token))).toMatchObject([refund]);
   expect(ready(await changes.own(other.token))).toEqual([]);
-  expect(text((await get("/account/coaching", other.token)).text)).toContain(
-    "No agreed changes are recorded.",
-  );
+  // #840 SIMPLE-04: with no records, the student's page shows no section.
+  expect(
+    text((await get("/account/coaching", other.token)).text),
+  ).not.toContain("Changes agreed with you");
 });
 
 it("AGREED94-04 an unconfirmed, empty, over-long or unknown-kind change is refused and nothing is recorded", async () => {

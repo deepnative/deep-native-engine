@@ -247,7 +247,7 @@ test("[F-ROADMAP-04-A] a student's first terms are one version with one invoice 
     await requiredCheck(1, async () => {
       await saveTerms(j.admin, real, j.reference, terms);
       await saveRecipient(j.student, real);
-      await j.admin.goto(`${real}/operator/coaching/${j.reference}`);
+      await j.admin.goto(`${real}/operator/coaching/${j.reference}/package`);
       await expect(termsInvoiceSection(j.admin)).toContainText(
         "Issue an invoice for terms version 1: CAD 1,200.00 plus HST (13%) CAD 156.00, total CAD 1,356.00, to Invented Student",
       );
@@ -256,7 +256,7 @@ test("[F-ROADMAP-04-A] a student's first terms are one version with one invoice 
         real,
         j.reference,
       );
-      await j.admin.goto(`${real}/operator/coaching/${j.reference}`);
+      await j.admin.goto(`${real}/operator/coaching/${j.reference}/package`);
       await expect(termsSection(j.admin)).toContainText(
         "Current terms, version 1:",
       );
@@ -359,7 +359,7 @@ async function invoiceNextOnce(j: Journey) {
       )
     ).status(),
   ).toBe(409);
-  await j.admin.goto(`${j.f.origin}/operator/coaching/${j.reference}`);
+  await j.admin.goto(`${j.f.origin}/operator/coaching/${j.reference}/package`);
   await expect(termsInvoiceSection(j.admin)).toContainText(
     "Terms version 2 is invoiced.",
   );
