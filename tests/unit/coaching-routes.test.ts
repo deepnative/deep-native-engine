@@ -2266,3 +2266,28 @@ it("SIMPLE-04 the student sees terms and agreed changes only when there are some
   expect(html).toContain("Your coaching terms");
   expect(html).toContain("Agreed changes, early release and refunds");
 });
+it("SIMPLE-01/02/04 covers no period yet, the student's refused reads and a package page without coaching invoicing", async () => {
+  const f = simpleFixture();
+  f.service.coachingOverview.mockResolvedValueOnce(
+    ready({
+      ...value,
+      rate: null,
+      rateVersion: null,
+      entry: null,
+      period: null,
+      billing: {
+        schedules: [{ unit: "days", days: 14, startsOn: "2026-12-01" }],
+        version: 1,
+        nextStart: null,
+      },
+    }),
+  );
+  const html = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  expect(html).toContain('<p class="rate-now">No hourly rate set.</p>');
+  f.coachingTerms.own.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await f.get("/account/coaching")).status).toBe(403);
+  f.agreedChanges.own.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await f.get("/account/coaching")).status).toBe(403);
+  const off = fixture(true);
+  expect((await off.get(`/operator/coaching/${id}/package`)).status).toBe(503);
+});
