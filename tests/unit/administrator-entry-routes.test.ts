@@ -1154,3 +1154,20 @@ it("WAITWORK-06 turns a queue on only when its store and its site setting are bo
     contributions: true,
   });
 });
+// #838 ADMINEXP-01: an earlier administrator session that was never ended is
+// named, with the button that ends it, instead of the generic refusal.
+it("ADMINEXP-01 tells an owner to end the earlier session and offers the button", async () => {
+  const f = fixture();
+  f.state.result = { kind: "unended" };
+  const r = await post(f.app);
+  expect(r.status).toBe(409);
+  expect(r.headers["set-cookie"]).toBeUndefined();
+  expect(r.text).toContain("<h1>End your earlier administrator session</h1>");
+  expect(r.text).toContain(
+    "An administrator session lasts up to eight hours. Your earlier one for this sign-in was not ended, so it has to be ended before you enter again.",
+  );
+  expect(r.text).toContain(
+    `<form method="post" action="/admin/end"><input type="hidden" name="csrf" value="${csrf(token, secret)}"><button type="submit">End administration for this sign-in</button></form>`,
+  );
+  expect(r.text).not.toContain("Administration unavailable");
+});

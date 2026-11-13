@@ -11,7 +11,8 @@ import {
 
 export type AdministratorResult =
   | { kind: "ready"; credential?: string; expires?: Date }
-  | { kind: "denied" | "unavailable" };
+  // ADMINEXP-01: an earlier entry for this sign-in was never ended.
+  | { kind: "denied" | "unavailable" | "unended" };
 export const LEARNERS_PER_PAGE = 25;
 /** One saved coaching month, as the console summarises it. */
 export interface LatestCoaching {
@@ -126,7 +127,7 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
           "SELECT 1 FROM administrator_sessions WHERE member_id=$1 AND member_token_hash=$2 AND revoked_at IS NULL",
           [owner.id, cookieHash(memberToken)],
         );
-        if (previous.rowCount) throw new PracticeLifetimeFailure("denied");
+        if (previous.rowCount) return { kind: "unended" as const };
         const expires = owner.session_expires;
         const credential = randomBytes(32).toString("hex"),
           id = randomUUID();

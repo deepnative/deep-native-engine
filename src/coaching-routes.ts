@@ -1,5 +1,5 @@
 import type { BillingProfileStore } from "./billing-profile.ts";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { csrf, validCsrf } from "./session.ts";
 import { page, escape } from "./views.ts";
@@ -77,7 +77,7 @@ function failure(
     .send(
       page(
         "Coaching request not confirmed",
-        `<h1>Coaching request not confirmed</h1><p role="alert">${kind === "unavailable" ? "The outcome is uncertain. Inspect the original operation before another action." : kind === "conflict" ? "This form is out of date or the current state does not allow this action. Reopen the period and review its rate, revision and invoice status." : (detail ?? "The request was not accepted. Check the period, whole hours and minutes, recipient and explicit amounts using the current form.")}</p>${key ? `<p><a href="${admin ? "/operator/invoices" : "/account/purchases"}/operations/${escape(key)}">Inspect original operation</a></p>` : ""}<p><a href="${admin ? adminPath : memberPath}">Return to coaching hours</a></p>`,
+        `<h1>Coaching request not confirmed</h1><p role="alert">${kind === "unavailable" ? "The outcome is uncertain. Inspect the original operation before another action." : kind === "conflict" ? "This form is out of date or the current state does not allow this action. Reopen the period and review its rate, revision and invoice status." : (detail ?? (admin && kind === "denied" ? 'Your administrator session has ended or was not entered. Open <a href="/admin">Administration</a>, end the earlier session if it asks you to, then enter administration and try again.' : "The request was not accepted. Check the period, whole hours and minutes, recipient and explicit amounts using the current form."))}</p>${key ? `<p><a href="${admin ? "/operator/invoices" : "/account/purchases"}/operations/${escape(key)}">Inspect original operation</a></p>` : ""}<p><a href="${admin ? adminPath : memberPath}">Return to coaching hours</a></p>`,
       ),
     );
 }
@@ -129,6 +129,28 @@ const changedOn = (at: Date) =>
     year: "numeric",
     timeZone: "America/Toronto",
   });
+/**
+ * #838 ONEPAGE-01: what the saved draft holds, so a request posted with the
+ * same values is requested as it is. It only decides whether to save first;
+ * the request always uses the stored draft.
+ */
+function draftPrint(
+  minutes: number,
+  name: string,
+  email: string,
+  company: string,
+) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        minutes,
+        name,
+        email.trim().toLowerCase(),
+        company.trim(),
+      ]),
+    )
+    .digest("hex");
+}
 const STEPS = [
   "Save hours",
   "Rate set",
@@ -166,8 +188,9 @@ function studentNextStep(s: {
     action = "";
   if (!e) {
     [step, status] = [0, "Nothing saved yet"];
-    message = `Enter your coaching hours for ${label} and save them.`;
-    action = button("#hours-form", "Enter your hours");
+    message = rate
+      ? `Enter your coaching hours for ${label} below, then choose Save and request invoice.`
+      : `Enter your coaching hours for ${label} below and save them. Your hourly rate isn't set yet; ask your coach or administrator to set it, then request the invoice here.`;
   } else if (e.state === "submitted") {
     [step, status] = [3, "Awaiting review"];
     message = `Your invoice request is with your administrator for review. The invoice appears here once it is issued; nothing is charged on this site.${s.periodEnd ? ` The invoice can be issued after this ${s.unit} ends on ${dayLabel(s.periodEnd)}.` : ""}`;
@@ -181,23 +204,20 @@ function studentNextStep(s: {
       );
   } else if (e.returnReason) {
     [step, status] = [0, "Returned for correction"];
-    message = `Your administrator returned these hours: ${escape(e.returnReason)}. Correct them and save, then request the invoice again.`;
-    action = button("#hours-form", "Correct your hours");
+    message = `Your administrator returned these hours: ${escape(e.returnReason)}. Correct them below and choose Save and request invoice.`;
   } else if (!rate) {
     [step, status] = [1, "Draft, not sent yet"];
-    message = `Your ${hours} are saved. Your administrator needs to set your hourly rate before you can request the invoice. You can still change your hours.`;
+    message = `Your ${hours} are saved. Your hourly rate isn't set yet, so the invoice can't be requested. Ask your coach or administrator to set it, then come back here to request the invoice.`;
   } else if (!e.email) {
     [step, status] = [2, "Draft, not sent yet"];
-    message = "Add your invoice email and save, then request the invoice.";
-    action = button("#invoice-email", "Add invoice email");
+    message = `Your ${hours} are saved. Add your invoice email below, then choose Save and request invoice.`;
   } else if (amount === null) {
     [step, status] = [2, "Draft, not sent yet"];
     message =
       "The saved hours at this rate exceed the invoice amount limit. Correct your hours or ask your administrator to review the rate.";
   } else {
     [step, status] = [2, "Draft, not sent yet"];
-    message = `Ready to request: ${hours} at ${money(rate.cents)} per hour is ${money(amount)} before tax.${amount === 0 ? " A zero total creates no invoice." : ""}`;
-    action = button("#request-invoice", "Request the invoice");
+    message = `Ready to request: ${hours} at ${money(rate.cents)} per hour is ${money(amount)} before tax.${amount === 0 ? " A zero total creates no invoice." : ""} Check your hours below and choose Save and request invoice.`;
   }
   const steps = STEPS.map((name, i) =>
     i === step
@@ -455,7 +475,7 @@ export function mountCoachingRoutes(
       // NEXTSTEP-03: a plain confirmation after the student's save or request.
       const done =
         !admin && e && req.query.done === "saved"
-          ? `Saved ${coachingDuration(e.minutes)} for ${label}.`
+          ? `Saved ${coachingDuration(e.minutes)} for ${label}.${v.rate ? "" : " Ask your coach or administrator to set your hourly rate, then request the invoice here."}`
           : !admin && req.query.done === "requested"
             ? `Invoice requested for ${label}. Your administrator will review it.`
             : "";
@@ -540,19 +560,14 @@ export function mountCoachingRoutes(
       if (snapshot)
         body += `<h2>Submitted snapshot</h2><p>${periodLabel({ key: snapshot.month, start: snapshot.periodStart, end: snapshot.periodEnd })} · ${coachingDuration(snapshot.minutes)} · ${money(snapshot.rate.cents)} per hour · rate version ${snapshot.rate.version} · subtotal ${money(snapshot.subtotalCents)}</p><p>Recipient: ${escape(snapshot.name)}${snapshot.company ? ` · ${escape(snapshot.company)}` : ""} · ${escape(snapshot.email)} · ${snapshot.sample ? "Sample, not payable" : "Configured offline invoice"}</p><p>${admin ? `Submitted revision ${e!.submittedRevision}. This snapshot stays retained after correction.` : "This record of what you submitted is kept, even if the hours are corrected later."}</p>`;
       if (!admin && period && (!e || e.state === "draft")) {
-        body += `<h2>Your hours</h2><form id="hours-form" method="post" action="${base}/save">${form("save", e?.revision ?? 0)}<label>Whole hours<input name="hours" type="number" min="0" max="${defined ? period.days * 24 : 744}" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label><label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="${escape(e?.name ?? recipient.value?.name ?? "")}" required></label><label>Invoice email<input id="invoice-email" name="email" type="email" autocomplete="email" maxlength="254" value="${escape(e?.email ?? recipient.value?.email ?? "")}"></label><label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value="${escape((e ? e.company : recipient.value?.company) ?? "")}"></label><p>Changes here are saved as your reusable billing recipient for later ${periodic ? "periods" : "months"}. <a href="/account/billing">Edit reusable billing recipient</a>. This email is only the billing recipient; it does not change your sign-in identity.${(e?.email ?? recipient.value?.email) ? "" : " You can save your hours now and add the invoice email before you request the invoice."}</p><button>Save coaching draft</button></form>`;
-        // NEXTSTEP-02: why the request is not offered yet, where it would be.
-        if (e && !v.rate)
-          body += `<p>You can request the invoice once your administrator sets your hourly rate.</p>`;
-        // DRAFTEMAIL-03: no invoice request until the draft has an email.
-        if (e && !e.email)
-          body +=
-            '<p role="alert">Add your invoice email and save the draft before you request the invoice.</p>';
-        else if (e && v.rate && amount !== null)
-          body += `<section id="request-invoice"><h2>Request the invoice</h2><p>Subtotal before ${hst ? escape(hst.label) : "separately supplied tax"}: <strong>${money(amount)}</strong>. ${amount === 0 ? "A zero-total submission creates no invoice." : hst ? `${escape(hst.label)} at ${taxRate(hst)} is added when the invoice is issued.` : "The administrator supplies tax when reviewing the invoice."}</p><form method="post" action="${base}/submit">${form("submit", e.revision)}${hidden("rateId", v.rate.id)}${hidden("sample", String(v.sample))}<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm this saved duration, recipient and exact rate version for ${defined ? label : v.month}. ${v.sample ? "This is a sample, not payable." : "I submit for configured offline invoicing; issued financial records may be retained after account deletion."}</span></label><button>Request coaching invoice</button></form></section>`;
-        if (e && v.rate && amount === null)
-          body +=
-            '<p role="alert">The saved duration at this rate exceeds the invoice amount limit. Correct the draft or ask the administrator to review the rate.</p>';
+        // #838 ONEPAGE-01..03: hours, recipient and the invoice request are
+        // one form. Save draft comes first, so Enter never requests.
+        const rate = v.rate,
+          fields = `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", e?.revision ?? 0)}${hidden("month", v.month)}${e ? hidden("saved", draftPrint(e.minutes, e.name, e.email, e.company ?? "")) : ""}`,
+          request = rate
+            ? `<h3>Request the invoice</h3><p>Rate: ${money(rate.cents)} per hour, set by your administrator. The subtotal is your hours × this rate, before ${hst ? `${escape(hst.label)}. ${escape(hst.label)} at ${taxRate(hst)} is added when the invoice is issued` : "separately supplied tax"}.</p>${e && amount === 0 ? "<p>A zero-total submission creates no invoice.</p>" : ""}${e && amount === null ? '<p role="alert">The saved duration at this rate exceeds the invoice amount limit. Correct the draft or ask the administrator to review the rate.</p>' : ""}<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm these hours, recipient and the rate ${money(rate.cents)} per hour (version ${rate.version}) for ${label}. ${v.sample ? "This is a sample, not payable." : "I submit for configured offline invoicing; issued financial records may be retained after account deletion."}</span></label>${hidden("rateId", rate.id)}${hidden("sample", String(v.sample))}<div class="form-actions"><button class="secondary" name="action" value="save" formnovalidate>Save draft</button><button name="action" value="request" formaction="${base}/request">Save and request invoice</button></div>`
+            : `<h3>Request the invoice</h3><p class="rate-missing">Your hourly rate for ${label} isn't set yet, so the invoice can't be requested. Ask your coach or administrator to set it. You can save your hours now and request the invoice here once it's set.</p><div class="form-actions"><button name="action" value="save">Save draft</button><button type="button" disabled>Save and request invoice</button></div>`;
+        body += `<h2>Your hours</h2><form id="hours-form" method="post" action="${base}/save">${fields}<label>Whole hours<input name="hours" type="number" min="0" max="${defined ? period.days * 24 : 744}" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label><label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="${escape(e?.name ?? recipient.value?.name ?? "")}" required></label><label>Invoice email<input id="invoice-email" name="email" type="email" autocomplete="email" maxlength="254" value="${escape(e?.email ?? recipient.value?.email ?? "")}"${rate ? " required" : ""}></label><label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value="${escape((e ? e.company : recipient.value?.company) ?? "")}"></label><p>Changes here are saved as your reusable billing recipient for later ${periodic ? "periods" : "months"}. <a href="/account/billing">Edit reusable billing recipient</a>. This email is only the billing recipient; it does not change your sign-in identity.${(e?.email ?? recipient.value?.email) ? "" : " You can save your hours now and add the invoice email before you request the invoice."}</p>${request}</form>`;
       }
       if (e?.invoiceId)
         body += `<p><a href="${admin ? "/operator/invoices/" : "/account/purchases/invoices/"}${e.invoiceId}">View issued invoice</a></p><p>To correct an issued ${unit}, the administrator must first void its unpaid invoice. Paid or partially paid invoices cannot be corrected here; contact the administrator for financial review.</p>`;
@@ -745,12 +760,117 @@ export function mountCoachingRoutes(
             : "The hours were not changed. Give a reason, and hours that fit the period and differ from the current figure.",
         );
   });
+  // #838 ONEPAGE-01/02: the student's one form saves the entered values and
+  // requests the invoice. Each step keeps its own operation and revision.
+  app.post(`${memberPath}/request`, async (req, res) => {
+    if (
+      !valid(req, res, [
+        "month",
+        "action",
+        "hours",
+        "minutes",
+        "name",
+        "email",
+        "company",
+        "rateId",
+        "sample",
+        "confirm",
+        "saved",
+      ])
+    )
+      return;
+    if (!store) return failure(res, "unavailable", false);
+    const minutes = parseCoachingDuration(req.body.hours, req.body.minutes);
+    if (
+      req.body.action !== "request" ||
+      req.body.confirm !== "submit" ||
+      minutes === null ||
+      typeof req.body.email !== "string" ||
+      req.body.email.trim() === "" ||
+      !["true", "false"].includes(req.body.sample)
+    )
+      return failure(
+        res,
+        "invalid",
+        false,
+        undefined,
+        "The invoice was not requested and nothing was saved. Enter whole hours and minutes, the recipient name and invoice email, and tick the confirmation.",
+      );
+    const month = req.body.month,
+      expected = Number(req.body.revision),
+      name = req.body.name,
+      email = req.body.email,
+      company = req.body.company ?? "";
+    // A draft saved exactly as posted is requested as it is, keeping its
+    // revision and this form's operation; otherwise the edits are saved first.
+    const unchanged =
+      typeof req.body.saved === "string" &&
+      req.body.saved === draftPrint(minutes, name, email, company);
+    let revision = expected,
+      operationId = req.body.operationId as string;
+    if (!unchanged) {
+      const saved = await store.saveCoaching(token(res), {
+        month,
+        expectedRevision: expected,
+        operationId,
+        minutes,
+        name,
+        email,
+        company,
+      });
+      if (saved.kind !== "ready")
+        return failure(res, saved.kind, false, operationId);
+      revision = saved.value.revision;
+      operationId = randomUUID();
+    }
+    const requested = await store.submitCoaching(token(res), {
+      month,
+      expectedRevision: revision,
+      operationId,
+      rateId: req.body.rateId,
+      sample: req.body.sample === "true",
+    });
+    if (requested.kind !== "ready" && unchanged)
+      return failure(res, requested.kind, false, operationId);
+    if (requested.kind !== "ready")
+      return res
+        .status(
+          {
+            denied: 403,
+            invalid: 422,
+            conflict: 409,
+            unavailable: 503,
+            "not-found": 404,
+          }[requested.kind],
+        )
+        .send(
+          page(
+            "Invoice not requested",
+            `<h1>Invoice not requested</h1><p role="alert">Your hours were saved, but the invoice was not requested. ${requested.kind === "conflict" ? "This form is out of date: the rate or the period changed since the page opened. Review them and request again." : requested.kind === "unavailable" ? "The outcome is uncertain; reopen the period to see whether it was requested." : "Check the period, rate and invoice email, then request again."}</p><p><a href="${memberPath}?month=${encodeURIComponent(month)}">Return to coaching hours</a></p>`,
+          ),
+        );
+    return res.redirect(
+      303,
+      `${memberPath}?month=${encodeURIComponent(month)}&done=requested`,
+    );
+  });
   for (const action of ["save", "submit", "return", "issue"] as const) {
     const admin = action === "return" || action === "issue",
       base = admin ? `${adminPath}/:ownerId` : memberPath;
     app.post(`${base}/${action}`, async (req, res) => {
       const fields = {
-        save: ["hours", "minutes", "name", "email", "company"],
+        // ONEPAGE-01: Save draft sends the whole form, request fields too.
+        save: [
+          "hours",
+          "minutes",
+          "name",
+          "email",
+          "company",
+          "rateId",
+          "sample",
+          "confirm",
+          "saved",
+        ],
         submit: ["rateId", "sample", "confirm"],
         return: ["reason"],
         // ISSUER-03: a typed tax is refused when the server computes HST.

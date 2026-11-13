@@ -179,7 +179,7 @@ it("WORDING-04 does not call the opening month a past month", async () => {
 it("HOUR01/02/09 keeps empty, disabled, sample and configured states honest and escapes private recipient text", async () => {
   const f = fixture();
   expect((await f.get("/account/coaching")).text).toContain(
-    "Request coaching invoice",
+    "Save and request invoice",
   );
   expect((await f.get("/operator/coaching")).text).toContain("Pending periods");
   f.service.adminOverview.mockResolvedValueOnce(
@@ -1052,7 +1052,7 @@ it("DRAFTEMAIL-01/03 lets a member save hours with no invoice email and asks for
   );
   let text = (await f.get("/account/coaching")).text;
   expect(text).toContain(
-    '<label>Invoice email<input id="invoice-email" name="email" type="email" autocomplete="email" maxlength="254" value=""></label>',
+    '<label>Invoice email<input id="invoice-email" name="email" type="email" autocomplete="email" maxlength="254" value="" required></label>',
   );
   expect(text).toContain(
     "You can save your hours now and add the invoice email before you request the invoice.",
@@ -1064,12 +1064,10 @@ it("DRAFTEMAIL-01/03 lets a member save hours with no invoice email and asks for
   // NEXTSTEP-02: the draft's own form shows the recipient; the next step
   // names the missing email.
   expect(text).toContain(
-    "Add your invoice email and save, then request the invoice.",
+    "Your 1 hour 30 minutes are saved. Add your invoice email below, then choose Save and request invoice.",
   );
-  expect(text).not.toContain("Request coaching invoice");
-  expect(text).toContain(
-    '<p role="alert">Add your invoice email and save the draft before you request the invoice.</p>',
-  );
+  // ONEPAGE-02: the email is required to request; the browser asks for it.
+  expect(text).toContain('maxlength="254" value="" required>');
   await f.post("/account/coaching/save", {
     action: "save",
     month,
@@ -1421,7 +1419,7 @@ it("PERIOD832-02 a student on defined periods picks a started period, saves with
     ready({ ...periodic, entry: periodEntry }),
   );
   expect((await f.get("/account/coaching")).text).toContain(
-    "I confirm this saved duration, recipient and exact rate version for 19 Oct 2026 to 1 Nov 2026.",
+    "I confirm these hours, recipient and the rate CAD 120.00 per hour (version 1) for 19 Oct 2026 to 1 Nov 2026.",
   );
   // Before the first period starts mid-month there is nothing to report yet.
   f.service.coachingOverview.mockResolvedValue(
@@ -1660,12 +1658,11 @@ it("NEXTSTEP-01 shows the five steps and starts at saving hours for a month with
   expect(card(text)).toContain(
     '<ol class="coaching-steps"><li aria-current="step">Save hours</li><li>Rate set</li><li>Request invoice</li><li>Administrator review</li><li>Invoice issued</li></ol>',
   );
+  // ONEPAGE-01: the form is right below; the card points to it in words.
   expect(card(text)).toContain(
-    "Enter your coaching hours for October 2026 and save them.",
+    "Enter your coaching hours for October 2026 below, then choose Save and request invoice.",
   );
-  expect(card(text)).toContain(
-    '<a class="button" href="#hours-form">Enter your hours</a>',
-  );
+  expect(card(text)).not.toContain('class="button"');
   expect(text).toContain('<form id="hours-form" method="post"');
   expect(text).toContain("Status: Nothing saved yet");
 });
@@ -1680,29 +1677,24 @@ it("NEXTSTEP-02 names one plain next action for each state of the month", async 
   expect(currentStep(text)).toBe("Rate set");
   expect(card(text)).toContain('<li class="done">Save hours</li>');
   expect(card(text)).toContain(
-    "Your 1 hour 30 minutes are saved. Your administrator needs to set your hourly rate before you can request the invoice. You can still change your hours.",
+    "Your 1 hour 30 minutes are saved. Your hourly rate isn't set yet, so the invoice can't be requested. Ask your coach or administrator to set it, then come back here to request the invoice.",
   );
   expect(card(text)).not.toContain('class="button"');
   // Rate set, but no invoice email.
   text = await show({ ...value, entry: { ...entry, email: "" } });
   expect(currentStep(text)).toBe("Request invoice");
   expect(card(text)).toContain(
-    "Add your invoice email and save, then request the invoice.",
+    "Your 1 hour 30 minutes are saved. Add your invoice email below, then choose Save and request invoice.",
   );
-  expect(card(text)).toContain(
-    '<a class="button" href="#invoice-email">Add invoice email</a>',
-  );
+  expect(card(text)).not.toContain('class="button"');
   expect(text).toContain('<input id="invoice-email" name="email"');
   // Ready to request.
   text = await show(value);
   expect(currentStep(text)).toBe("Request invoice");
   expect(card(text)).toContain(
-    "Ready to request: 1 hour 30 minutes at CAD 120.00 per hour is CAD 180.00 before tax.",
+    "Ready to request: 1 hour 30 minutes at CAD 120.00 per hour is CAD 180.00 before tax. Check your hours below and choose Save and request invoice.",
   );
-  expect(card(text)).toContain(
-    '<a class="button" href="#request-invoice">Request the invoice</a>',
-  );
-  expect(text).toContain('<section id="request-invoice">');
+  expect(card(text)).not.toContain('class="button"');
   // Returned for correction.
   text = await show({
     ...value,
@@ -1710,7 +1702,7 @@ it("NEXTSTEP-02 names one plain next action for each state of the month", async 
   });
   expect(currentStep(text)).toBe("Save hours");
   expect(card(text)).toContain(
-    "Your administrator returned these hours: Correct &lt;time&gt;. Correct them and save, then request the invoice again.",
+    "Your administrator returned these hours: Correct &lt;time&gt;. Correct them below and choose Save and request invoice.",
   );
   expect(text).toContain("Status: Returned for correction");
   // Submitted.
@@ -1867,4 +1859,227 @@ it("NEXTSTEP-02 covers the amount limit, a zero total, an invoice still being li
   // A stale "saved" link to a month with nothing saved confirms nothing.
   text = await show({ ...value, entry: null }, `?month=${month}&done=saved`);
   expect(text).not.toContain('class="notice"');
+});
+
+// #838 ONEPAGE: hours, recipient and the invoice request are one form.
+const hoursForm = (html: string) =>
+  html.slice(
+    html.indexOf('<form id="hours-form"'),
+    html.indexOf("</form>", html.indexOf('<form id="hours-form"')),
+  );
+const requestFields = {
+  action: "request",
+  month,
+  hours: "2",
+  minutes: "15",
+  name: "Invented",
+  email: "recipient@example.invalid",
+  company: "",
+  rateId: id,
+  sample: "true",
+  confirm: "submit",
+};
+it("ONEPAGE-01 puts the hours, recipient and invoice request in one form with Save draft first", async () => {
+  const f = fixture();
+  const text = mainHtml((await f.get("/account/coaching")).text);
+  const form = hoursForm(text);
+  expect(form).toContain('action="/account/coaching/save"');
+  expect(form).toContain(
+    '<label>Invoice email<input id="invoice-email" name="email" type="email" autocomplete="email" maxlength="254" value="recipient@example.invalid" required></label>',
+  );
+  expect(form).toContain(
+    "<h3>Request the invoice</h3><p>Rate: CAD 120.00 per hour, set by your administrator. The subtotal is your hours × this rate, before separately supplied tax.</p>",
+  );
+  expect(form).toContain(
+    '<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm these hours, recipient and the rate CAD 120.00 per hour (version 1) for October 2026. This is a sample, not payable.</span></label>',
+  );
+  expect(form).toContain(
+    `<input type="hidden" name="rateId" value="${id}"><input type="hidden" name="sample" value="true">`,
+  );
+  // Enter submits the first button, so the safe one comes first.
+  expect(form).toContain(
+    '<div class="form-actions"><button class="secondary" name="action" value="save" formnovalidate>Save draft</button><button name="action" value="request" formaction="/account/coaching/request">Save and request invoice</button></div>',
+  );
+  expect(text).not.toContain('action="/account/coaching/submit"');
+  expect(text).not.toContain("Request coaching invoice");
+});
+it("ONEPAGE-01 saves the entered values and requests the invoice in one step", async () => {
+  const f = fixture();
+  f.service.saveCoaching.mockResolvedValueOnce(ready({ month, revision: 4 }));
+  const r = await f.post("/account/coaching/request", {
+    ...requestFields,
+    revision: "3",
+  });
+  expect(r.status).toBe(303);
+  expect(r.headers.location).toBe(
+    `/account/coaching?month=${month}&done=requested`,
+  );
+  expect(f.service.saveCoaching).toHaveBeenLastCalledWith(
+    token,
+    expect.objectContaining({
+      month,
+      minutes: 135,
+      expectedRevision: 3,
+      email: "recipient@example.invalid",
+    }),
+  );
+  expect(f.service.submitCoaching).toHaveBeenLastCalledWith(
+    token,
+    expect.objectContaining({
+      month,
+      expectedRevision: 4,
+      rateId: id,
+      sample: true,
+    }),
+  );
+  // Each step keeps its own operation key.
+  const saveKey = f.service.saveCoaching.mock.lastCall![1].operationId,
+    submitKey = f.service.submitCoaching.mock.lastCall![1].operationId;
+  expect(saveKey).toBe(id);
+  expect(submitKey).not.toBe(saveKey);
+});
+it("ONEPAGE-02 refuses a request without confirmation or an email, and says when the hours were saved but not requested", async () => {
+  const f = fixture();
+  for (const fields of [
+    { ...requestFields, confirm: "" },
+    { ...requestFields, email: "" },
+    { ...requestFields, sample: "maybe" },
+    { ...requestFields, hours: "x" },
+  ]) {
+    expect((await f.post("/account/coaching/request", fields)).status).toBe(
+      422,
+    );
+  }
+  expect(f.service.saveCoaching).not.toHaveBeenCalled();
+  f.service.saveCoaching.mockResolvedValueOnce({ kind: "conflict" });
+  expect(
+    (await f.post("/account/coaching/request", requestFields)).status,
+  ).toBe(409);
+  expect(f.service.submitCoaching).not.toHaveBeenCalled();
+  f.service.submitCoaching.mockResolvedValueOnce({ kind: "conflict" });
+  const half = await f.post("/account/coaching/request", requestFields);
+  expect(half.status).toBe(409);
+  expect(half.text).toContain(
+    "Your hours were saved, but the invoice was not requested.",
+  );
+  expect(half.text).toContain(
+    `<a href="/account/coaching?month=${month}">Return to coaching hours</a>`,
+  );
+  // The administrator has no request action.
+  expect(
+    (await f.post(`/operator/coaching/${id}/request`, requestFields)).status,
+  ).toBe(404);
+});
+it("ONEPAGE-03 with no rate shows the request button unavailable and says to ask the coach", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValueOnce(
+    ready({ ...value, rate: null, rates: [] }),
+  );
+  const form = hoursForm(mainHtml((await f.get("/account/coaching")).text));
+  expect(form).toContain(
+    "<h3>Request the invoice</h3><p class=\"rate-missing\">Your hourly rate for October 2026 isn't set yet, so the invoice can't be requested. Ask your coach or administrator to set it. You can save your hours now and request the invoice here once it's set.</p>",
+  );
+  expect(form).toContain(
+    '<div class="form-actions"><button name="action" value="save">Save draft</button><button type="button" disabled>Save and request invoice</button></div>',
+  );
+  expect(form).not.toContain('name="confirm"');
+  expect(form).toContain('maxlength="254" value="recipient@example.invalid">');
+});
+it("ONEPAGE-03 confirms a save with no rate by saying what to ask for", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValueOnce(
+    ready({ ...value, rate: null, rates: [] }),
+  );
+  const text = mainHtml(
+    (await f.get(`/account/coaching?month=${month}&done=saved`)).text,
+  );
+  expect(text).toContain(
+    '<p class="notice" role="status">Saved 1 hour 30 minutes for October 2026. Ask your coach or administrator to set your hourly rate, then request the invoice here.</p>',
+  );
+});
+it("ADMINEXP-02 says the administrator session ended when a coaching action is refused for it", async () => {
+  const f = fixture();
+  f.service.setCoachingRate.mockResolvedValueOnce({ kind: "denied" });
+  const r = await f.post(`/operator/coaching/${id}/rate`, {
+    effectiveMonth: month,
+    rate: "80.00",
+  });
+  expect(r.status).toBe(403);
+  expect(r.text).toContain(
+    'Your administrator session has ended or was not entered. Open <a href="/admin">Administration</a>, end the earlier session if it asks you to, then enter administration and try again.',
+  );
+  expect(r.text).not.toContain("Check the period");
+});
+it("ONEPAGE-01 requests a draft saved exactly as posted without saving it again", async () => {
+  const f = fixture();
+  const saved = /name="saved" value="([a-f0-9]{64})"/.exec(
+    (await f.get("/account/coaching")).text,
+  )![1]!;
+  const same = {
+    ...requestFields,
+    hours: "1",
+    minutes: "30",
+    name: entry.name,
+    email: entry.email,
+    saved,
+  };
+  // A changed value, or no fingerprint, saves first.
+  await f.post("/account/coaching/request", { ...same, minutes: "31" });
+  await f.post("/account/coaching/request", { ...same, saved: undefined });
+  expect(f.service.saveCoaching).toHaveBeenCalledTimes(2);
+  f.service.saveCoaching.mockClear();
+  const r = await f.post("/account/coaching/request", same);
+  expect(r.headers.location).toBe(
+    `/account/coaching?month=${month}&done=requested`,
+  );
+  expect(f.service.saveCoaching).not.toHaveBeenCalled();
+  expect(f.service.submitCoaching).toHaveBeenLastCalledWith(
+    token,
+    expect.objectContaining({ expectedRevision: 1, operationId: id }),
+  );
+  // Its refusal reads as before: nothing new was saved.
+  f.service.submitCoaching.mockResolvedValueOnce({ kind: "conflict" });
+  const stale = await f.post("/account/coaching/request", same);
+  expect(stale.status).toBe(409);
+  expect(stale.text).toContain("This form is out of date");
+  expect(stale.text).not.toContain("Your hours were saved");
+});
+it("ONEPAGE-02 covers the request's remaining refusals and the first-visit wording without a rate", async () => {
+  const f = fixture();
+  expect(
+    (
+      await f.post("/account/coaching/request", {
+        ...requestFields,
+        action: "save",
+      })
+    ).status,
+  ).toBe(422);
+  const noCompany: Record<string, string> = { ...requestFields };
+  delete noCompany.company;
+  await f.post("/account/coaching/request", noCompany);
+  expect(f.service.saveCoaching).toHaveBeenLastCalledWith(
+    token,
+    expect.objectContaining({ company: "" }),
+  );
+  for (const [kind, text] of [
+    ["unavailable", "The outcome is uncertain"],
+    ["invalid", "Check the period, rate and invoice email"],
+  ] as const) {
+    f.service.submitCoaching.mockResolvedValueOnce({ kind });
+    const r = await f.post("/account/coaching/request", requestFields);
+    expect(r.text).toContain(
+      "Your hours were saved, but the invoice was not requested.",
+    );
+    expect(r.text).toContain(text);
+  }
+  f.service.coachingOverview.mockResolvedValueOnce(
+    ready({ ...value, entry: null, rate: null, rates: [] }),
+  );
+  expect(mainHtml((await f.get("/account/coaching")).text)).toContain(
+    "Enter your coaching hours for October 2026 below and save them. Your hourly rate isn't set yet; ask your coach or administrator to set it, then request the invoice here.",
+  );
+  const disabled = fixture(true);
+  expect(
+    (await disabled.post("/account/coaching/request", requestFields)).status,
+  ).toBe(503);
 });

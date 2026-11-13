@@ -49,11 +49,9 @@ test("[L338] OVR832-01/03/06/07/08 an administrator changes a student's submitte
     await s
       .getByLabel("Invoice email")
       .fill("override-student@example.invalid");
-    await s.getByRole("button", { name: "Save coaching draft" }).click();
-    await s
-      .getByRole("checkbox", { name: /I confirm this saved duration/ })
-      .check();
-    await s.getByRole("button", { name: "Request coaching invoice" }).click();
+    await s.getByRole("button", { name: "Save draft" }).click();
+    await s.getByRole("checkbox", { name: /I confirm these hours/ }).check();
+    await s.getByRole("button", { name: "Save and request invoice" }).click();
     await expect(s.getByText("Status: Awaiting review")).toBeVisible();
 
     // 4. The administrator must give a reason, then changes 10 hours to 8.

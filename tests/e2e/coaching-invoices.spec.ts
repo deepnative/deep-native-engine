@@ -217,17 +217,15 @@ async function save(f: Fixture, p: Page, hours = "1", minutes = "30") {
     p.waitForURL(`${f.origin}/account/coaching?month=${f.month}&done=saved`, {
       waitUntil: "load",
     }),
-    p.getByRole("button", { name: "Save coaching draft" }).click(),
+    p.getByRole("button", { name: "Save draft" }).click(),
   ]);
   await expect(
     p.getByRole("heading", { name: "Coaching hours", exact: true }),
   ).toBeVisible();
 }
 async function submit(p: Page) {
-  await p
-    .getByRole("checkbox", { name: /I confirm this saved duration/ })
-    .check();
-  await p.getByRole("button", { name: "Request coaching invoice" }).click();
+  await p.getByRole("checkbox", { name: /I confirm these hours/ }).check();
+  await p.getByRole("button", { name: "Save and request invoice" }).click();
 }
 async function issue(f: Fixture, p: Page, id: string) {
   await p.goto(`${f.origin}/operator/coaching/${id}`);
@@ -342,9 +340,7 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
       .getByLabel("Invoice recipient name")
       .fill("Invented learner");
     await recovered.getByLabel("Invoice email").fill("billing@example.invalid");
-    await recovered
-      .getByRole("button", { name: "Save coaching draft" })
-      .click();
+    await recovered.getByRole("button", { name: "Save draft" }).click();
     await expect(
       recovered.locator(
         'form[action="/account/coaching/save"] input[name="revision"]',
@@ -482,7 +478,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       s.waitForURL(`${f.origin}/account/coaching?month=${month}&done=saved`, {
         waitUntil: "load",
       }),
-      s.getByRole("button", { name: "Save coaching draft" }).click(),
+      s.getByRole("button", { name: "Save draft" }).click(),
     ]);
     await expect(
       s.getByText("CAD 213.75", { exact: true }).first(),
@@ -764,7 +760,7 @@ test("[L276] HOUR09 disabled invoicing keeps monthly entry honest and learning a
       m.page.getByText(/Coaching invoicing is not configured/),
     ).toBeVisible();
     await expect(
-      m.page.getByRole("button", { name: "Request coaching invoice" }),
+      m.page.getByRole("button", { name: "Save and request invoice" }),
     ).toHaveCount(0);
     await m.page.getByRole("link", { name: "My account", exact: true }).click();
     await expect(m.page.locator("code").first()).toHaveText(m.id);

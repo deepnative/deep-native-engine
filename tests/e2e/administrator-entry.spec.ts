@@ -428,8 +428,11 @@ test("[L272] lost entry acknowledgement returns no staff cookie and recovers onl
     ).toBe(false);
     await page.goto(f.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
+    // ADMINEXP-01: the earlier entry is named, with the button that ends it.
     await expect(
-      page.getByRole("heading", { name: "Administration unavailable" }),
+      page.getByRole("heading", {
+        name: "End your earlier administrator session",
+      }),
     ).toBeVisible();
     expect(f.commits).toBe(1);
     await page.goto(f.origin + "/admin");
@@ -584,7 +587,7 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
     await page
       .getByLabel("Company name (optional)")
       .fill("Invented Coaching Co");
-    await page.getByRole("button", { name: "Save coaching draft" }).click();
+    await page.getByRole("button", { name: "Save draft" }).click();
     // NEXTSTEP-03: the save is confirmed and the draft keeps the recipient.
     await expect(page.getByRole("status")).toContainText(
       "Saved 2 hours 0 minutes",
