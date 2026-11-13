@@ -204,7 +204,7 @@ test("[L337] LIMITS823-01/02/06 an administrator sets a student's session length
 
     // 3. The administrator's form starts from 60 and 15 and explains the bounds.
     const a = await f.admin();
-    await a.goto(`${f.origin}/operator/coaching/${id}`);
+    await a.goto(`${f.origin}/operator/coaching/${id}/package`);
     const terms = a.getByRole("region", {
       name: "Coaching terms",
       exact: true,
@@ -318,7 +318,7 @@ test("[L337] LIMITS823-01/02/06 an administrator sets a student's session length
         { exact: false },
       ),
     ).toBeVisible();
-    await a.goto(`${f.origin}/operator/coaching/${id}`);
+    await a.goto(`${f.origin}/operator/coaching/${id}/package`);
     await expect(terms).toContainText("Current terms, version 2:");
     await expect(a.getByLabel("Session length (minutes)")).toHaveValue("45");
   } finally {

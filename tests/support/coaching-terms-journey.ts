@@ -68,7 +68,7 @@ export async function saveTerms(
   reference: string,
   terms: TermsForm,
 ) {
-  await admin.goto(`${origin}/operator/coaching/${reference}`);
+  await admin.goto(`${origin}/operator/coaching/${reference}/package`);
   const form = admin.locator(
     `form[action="/operator/coaching/${reference}/terms"]`,
   );
@@ -94,7 +94,9 @@ export async function saveTerms(
     aiRequests: String(terms.aiRequests),
   };
   await form.getByRole("button", { name: "Save coaching terms" }).click();
-  await expect(admin).toHaveURL(`${origin}/operator/coaching/${reference}`);
+  await expect(admin).toHaveURL(
+    `${origin}/operator/coaching/${reference}/package`,
+  );
   await expect(termsSection(admin)).toContainText("Current terms, version");
   return sent;
 }
@@ -134,7 +136,7 @@ export async function issueTermsInvoice(
   reference: string,
   tax?: string,
 ) {
-  await admin.goto(`${origin}/operator/coaching/${reference}`);
+  await admin.goto(`${origin}/operator/coaching/${reference}/package`);
   const section = termsInvoiceSection(admin),
     form = section.locator("form");
   const sent = {
@@ -297,7 +299,7 @@ export async function recordAgreedChange(
   reference: string,
   change: AgreedForm,
 ) {
-  await admin.goto(`${origin}/operator/coaching/${reference}`);
+  await admin.goto(`${origin}/operator/coaching/${reference}/package`);
   const form = agreedSection(admin).locator("form");
   await form.getByLabel("Kind of change").selectOption({ label: change.kind });
   await form.getByLabel("What was agreed").fill(change.agreed);
@@ -309,7 +311,7 @@ export async function recordAgreedChange(
     .check();
   await form.getByRole("button", { name: "Record agreed change" }).click();
   await expect(admin).toHaveURL(
-    `${origin}/operator/coaching/${reference}#agreed-changes`,
+    `${origin}/operator/coaching/${reference}/package#agreed-changes`,
   );
 }
 

@@ -716,10 +716,10 @@ it("ADMIN-LAYOUT-02 coaching administration groups its lists in cards and naviga
     ["/operator/invoices", "Courses and invoices"],
   ]);
   expect(mainHtml(review)).toContain(
-    '<section class="invoice-workspace portal-workspace">',
+    '<section class="invoice-workspace coaching-page portal-workspace">',
   );
   const member = mainHtml((await f.get("/account/coaching")).text);
-  expect(member).toContain('<section class="invoice-workspace">');
+  expect(member).toContain('<section class="invoice-workspace coaching-page">');
   // AUDIT-03 (#643): student navigation is a button row too.
   expect(member).toContain(
     '<p class="account-links"><a class="button secondary" href="/account">My account</a> <a class="button secondary" href="/account/purchases">Courses and invoices</a></p>',
@@ -863,7 +863,9 @@ it("GAPS-03 tells the administrator to set a missing rate, and the member to ask
   const member = (await f.get("/account/coaching")).text;
   expect(member).toContain("Ask the administrator to enter your agreed rate");
   const staff = (await f.get(`/operator/coaching/${id}`)).text;
-  expect(staff).toContain("No rate is set for this month. Set the rate below.");
+  expect(staff).toContain(
+    "No rate is set for this month. Set it under Hourly rate.",
+  );
   expect(staff).not.toContain("Ask the administrator");
 });
 it("ISSUER-03 issues a configured coaching invoice with computed 13% HST and no tax field", async () => {
@@ -1789,10 +1791,10 @@ it("NEXTSTEP-04 shows the student a plain status and moves reference material be
     origin,
     secret,
     coachingTerms: {
-      own: vi.fn().mockResolvedValue(ready(null)),
+      own: vi.fn().mockResolvedValue(ready(packageTerms)),
     } as never,
     agreedChanges: {
-      own: vi.fn().mockResolvedValue(ready([])),
+      own: vi.fn().mockResolvedValue(ready([agreedRow])),
     } as never,
   });
   const text = mainHtml(
@@ -2082,4 +2084,214 @@ it("ONEPAGE-02 covers the request's remaining refusals and the first-visit wordi
   expect(
     (await disabled.post("/account/coaching/request", requestFields)).status,
   ).toBe(503);
+});
+// #840 SIMPLE-01..04: one hourly rate on the student tab, the rest optional.
+const packageTerms = {
+  version: 2,
+  priceCents: 8000,
+  startsOn: "2026-11-13",
+  endsOn: "2027-06-30",
+  renewsOn: "2027-07-31",
+  reviewMinutes: 0,
+  coachingSessions: 0,
+  aiRequests: 0,
+  sessionMinutes: 60,
+  practiceExchanges: 20,
+  balances: null,
+};
+const agreedRow = {
+  id,
+  kind: "early_release",
+  agreed: "Invented agreement",
+  reason: "Invented reason",
+  recordedAt: new Date("2026-11-01T00:00:00Z"),
+};
+function simpleFixture(t: unknown = null, rows: unknown[] = []) {
+  const f = fixture();
+  const app = express();
+  app.use(express.urlencoded({ extended: false }));
+  app.use((_req, res, next) => {
+    res.locals.token = token;
+    next();
+  });
+  const coachingTerms = {
+    own: vi.fn().mockResolvedValue(ready(t)),
+    forStudent: vi.fn().mockResolvedValue(ready(t)),
+    save: vi.fn().mockResolvedValue(ready({ version: 3 })),
+  };
+  const agreedChanges = {
+    own: vi.fn().mockResolvedValue(ready(rows)),
+    forStudent: vi.fn().mockResolvedValue(ready(rows)),
+    record: vi.fn().mockResolvedValue(ready({ id })),
+  };
+  const service = {
+    ...f.service,
+    coachingTermsInvoice: vi
+      .fn()
+      .mockResolvedValue(
+        ready({ terms: t, recipient: null, invoiceId: null, earlier: [] }),
+      ),
+  };
+  mountCoachingRoutes(app, service as unknown as SimpleInvoiceStore, {
+    origin,
+    secret,
+    coachingTerms: coachingTerms as never,
+    agreedChanges: agreedChanges as never,
+  });
+  const get = async (path: string) =>
+    withLoopback(app, (s) => request(s).get(path));
+  const post = (path: string, fields: Record<string, unknown>) =>
+    withLoopback(app, (s) =>
+      request(s)
+        .post(path)
+        .set("Origin", origin)
+        .type("form")
+        .send({ csrf: csrf(token, secret), operationId: id, ...fields }),
+    );
+  return { service, coachingTerms, agreedChanges, get, post };
+}
+it("SIMPLE-01/03 the student tab puts one hourly rate beside the hours in two columns", async () => {
+  const f = simpleFixture(packageTerms, [agreedRow]);
+  const html = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  expect(html).toContain('<div class="coaching-layout">');
+  expect(html).toContain('<div class="coaching-main">');
+  expect(html).toContain('<aside class="coaching-side">');
+  const side = html.slice(html.indexOf('<aside class="coaching-side">'));
+  expect(side.indexOf('<h2 id="hourly-rate">Hourly rate</h2>')).toBeGreaterThan(
+    0,
+  );
+  expect(side.indexOf('id="hourly-rate"')).toBeLessThan(
+    side.indexOf("billing-period"),
+  );
+  expect(side).toContain(
+    '<p class="rate-now"><strong>CAD 120.00 per hour</strong>',
+  );
+  expect(side).toContain(`action="/operator/coaching/${id}/rate"`);
+  expect(side).toContain("Hourly rate (CAD)");
+  expect(side).toContain("Applies from");
+  expect(side).toContain("<button>Save hourly rate</button>");
+  expect(html).not.toContain("Set member rate");
+  // No cards inside cards.
+  expect(html).not.toMatch(
+    /portal-card[^>]*>(?:(?!<\/section>).)*portal-card/s,
+  );
+});
+it("SIMPLE-01 says plainly when no hourly rate is set", async () => {
+  const f = simpleFixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, rate: null, rateVersion: null }),
+  );
+  const html = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  expect(html).toContain(
+    '<p class="rate-now">No hourly rate set for October 2026.</p>',
+  );
+  expect(html).toContain(
+    "No rate is set for this month. Set it under Hourly rate.",
+  );
+});
+it("SIMPLE-02 moves the package, its invoice and agreed changes off the student tab", async () => {
+  const f = simpleFixture(packageTerms, [agreedRow]);
+  const tab = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  expect(tab).not.toContain("Save coaching terms");
+  expect(tab).not.toContain("Invoice these coaching terms");
+  expect(tab).not.toContain("Record agreed change");
+  expect(tab).toContain(
+    `<a href="/operator/coaching/${id}/package">Coaching package and agreed changes (optional)</a>`,
+  );
+  const pkg = mainHtml((await f.get(`/operator/coaching/${id}/package`)).text);
+  expect(pkg).toContain("<h1>Coaching package</h1>");
+  expect(pkg).toContain("Optional. Most students only need an hourly rate");
+  expect(pkg).toContain("Save coaching terms");
+  expect(pkg).toContain("Invoice these coaching terms");
+  expect(pkg).toContain("Record agreed change");
+  expect(pkg).toContain(
+    `<a class="button secondary" href="/operator/coaching/${id}">Back to hours and rate</a>`,
+  );
+  // Saves come back to the package page.
+  const saved = await f.post(`/operator/coaching/${id}/terms`, {
+    revision: "2",
+    price: "80",
+    startsOn: "2026-11-13",
+    endsOn: "2027-06-30",
+    renewsOn: "2027-07-31",
+    reviewMinutes: "0",
+    coachingSessions: "0",
+    aiRequests: "0",
+    sessionMinutes: "60",
+    practiceExchanges: "20",
+  });
+  expect(saved.headers.location).toBe(`/operator/coaching/${id}/package`);
+  const rec = await f.post(`/operator/coaching/${id}/agreed-change`, {
+    kind: "early_release",
+    agreed: "x",
+    reason: "y",
+    confirm: "agreed-change",
+  });
+  expect(rec.headers.location).toBe(
+    `/operator/coaching/${id}/package#agreed-changes`,
+  );
+});
+it("SIMPLE-02 the package page refuses extra queries, a missing student and store refusals", async () => {
+  const f = simpleFixture();
+  expect((await f.get(`/operator/coaching/${id}/package?x=1`)).status).not.toBe(
+    200,
+  );
+  f.service.coachingOverview.mockResolvedValueOnce({ kind: "not-found" });
+  expect((await f.get(`/operator/coaching/${id}/package`)).status).toBe(404);
+  f.service.coachingOverview.mockResolvedValueOnce({ kind: "denied" });
+  expect((await f.get(`/operator/coaching/${id}/package`)).status).not.toBe(
+    200,
+  );
+  f.coachingTerms.forStudent.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await f.get(`/operator/coaching/${id}/package`)).status).not.toBe(
+    200,
+  );
+  f.service.coachingTermsInvoice.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await f.get(`/operator/coaching/${id}/package`)).status).not.toBe(
+    200,
+  );
+  f.agreedChanges.forStudent.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await f.get(`/operator/coaching/${id}/package`)).status).not.toBe(
+    200,
+  );
+});
+it("SIMPLE-04 the student keeps their terms card and folded agreed changes beside the hours", async () => {
+  const f = simpleFixture();
+  const html = mainHtml((await f.get("/account/coaching")).text);
+  expect(html).toContain('<div class="coaching-layout">');
+  const side = html.slice(html.indexOf('<aside class="coaching-side">'));
+  expect(side).toContain(
+    "Your administrator hasn't set your coaching terms yet.",
+  );
+  expect(side).toContain(
+    '<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>',
+  );
+  expect(html.indexOf('id="hours-form"')).toBeLessThan(
+    html.indexOf('<aside class="coaching-side">'),
+  );
+});
+it("SIMPLE-01/02/04 covers no period yet, the student's refused reads and a package page without coaching invoicing", async () => {
+  const f = simpleFixture();
+  f.service.coachingOverview.mockResolvedValueOnce(
+    ready({
+      ...value,
+      rate: null,
+      rateVersion: null,
+      entry: null,
+      period: null,
+      billing: {
+        schedules: [{ unit: "days", days: 14, startsOn: "2026-12-01" }],
+        version: 1,
+        nextStart: null,
+      },
+    }),
+  );
+  const html = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  expect(html).toContain('<p class="rate-now">No hourly rate set.</p>');
+  f.coachingTerms.own.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await f.get("/account/coaching")).status).toBe(403);
+  f.agreedChanges.own.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await f.get("/account/coaching")).status).toBe(403);
+  const off = fixture(true);
+  expect((await off.get(`/operator/coaching/${id}/package`)).status).toBe(503);
 });

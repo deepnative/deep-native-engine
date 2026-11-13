@@ -468,20 +468,20 @@ it("TERMS316-01/05/06 routes show the sections, save through the store and map e
   expect(text((await r.get("/account/coaching")).text)).toContain(
     "Price CAD 1,200.00",
   );
-  const admin = await r.get(`/operator/coaching/${id}`);
+  const admin = await r.get(`/operator/coaching/${id}/package`);
   expect(admin.text).toContain(`action="/operator/coaching/${id}/terms"`);
   expect(admin.text).toContain('name="revision" value="0"');
   store.forStudent.mockResolvedValueOnce({ kind: "ready", value: saved });
-  expect((await r.get(`/operator/coaching/${id}`)).text).toContain(
+  expect((await r.get(`/operator/coaching/${id}/package`)).text).toContain(
     'name="revision" value="1"',
   );
   store.own.mockResolvedValueOnce({ kind: "unavailable" });
   expect((await r.get("/account/coaching")).status).toBe(503);
   store.forStudent.mockResolvedValueOnce({ kind: "invalid" });
-  expect((await r.get(`/operator/coaching/${id}`)).status).toBe(403);
+  expect((await r.get(`/operator/coaching/${id}/package`)).status).toBe(403);
   const ok = await r.post({});
   expect(ok.status).toBe(303);
-  expect(ok.headers.location).toBe(`/operator/coaching/${id}`);
+  expect(ok.headers.location).toBe(`/operator/coaching/${id}/package`);
   expect(store.save).toHaveBeenCalledWith(token, {
     ...values,
     ...standard,
@@ -667,13 +667,13 @@ it("TERMSINV318-04 the terms-invoice route checks the form, passes the version a
     issueCoachingTerms: issue,
     coachingTermsInvoice: read,
   });
-  expect(text((await r.get(`/operator/coaching/${id}`)).text)).toContain(
-    "Set coaching terms first.",
-  );
+  expect(
+    text((await r.get(`/operator/coaching/${id}/package`)).text),
+  ).toContain("Set coaching terms first.");
   read.mockResolvedValueOnce({ kind: "invalid" });
-  expect((await r.get(`/operator/coaching/${id}`)).status).toBe(403);
+  expect((await r.get(`/operator/coaching/${id}/package`)).status).toBe(403);
   read.mockResolvedValueOnce({ kind: "unavailable" });
-  expect((await r.get(`/operator/coaching/${id}`)).status).toBe(503);
+  expect((await r.get(`/operator/coaching/${id}/package`)).status).toBe(503);
   const ok = await send(r, { tax: "5.00" });
   expect(ok.status).toBe(303);
   expect(ok.headers.location).toBe(`/operator/invoices/${key}`);
@@ -780,7 +780,7 @@ it("RENEW317-01/03 shows each renewal's state and that nothing renews automatica
   ])
     expect(shown).toContain(line);
   expect(html).toContain("Ada &lt;Sample&gt;");
-  expect(html).toContain(`href="/operator/coaching/${id}"`);
+  expect(html).toContain(`href="/operator/coaching/${id}/package"`);
   expect(text(renewalsSection([{ ...due[0]!, days: -1 }], "/o"))).toContain(
     "1 day overdue",
   );

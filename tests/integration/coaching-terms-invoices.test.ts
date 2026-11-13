@@ -144,7 +144,9 @@ afterAll(() => pool.end());
 it("TERMSINV318-01 an administrator issues the current terms as a Deep Native Inc. invoice with 13% HST", async () => {
   const m = await member();
   await setTerms(m.id);
-  const page = text((await get(`/operator/coaching/${m.id}`, admin)).text);
+  const page = text(
+    (await get(`/operator/coaching/${m.id}/package`, admin)).text,
+  );
   expect(page).toContain("Invoice these coaching terms");
   expect(page).toContain(
     "Issue an invoice for terms version 1: CAD 1,200.00 plus HST (13%) CAD 156.00, total CAD 1,356.00, to Invented Student · Invented Studio · invented.student@example.test.",
@@ -249,7 +251,9 @@ it("TERMSINV318-03 without a saved billing recipient or terms, nothing is issued
     kind: "not-found",
   });
   await setTerms(m.id);
-  const page = text((await get(`/operator/coaching/${m.id}`, admin)).text);
+  const page = text(
+    (await get(`/operator/coaching/${m.id}/package`, admin)).text,
+  );
   expect(page).toContain(
     "This student hasn't saved a billing recipient yet. Ask them to save one on their Billing recipient page before you issue an invoice for these terms.",
   );
@@ -395,7 +399,8 @@ it("TERMSINV318-08 a corrected version names the earlier invoice for the same pe
   );
   // The same period with a different allowance: version 2, not yet invoiced.
   await setTerms(m.id, 1, { ...agreed, aiRequests: 100 });
-  const corrected = (await get(`/operator/coaching/${m.id}`, admin)).text;
+  const corrected = (await get(`/operator/coaching/${m.id}/package`, admin))
+    .text;
   expect(text(corrected)).toContain(
     "Terms version 1 covers an overlapping coaching period (December 1, 2026 to May 31, 2027) and is already invoiced: view that invoice. Issue another invoice only if the student owes both. To replace the earlier invoice, void it first.",
   );
@@ -413,7 +418,7 @@ it("TERMSINV318-08 a corrected version names the earlier invoice for the same pe
     }),
   );
   expect(
-    text((await get(`/operator/coaching/${m.id}`, admin)).text),
+    text((await get(`/operator/coaching/${m.id}/package`, admin)).text),
   ).not.toContain("is already invoiced");
   // A renewal for a later, separate period is its own invoice.
   const r = await member();
@@ -425,7 +430,9 @@ it("TERMSINV318-08 a corrected version names the earlier invoice for the same pe
     endsOn: "2027-11-30",
     renewsOn: "2027-12-01",
   });
-  const renewal = text((await get(`/operator/coaching/${r.id}`, admin)).text);
+  const renewal = text(
+    (await get(`/operator/coaching/${r.id}/package`, admin)).text,
+  );
   expect(renewal).toContain("Issue an invoice for terms version 2:");
   expect(renewal).not.toContain("is already invoiced");
 });

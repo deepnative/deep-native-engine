@@ -455,7 +455,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       .getByRole("link", { name: "Coaching hours and rates", exact: true })
       .click();
     await o.getByLabel("Hourly rate (CAD)").fill("95.00");
-    await o.getByLabel("Effective month").fill(month);
+    await o.getByLabel("Applies from").fill(month);
     await friendly(o, "owner-set-rate");
     await o.getByRole("button", { name: "Save hourly rate" }).click();
 
@@ -779,7 +779,7 @@ test("[L330] ALLOW27-01/03/07 an administrator sets a student's allowances and t
     const day = (offset: number) =>
       new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
     async function setTerms(aiRequests: string) {
-      await a.goto(`${f.origin}/operator/coaching/${m.id}`);
+      await a.goto(`${f.origin}/operator/coaching/${m.id}/package`);
       await a.getByLabel("Price (CAD)").fill("1500.00");
       await a.getByLabel("Start date").fill(day(-1));
       await a.getByLabel("End date").fill(day(60));

@@ -2345,3 +2345,41 @@ td code {
   border-radius: 9px;
   background: #fff4df;
 }
+
+/* #840 SIMPLE-03: coaching pages are wide and flat: the hours on the left,
+   the hourly rate and billing period beside them, one column on phones. */
+.invoice-workspace.coaching-page {
+  max-width: 1160px;
+}
+.coaching-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 32px;
+  margin-top: 24px;
+}
+.coaching-main,
+.coaching-side {
+  min-width: 0;
+}
+@media (min-width: 900px) {
+  .coaching-layout:has(> .coaching-side) {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+    align-items: start;
+  }
+}
+.coaching-main > :first-child,
+.coaching-side > :first-child {
+  margin-top: 0;
+}
+.coaching-side > .portal-card {
+  padding: 20px;
+}
+.coaching-side form {
+  max-width: none;
+}
+.rate-now {
+  font-size: 18px;
+}
+.coaching-more {
+  margin-top: 20px;
+}

@@ -134,7 +134,7 @@ async function recordIsShown(j: Journey, change: AgreedForm) {
   for (const page of [j.admin, j.student]) {
     await page.goto(
       page === j.admin
-        ? `${j.f.origin}/operator/coaching/${j.reference}`
+        ? `${j.f.origin}/operator/coaching/${j.reference}/package`
         : j.f.origin + "/account/coaching",
     );
     await expect(record(page, change)).toContainText(

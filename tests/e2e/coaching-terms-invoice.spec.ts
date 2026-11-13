@@ -132,7 +132,7 @@ test("[L331] TERMSINV318-01/03/05 an administrator invoices a student's coaching
 
     // 2. The administrator sets terms; with no recipient, nothing can be issued.
     const a = await f.admin();
-    await a.goto(`${f.origin}/operator/coaching/${id}`);
+    await a.goto(`${f.origin}/operator/coaching/${id}/package`);
     await a.getByLabel("Price (CAD)").fill("1200.00");
     await a.getByLabel("Start date").fill("2026-12-01");
     await a.getByLabel("End date").fill("2027-05-31");
@@ -225,7 +225,7 @@ test("[L331] TERMSINV318-01/03/05 an administrator invoices a student's coaching
     await expect(s.getByText(/CAD 1356\.00 · Paid/)).toBeVisible();
 
     // 7. Back on the coaching page the version shows as invoiced, with no form.
-    await a.goto(`${f.origin}/operator/coaching/${id}`);
+    await a.goto(`${f.origin}/operator/coaching/${id}/package`);
     await expect(section).toContainText("Terms version 1 is invoiced.");
     await expect(
       section.getByRole("button", { name: "Issue invoice for these terms" }),

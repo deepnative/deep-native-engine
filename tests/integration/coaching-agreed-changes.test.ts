@@ -112,7 +112,7 @@ afterAll(() => pool.end());
 
 it("AGREED94-01 an administrator records an agreed early release and an agreed refund on the student's coaching page, newest first", async () => {
   const m = await member();
-  const page = await get(`/operator/coaching/${m.id}`, admin.token);
+  const page = await get(`/operator/coaching/${m.id}/package`, admin.token);
   expect(page.status).toBe(200);
   expect(text(page.text)).toContain(
     "No agreed changes are recorded for this student.",
@@ -125,7 +125,7 @@ it("AGREED94-01 an administrator records an agreed early release and an agreed r
   });
   expect(saved.status).toBe(303);
   expect(saved.headers.location).toBe(
-    `/operator/coaching/${m.id}#agreed-changes`,
+    `/operator/coaching/${m.id}/package#agreed-changes`,
   );
   expect(
     (
@@ -138,7 +138,7 @@ it("AGREED94-01 an administrator records an agreed early release and an agreed r
   ).toBe(303);
   expect(await stored(m.id)).toEqual([release, refund]);
   const after = text(
-    (await get(`/operator/coaching/${m.id}`, admin.token)).text,
+    (await get(`/operator/coaching/${m.id}/package`, admin.token)).text,
   );
   expect(after).toContain(`Agreed: ${release.agreed}`);
   expect(after).toContain(`Reason: ${release.reason}`);
