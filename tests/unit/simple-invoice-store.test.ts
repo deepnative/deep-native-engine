@@ -94,8 +94,16 @@ const payment = {
   evidence: "Invented bank reference",
 };
 const action = { invoiceId, operationId, expectedRevision: 1 };
-const decoded = {
+// Issued invoices carry the recipient's email beside the printable document.
+const emailed: StoredInvoice = {
   ...invoice,
+  document: {
+    ...invoice.document,
+    recipientEmail: "invented@example.invalid",
+  } as StoredInvoice["document"],
+};
+const decoded = {
+  ...emailed,
   refundedCents: 0,
 };
 function fixture(
@@ -571,7 +579,7 @@ it("OFFPUR-06 voids only an unpaid invoice and preserves receipts and uncertain 
   ).toBe("invalid");
 });
 it("OFFPUR-02/03 claims an email once and records confirmed versus unknown provider outcomes", async () => {
-  const f = fixture();
+  const f = fixture({ invoice: emailed });
   expect(await f.service.claimEmail(admin, action)).toEqual({
     kind: "ready",
     value: { send: true, invoice: decoded },
@@ -580,7 +588,12 @@ it("OFFPUR-02/03 claims an email once and records confirmed versus unknown provi
     digest: invoiceDigest({ action: "email", input: action }),
     result: { invoiceId },
   };
-  expect(await fixture({ receipt }).service.claimEmail(admin, action)).toEqual({
+  expect(
+    await fixture({ receipt, invoice: emailed }).service.claimEmail(
+      admin,
+      action,
+    ),
+  ).toEqual({
     kind: "ready",
     value: { send: false, invoice: decoded },
   });
@@ -641,6 +654,22 @@ it("OFFPUR-02/03 claims an email once and records confirmed versus unknown provi
   expect(
     (await f.service.finishEmail(admin, invoiceId, "bad", true)).kind,
   ).toBe("invalid");
+});
+it("NOEMAIL-03 refuses to claim an email for an invoice with no email address, changing nothing", async () => {
+  for (const document of [
+    invoice.document,
+    { ...invoice.document, recipientEmail: "" },
+  ]) {
+    const f = fixture({
+      invoice: { ...invoice, document } as StoredInvoice,
+    });
+    expect((await f.service.claimEmail(admin, action)).kind).toBe("invalid");
+    expect(
+      f.query.mock.calls.some(([sql]) =>
+        sql.startsWith("UPDATE simple_invoices SET delivery"),
+      ),
+    ).toBe(false);
+  }
 });
 it("OFFPUR-10 processes only active due agreements with unchanged eligible source versions", async () => {
   const active = {

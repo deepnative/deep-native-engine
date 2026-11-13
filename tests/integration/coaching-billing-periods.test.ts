@@ -244,7 +244,7 @@ it("PERIOD832-02 the student reports hours for periods that have started, within
   );
   expect(page.text).toContain("Your billing period");
   expect(page.text).toContain("Saved periods");
-  expect(page.text).not.toContain("Calendar month (UTC)");
+  expect(page.text).not.toContain('class="month-nav"');
   // The database ties a dated key to its first day and the hours to its length.
   for (const [key, start, end, minutes] of [
     [day(-34), day(-33), day(-21), 60],
@@ -452,8 +452,9 @@ it("PERIOD832-05 calendar-month records stay intact and readable, and a first pe
     billing: { version: 0, schedules: [] },
   });
   expect((await save(legacy.token, month, 60)).kind).toBe("ready");
+  // #842 MONTHNAV-01: calendar months move by previous-month links.
   expect((await get("/account/coaching", legacy.token)).text).toContain(
-    "Calendar month (UTC)",
+    '<nav class="month-nav" aria-label="Months">',
   );
   // The database refuses a second period over the same days.
   await expect(

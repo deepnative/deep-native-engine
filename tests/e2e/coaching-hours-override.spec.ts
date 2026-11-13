@@ -43,12 +43,6 @@ test("[L338] OVR832-01/03/06/07/08 an administrator changes a student's submitte
     await s.goto(f.origin + "/account/coaching");
     await s.getByLabel("Whole hours").fill("10");
     await s.getByLabel("Additional minutes").fill("0");
-    await s
-      .getByLabel("Invoice recipient name")
-      .fill("Invented override student");
-    await s
-      .getByLabel("Invoice email")
-      .fill("override-student@example.invalid");
     await s.getByRole("button", { name: "Save draft" }).click();
     await s.getByRole("checkbox", { name: /I confirm these hours/ }).check();
     await s.getByRole("button", { name: "Save and request invoice" }).click();

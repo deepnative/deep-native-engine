@@ -536,16 +536,16 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
   try {
     await f.verify();
     await f.publishCourse();
-    // RECIPIENT-01/SIGNEMAIL-01: a new month suggests the registered name and
-    // the verified sign-in email.
+    // RECIPIENT-01/SIGNEMAIL-01: a new month invoices the registered name and
+    // the verified sign-in email. #842 NOEMAIL-01: shown, not asked for.
     await page.goto(f.origin + "/account/coaching");
-    await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
-      "陳 Registered learner",
+    const invoiceTo = page.locator(".invoice-to");
+    await expect(invoiceTo).toContainText(
+      "Invoice to: 陳 Registered learner · tom@deepnative.io.",
     );
-    await expect(page.getByLabel("Invoice email", { exact: true })).toHaveValue(
-      "tom@deepnative.io",
-    );
-    await expect(page.getByLabel("Company name (optional)")).toHaveValue("");
+    await expect(page.getByLabel("Invoice recipient name")).toHaveCount(0);
+    await expect(page.getByLabel("Invoice email")).toHaveCount(0);
+    await expect(page.getByLabel("Company name (optional)")).toHaveCount(0);
     await page.goto(f.origin + "/account");
     await page
       .getByRole("link", { name: "Billing recipient", exact: true })
@@ -573,30 +573,31 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
     );
     // RECIPIENT-02: the saved recipient wins over the registered name.
     await page.goto(f.origin + "/account/coaching");
-    await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
-      "Invented original recipient",
+    await expect(invoiceTo).toContainText(
+      "Invoice to: Invented original recipient · Invented Co Ltd · billing@example.invalid.",
     );
-    await expect(page.getByLabel("Company name (optional)")).toHaveValue(
-      "Invented Co Ltd",
-    );
-    // RECIPIENT-03: edits saved with a draft become the reusable recipient.
-    await page.getByLabel("Whole hours").fill("2");
+    // RECIPIENT-03: the Change link edits the reusable recipient, which the
+    // coaching month then uses.
+    await invoiceTo.getByRole("link", { name: "Change", exact: true }).click();
+    await expect(page).toHaveURL(f.origin + "/account/billing");
     await page
       .getByLabel("Invoice recipient name")
       .fill("Invented coaching recipient");
     await page
       .getByLabel("Company name (optional)")
       .fill("Invented Coaching Co");
+    await page.getByRole("button", { name: "Save billing recipient" }).click();
+    await expect(page.locator('input[name="revision"]')).toHaveValue("2");
+    await page.waitForLoadState("load");
+    await page.goto(f.origin + "/account/coaching");
+    await page.getByLabel("Whole hours").fill("2");
     await page.getByRole("button", { name: "Save draft" }).click();
     // NEXTSTEP-03: the save is confirmed and the draft keeps the recipient.
     await expect(page.getByRole("status")).toContainText(
       "Saved 2 hours 0 minutes",
     );
-    await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
-      "Invented coaching recipient",
-    );
-    await expect(page.getByLabel("Company name (optional)")).toHaveValue(
-      "Invented Coaching Co",
+    await expect(invoiceTo).toContainText(
+      "Invoice to: Invented coaching recipient · Invented Coaching Co · billing@example.invalid.",
     );
     expect(
       await page.evaluate(
