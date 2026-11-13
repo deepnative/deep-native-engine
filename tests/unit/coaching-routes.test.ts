@@ -2054,7 +2054,8 @@ it("ONEPAGE-02 covers the request's remaining refusals and the first-visit wordi
       })
     ).status,
   ).toBe(422);
-  const { company: _company, ...noCompany } = requestFields;
+  const noCompany: Record<string, string> = { ...requestFields };
+  delete noCompany.company;
   await f.post("/account/coaching/request", noCompany);
   expect(f.service.saveCoaching).toHaveBeenLastCalledWith(
     token,
