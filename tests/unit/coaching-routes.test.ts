@@ -2287,7 +2287,7 @@ it("ONEPAGE-02 covers the request's remaining refusals and the first-visit wordi
   );
   for (const [kind, text] of [
     ["unavailable", "The outcome is uncertain"],
-    ["invalid", "Check the period, rate and invoice email"],
+    ["invalid", "Check the period and rate"],
   ] as const) {
     f.service.submitCoaching.mockResolvedValueOnce({ kind });
     const r = await f.post("/account/coaching/request", requestFields);

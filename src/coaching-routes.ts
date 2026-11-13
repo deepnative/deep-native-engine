@@ -891,7 +891,7 @@ export function mountCoachingRoutes(
         .send(
           page(
             "Invoice not requested",
-            `<h1>Invoice not requested</h1><p role="alert">Your hours were saved, but the invoice was not requested. ${requested.kind === "conflict" ? "This form is out of date: the rate or the period changed since the page opened. Review them and request again." : requested.kind === "unavailable" ? "The outcome is uncertain; reopen the period to see whether it was requested." : "Check the period, rate and invoice email, then request again."}</p><p><a href="${memberPath}?month=${encodeURIComponent(month)}">Return to coaching hours</a></p>`,
+            `<h1>Invoice not requested</h1><p role="alert">Your hours were saved, but the invoice was not requested. ${requested.kind === "conflict" ? "This form is out of date: the rate or the period changed since the page opened. Review them and request again." : requested.kind === "unavailable" ? "The outcome is uncertain; reopen the period to see whether it was requested." : "Check the period and rate, then request again."}</p><p><a href="${memberPath}?month=${encodeURIComponent(month)}">Return to coaching hours</a></p>`,
           ),
         );
     return res.redirect(
