@@ -217,6 +217,8 @@ function aiRequestSection(row: AiRequestSummary) {
 }
 export function invoiceReconciliationPage(
   snapshot: InvoiceReconciliationSnapshot,
+  /** MENUALL-01 (#850): the administrator menu replaces the button row. */
+  menu = "",
 ) {
   const { flagged, flaggedTotal, manual } = snapshot;
   const flaggedSection = flagged.length
@@ -231,12 +233,7 @@ export function invoiceReconciliationPage(
     : '<p role="status">No invoices are flagged.</p>';
   return page(
     "Invoice and cash reconciliation",
-    `<article class="reading"><p class="eyebrow">ADMINISTRATOR · ${hostingText("PREVIEW RECORDS", "TEST DATA")} · NOT A LIVE FIGURE</p><h1>Invoice and cash reconciliation</h1><p>One read-only snapshot comparing each invoice with its recorded receipts and refunds. Sample and other invoices are shown apart and are never added together.</p><p>As of <time datetime="${escape(snapshot.asOf.toISOString())}">${readableTime(snapshot.asOf)}</time>. Late records can change these totals on a later read.</p>${portalActions(
-      [
-        ["/operator/invoices", "Courses and invoices"],
-        ["/operator", "Administration console"],
-      ],
-    )}${snapshot.groups.map(groupSection).join("")}<section class="portal-card" data-manual-check><h2>Staff change history</h2><p>Each member's recorded receipts and refunds compared with staff change history. No member is named here.</p>${fields(
+    `${menu}<article class="reading"><p class="eyebrow">ADMINISTRATOR · ${hostingText("PREVIEW RECORDS", "TEST DATA")} · NOT A LIVE FIGURE</p><h1>Invoice and cash reconciliation</h1><p>One read-only snapshot comparing each invoice with its recorded receipts and refunds. Sample and other invoices are shown apart and are never added together.</p><p>As of <time datetime="${escape(snapshot.asOf.toISOString())}">${readableTime(snapshot.asOf)}</time>. Late records can change these totals on a later read.</p>${snapshot.groups.map(groupSection).join("")}<section class="portal-card" data-manual-check><h2>Staff change history</h2><p>Each member's recorded receipts and refunds compared with staff change history. No member is named here.</p>${fields(
       [
         ["manual.compared", "Members compared", String(manual.comparedMembers)],
         [
@@ -274,7 +271,7 @@ export function invoiceReconciliationUnavailablePage(
     `<section class="error-page"><h1>Invoice report unavailable</h1><p role="alert">${message}</p>${portalActions(
       [
         ["/operator/invoice-reconciliation", "Open the report"],
-        ["/operator", "Administration console"],
+        ["/operator", "Students"],
       ],
     )}</section>`,
   );

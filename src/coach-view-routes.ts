@@ -64,7 +64,7 @@ export function mountCoachView(app: Express, store: CoachView | undefined) {
       ? `<div class="table-scroll" tabindex="0" role="region" aria-label="Coaching hours"><table class="member-table coach-hours"><caption class="visually-hidden">Coaching hours for ${monthLabel(v.month)}</caption><thead><tr><th scope="col">Name</th><th scope="col">Hours</th><th scope="col">Status</th></tr></thead><tbody>${rows}</tbody></table></div>`
       : v.assigned
         ? '<p role="status">No coaching hours saved for this month.</p>'
-        : '<p role="status">No students are assigned to you yet. Ask an administrator to assign students to you in the Administration console.</p>';
+        : '<p role="status">No students are assigned to you yet. Ask an administrator to add you as a coach on each student&#39;s page.</p>';
     res.send(
       page(
         "Coaching",

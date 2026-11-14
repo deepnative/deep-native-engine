@@ -1409,12 +1409,8 @@ it("COACH-TEXT-01 describes separately arranged courses and monthly coaching wit
   expect(planning.text).toContain(
     "Optional courses and monthly coaching are arranged separately with course support.",
   );
-  expect(planning.text).toContain(
-    'href="/account/purchases">Courses and invoices</a>',
-  );
-  expect(planning.text).toContain(
-    'href="/account/coaching">Coaching hours</a>',
-  );
+  expect(planning.text).toContain('href="/account/purchases">Invoices</a>');
+  expect(planning.text).toContain('href="/account/coaching">Coaching</a>');
   expect(planning.text).toContain(
     "View historical coaching plans (unavailable)",
   );

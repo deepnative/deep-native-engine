@@ -60,10 +60,7 @@ export function agreementOutcomesPage(snapshot: AgreementOutcomesSnapshot) {
   return page(
     "Course agreement outcomes",
     `<article class="reading"><p class="eyebrow">STAFF · ${hostingText("PREVIEW RECORDS", "TEST DATA")} · NOT A LIVE FIGURE</p><h1>Course agreement outcomes</h1><p>One read-only snapshot of the course-billing agreements offered to members: how many were accepted, withdrawn or cancelled. Real and test agreements are shown apart and are never added together.</p><p>As of <time datetime="${escape(snapshot.asOf.toISOString())}">${readableTime(snapshot.asOf)}</time>. Each agreement is counted once, by what has happened to it so far. A later read may differ.</p>${portalActions(
-      [
-        ["/operator/invoice-reconciliation", "Invoice reconciliation"],
-        ["/operator", "Administration console"],
-      ],
+      [["/operator/invoice-reconciliation", "Invoice reconciliation"]],
     )}${groupSection("real", snapshot.real)}${groupSection("test", snapshot.test)}<h2>How these are counted</h2><ul><li>Offered counts every agreement, including offers later withdrawn. Accepted counts every agreement a member accepted, including ones cancelled since.</li><li>Cancellation has no recorded date, so cancelled and withdrawn counts are as of this snapshot, not a period.</li><li>An agreement goes when its member deletes their account, so deleted accounts aren't counted.</li></ul><h2>What this report cannot establish</h2><ul><li>This is not revenue or collected cash. Invoices and payments have their own reconciliation.</li><li>Renewal of monthly agreements isn't counted here.</li><li>A small number of agreements can't show a trend. No forecast is made.</li><li>No member names, emails, agreement terms, amounts or identifiers are shown. Nothing is corrected or stored.</li></ul><p><a href="/operator/course-agreements">Read a fresh snapshot</a></p></article>`,
   );
 }
@@ -83,7 +80,7 @@ export function agreementOutcomesUnavailablePage(
     `<section class="error-page"><h1>Agreement outcomes unavailable</h1><p role="alert">${message}</p>${portalActions(
       [
         ["/operator/course-agreements", "Open the report"],
-        ["/operator", "Administration console"],
+        ["/operator", "Students"],
       ],
     )}</section>`,
   );

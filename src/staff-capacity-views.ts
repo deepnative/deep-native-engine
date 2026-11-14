@@ -156,10 +156,7 @@ export function staffCapacityPage(snapshot: StaffCapacitySnapshot) {
   return page(
     "Staff capacity",
     `<article class="reading"><p class="eyebrow">STAFF · ${hostingText("PREVIEW RECORDS", "TEST DATA")} · NOT A LIVE FIGURE</p><h1>Staff capacity</h1><p>One read-only snapshot comparing the expert registry's declared capacity with its open slots and recorded review time, with support time shown beside them. Coaching, formal review and support are shown apart and are never added together.</p><p>As of <time datetime="${escape(snapshot.asOf.toISOString())}">${readableTime(snapshot.asOf)}</time>. A later read may differ.</p>${portalActions(
-      [
-        ["/operator/experts", "Expert coverage registry"],
-        ["/operator", "Administration console"],
-      ],
+      [["/operator/experts", "Expert coverage registry"]],
     )}${snapshot.groups.map(groupSection).join("")}${reviewTimeSection(snapshot.reviewTime)}${supportTimeSection(snapshot.supportTime)}<h2>What this report cannot establish</h2><ul><li>Support has no roster: nobody declares support capacity, so open support time is shown on its own and is compared with nothing.</li><li>A roster record is not proof of qualification. Unverified records are never counted as available coverage.</li><li>Declared capacity and commitments are what staff typed into the registry. No timesheet, calendar or contract is compared.</li><li>Coach assignments to members use a member sign-in, not the staff identity the roster uses, so they can't be matched to roster records and aren't shown.</li><li>No staff cost, forecast, booked service or revenue is shown.</li><li>No staff names, identifiers or qualification, agreement or conflict references are shown. Nothing is corrected or stored.</li></ul><p><a href="/operator/staff-capacity">Read a fresh snapshot</a> · <a href="/operator/delivery-cost">Delivery cost</a></p></article>`,
   );
 }
@@ -179,7 +176,7 @@ export function staffCapacityUnavailablePage(
     `<section class="error-page"><h1>Capacity report unavailable</h1><p role="alert">${message}</p>${portalActions(
       [
         ["/operator/staff-capacity", "Open the report"],
-        ["/operator", "Administration console"],
+        ["/operator", "Students"],
       ],
     )}</section>`,
   );

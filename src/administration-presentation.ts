@@ -67,3 +67,61 @@ export function shortInvoiceNumber(number: string) {
     "$1",
   );
 }
+
+/** True when this request's account holds the admin role (see above). */
+export function administrationAvailable(): boolean {
+  return administration.getStore() === true;
+}
+
+/**
+ * MENUALL-01 (#850): which menu item owns an administrator address. A
+ * student's pages belong to Students, an invoice to Invoices, and the reports
+ * and tools listed under More to More.
+ */
+export function adminMenuItem(path: string): AdminMenuItem {
+  if (path === "/operator" || /^\/operator\/coaching\/./.test(path))
+    return "students";
+  if (/^\/operator\/invoices(\/|$)/.test(path)) return "invoices";
+  if (path === "/operator/roles") return "roles";
+  if (path === "/operator/changes") return "history";
+  return "more";
+}
+
+/**
+ * MENUALL-01: a page that was built without the menu gets it as the first
+ * thing in its main content. A page that already carries it is left alone.
+ */
+export function withAdminMenu(html: string, menu: string): string {
+  return html.includes('class="admin-menu"')
+    ? html
+    : html.replace('<main id="main">', `<main id="main">${menu}`);
+}
+
+/**
+ * MENUALL-01: every administrator page that renders for an admin account
+ * carries the menu, including the reports and tools under More that are built
+ * elsewhere. It only adds links to a page the route already chose to show:
+ * refusals, redirects and non-page responses pass through untouched.
+ */
+export function adminMenuOnEveryPage(
+  req: { path: string },
+  res: {
+    statusCode: number;
+    send: (body?: unknown) => unknown;
+    app: { locals: Record<string, unknown> };
+  },
+  next: () => void,
+) {
+  if (/^\/(operator|moderate)(\/|$)/.test(req.path)) {
+    const send = res.send.bind(res);
+    res.send = (body?: unknown) =>
+      send(
+        typeof body === "string" &&
+          res.statusCode === 200 &&
+          administrationAvailable()
+          ? withAdminMenu(body, adminMenuFor(res, adminMenuItem(req.path)))
+          : body,
+      );
+  }
+  next();
+}

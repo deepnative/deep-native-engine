@@ -1368,7 +1368,7 @@ footer {
     color: black;
   }
   body:has(.invoice-document)
-    :is(.site-header, footer, .skip, .invoice-controls) {
+    :is(.site-header, footer, .skip, .invoice-controls, .admin-menu) {
     display: none;
   }
   body:has(.invoice-document) main {
@@ -2878,15 +2878,140 @@ main > .reading:first-child {
 .profile-link {
   margin: 32px 0;
 }
-/* FOLD-01: one line per invoice. */
-.invoice-list {
+/* FOLD-01: one line per invoice. (#850: the student's list only; the
+   administrator's invoice table shares the class name.) */
+ul.invoice-list {
+  max-width: 820px;
   margin: 16px 0 28px;
   padding: 0;
   list-style: none;
   border-top: 1px solid var(--line);
 }
-.invoice-list li {
+ul.invoice-list li {
   padding: 12px 0;
   border-bottom: 1px solid var(--line);
   font-variant-numeric: tabular-nums;
+}
+/* #850 */
+/* SEAM-01: account, coaching, invoice and administrator pages share one page
+   title size, whichever of the three earlier changes built the page. */
+.account-page h1,
+.portal-page h1,
+.portal-workspace h1,
+.invoice-workspace h1,
+.invoice-document h1,
+main:has(> .admin-menu) h1 {
+  font-size: clamp(30px, 4vw, 40px);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+/* A page with only the page frame started 12px lower than its siblings. */
+.portal-workspace:not(.invoice-workspace, :has(> .admin-menu)) {
+  margin-top: 30px;
+}
+@media (max-width: 760px) {
+  .portal-workspace:not(.invoice-workspace, :has(> .admin-menu)) {
+    margin-top: 16px;
+  }
+}
+/* NAMES-02: a student's page is titled with their name; this line says what
+   the name is. */
+h1:has(+ .page-kind) {
+  margin-bottom: 4px;
+}
+.page-kind {
+  margin-bottom: 20px;
+  color: var(--muted);
+  font-size: 15px;
+}
+/* BACK-01: one plain link back instead of a row of buttons. */
+.back-link {
+  margin: 32px 0 0;
+}
+.back-link a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 650;
+}
+.invoice-controls > .back-link {
+  margin-top: 8px;
+}
+.invoice-workspace:not(.portal-workspace) > .back-link:last-child {
+  margin-bottom: 32px;
+}
+/* MENUALL-01: the menu on a page that was built without a page frame, such as
+   a report under More or an invoice. */
+main > .admin-menu {
+  margin-top: 20px;
+}
+main > .admin-menu + * {
+  margin-top: 0;
+}
+main > .admin-menu + .invoice-document {
+  padding-top: 0;
+}
+/* SEAM-01: every page under the menu uses plain sections, as Students does. */
+:is(.portal-page, .portal-workspace):has(> .admin-menu) > .portal-card {
+  margin-top: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+:is(.portal-page, .portal-workspace):has(> .admin-menu) > .portal-intro p {
+  max-width: 72ch;
+}
+.role-admin .portal-card form,
+.role-admin .table-scroll {
+  max-width: 44rem;
+}
+.role-admin fieldset,
+.coach-choices fieldset {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+/* A student's coaches and course records, folded beside their hours. The
+   card and its heading repeat the summary, so only the form shows. */
+.coaching-details > .portal-card {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.coaching-details > .portal-card > h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.coaching-details > h3 {
+  margin: 16px 0 4px;
+  font-size: 16px;
+}
+.coaching-details > ul {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+/* On a phone every stacked table row is the same two columns, label then
+   value, from one edge. Before, #844 and #845 each laid out some of the cells,
+   so links sat left and plain values right. */
+@media (max-width: 640px) {
+  .stack-table tbody td {
+    display: grid;
+    grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    justify-content: normal;
+    padding: 4px 0;
+    text-align: left;
+  }
+  .stack-table tbody td::before {
+    font-size: 14px;
+  }
+  .stack-table td > span {
+    margin-top: -6px;
+  }
 }

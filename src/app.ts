@@ -96,7 +96,10 @@ import {
   hostingText,
   inventedInputOnly,
 } from "./hosting-presentation.ts";
-import { withAdministration } from "./administration-presentation.ts";
+import {
+  adminMenuOnEveryPage,
+  withAdministration,
+} from "./administration-presentation.ts";
 import { withCurrentPath } from "./navigation-presentation.ts";
 import {
   sharingHeaderSession,
@@ -613,6 +616,8 @@ export function app(
     // Hidden until mountAccountViews reads a stored admin role.
     withAdministration(false, next),
   );
+  // MENUALL-01 (#850): administrator pages built elsewhere get the menu too.
+  app.use(adminMenuOnEveryPage);
   app.use((_req, _res, next) => withDemoSite(options.demoSite === true, next));
   app.use((_req, _res, next) =>
     withMemberContributions(options.memberContributions === true, next),
@@ -1960,7 +1965,20 @@ export function app(
     }
   }
   mountSimpleInvoiceRoutes(app, options.simpleInvoices, options);
-  mountCoachingRoutes(app, options.simpleInvoices, options);
+  // #850: a student's coaches and course records show on their coaching
+  // page wherever the administrator pages that used to hold them are on.
+  const studentAdmin = options.localStaffEntry && mode !== "live";
+  mountCoachingRoutes(
+    app,
+    options.simpleInvoices,
+    options,
+    studentAdmin
+      ? {
+          roleAdmin: options.roleAdmin,
+          administratorEntry: options.administratorEntry,
+        }
+      : {},
+  );
   mountCoachView(app, options.coachView);
   mountAccountRoleAdmin(
     app,

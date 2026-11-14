@@ -437,7 +437,7 @@ it("WALK44-01 an administrator opening a deleted student's coaching page is told
     "If the student deleted their account, their coaching terms, hours and allowances were removed with it.",
   );
   expect(words).not.toContain("Coaching request not confirmed");
-  expect(gone.text).toContain('href="/operator/coaching"');
+  expect(gone.text).toContain('<a href="/operator">All students</a>');
   expect(await versions(student.id)).toBe(0);
   // A reference that never was an account reads the same, so the page confirms nothing more.
   expect(

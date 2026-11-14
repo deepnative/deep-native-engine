@@ -53,7 +53,7 @@ async function sampleInvoice(f: Fixture) {
       "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS day",
     )
   ).rows[0]!.day;
-  await admin.page.getByLabel("Starts on (UTC date)").fill(day);
+  await admin.page.getByLabel("Starts on", { exact: true }).fill(day);
   await admin.page
     .getByLabel("Configured tax amount per invoice (CAD)")
     .fill("0.00");

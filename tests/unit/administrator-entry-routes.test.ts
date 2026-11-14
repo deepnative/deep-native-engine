@@ -344,8 +344,9 @@ it("ADMINHOME-01 lists submitted hours first, each opening that student's month"
   );
   expect(main).not.toContain("No hours are waiting for review.");
 });
-it("ADMINSTUDENT-01/ADMINCON02 an old selected-student link is a small page for that student, escaped", async () => {
-  const f = fixture({ billing: true }),
+it("ADMINSTUDENT-01/ADMINCON02 an old selected-student link is a small page for that student, escaped; #850 SEAM-01 with billing on it opens the student's one page", async () => {
+  const on = fixture({ billing: true }),
+    f = fixture(),
     id = "11111111-1111-4111-8111-111111111111";
   f.state.directory = {
     kind: "ready",
@@ -388,6 +389,27 @@ it("ADMINSTUDENT-01/ADMINCON02 an old selected-student link is a small page for 
       },
     },
   };
+  // #850: coaches and course records are on the student's page, so the old
+  // address goes there once the same access check has passed.
+  on.state.directory = f.state.directory;
+  const moved = await (
+    await http(on.app)
+  )
+    .get("/operator?ownerId=" + id)
+    .set("Cookie", `dne_staff=${credential}`);
+  expect(moved.status).toBe(303);
+  expect(moved.headers.location).toBe(`/operator/coaching/${id}`);
+  expect(moved.headers["cache-control"]).toBe("no-store");
+  on.state.directory = { kind: "denied" };
+  expect(
+    (
+      await (
+        await http(on.app)
+      )
+        .get("/operator?ownerId=" + id)
+        .set("Cookie", `dne_staff=${credential}`)
+    ).status,
+  ).toBe(403);
   const r = await (
     await http(f.app)
   )
@@ -399,7 +421,7 @@ it("ADMINSTUDENT-01/ADMINCON02 an old selected-student link is a small page for 
   const main = mainHtml(r.text);
   // The page is the student, not the whole console again.
   expect(main).toContain(
-    `<a href="/operator">Students</a><a href="/operator/invoices">Invoices</a><a href="/staff">More</a></nav><h1>&lt;Invented member&gt;</h1><div class="portal-actions"><a href="/operator/coaching/${id}" class="button">Hours, rate and invoices</a></div>`,
+    `<a href="/operator" aria-current="page">Students</a><a href="/staff">More</a></nav><h1>&lt;Invented member&gt;</h1><p class="page-kind">Student</p><section`,
   );
   for (const gone of [
     "<table",
@@ -422,8 +444,11 @@ it("ADMINSTUDENT-01/ADMINCON02 an old selected-student link is a small page for 
   expect(main).toContain(
     `<a href="/operator/invoices/${id}">DN-11111111</a> · CAD 50.00 · Sent</li>`,
   );
+  expect(main).toContain("Billing is switched off on this site.");
+  expect(main).not.toContain("Prepare course billing");
+  expect(main).not.toContain("portal-actions");
   expect(main).toContain(
-    `<a href="/operator/invoices?ownerId=${id}">Prepare course billing for this student</a>`,
+    '<p class="back-link"><a href="/operator">All students</a></p>',
   );
   f.state.directory.value.selected!.enrollments = [];
   f.state.directory.value.selected!.plans = [];
@@ -440,17 +465,7 @@ it("ADMINSTUDENT-01/ADMINCON02 an old selected-student link is a small page for 
     "No course enrollment, bundle or course invoice yet.",
   );
   expect(empty.text).not.toContain("portal-columns");
-  const off = fixture();
-  off.state.directory = f.state.directory;
-  const disabled = (
-    await (
-      await http(off.app)
-    )
-      .get("/operator")
-      .set("Cookie", `dne_staff=${credential}`)
-  ).text;
-  expect(disabled).toContain("Billing is switched off on this site.");
-  expect(disabled).not.toContain("/operator/invoices");
+  expect(empty.text).not.toContain("/operator/invoices");
 });
 it("ADMINCON04 denies direct malformed or expired console requests without authority renewal", async () => {
   const f = fixture();
@@ -559,7 +574,7 @@ it("ADMINHOME-01/ADMINTABLE-01/02/03/04 renders a paged student table that keeps
   expect(first.status).toBe(200);
   expect(first.text).toContain("Showing 1–2 of 60");
   expect(first.text).toContain(
-    '<table class="member-table stack-table"><thead><tr><th scope="col">Name</th><th scope="col">Hourly rate</th><th scope="col">This month<span>November 2026</span></th><th scope="col">Coaches</th><th scope="col">Joined</th></tr></thead>',
+    '<table class="member-table stack-table"><thead><tr><th scope="col">Name</th><th scope="col">Hourly rate</th><th scope="col">This month<span>November 2026</span></th><th scope="col">Joined</th></tr></thead>',
   );
   // ADMINHOME-01: no starting point, goal or account reference columns.
   for (const gone of [
@@ -572,13 +587,16 @@ it("ADMINHOME-01/ADMINTABLE-01/02/03/04 renders a paged student table that keeps
   ])
     expect(first.text).not.toContain(gone);
   // ADMINSTUDENT-01: the name opens the one student page. Each cell carries
-  // its label for the stacked phone layout.
+  // its label for the stacked phone layout. #850 SEAM-01: no Coaches link
+  // column and a readable joined date; with billing off the name opens the
+  // small student page, which is where coaches are set on such a site.
   expect(first.text).toContain(
-    `<tr><td data-label="Name"><a href="/operator/coaching/${members[0]!.id}">Learner &lt;1&gt;</a></td><td data-label="Hourly rate">CAD 120.00</td><td data-label="This month" class="member-coaching">—</td><td data-label="Coaches"><a href="/operator?ownerId=${members[0]!.id}" aria-label="Coaches for Learner &lt;1&gt;">Coaches</a></td><td data-label="Joined">2026-11-02</td></tr>`,
+    `<tr><td data-label="Name"><a href="/operator?ownerId=${members[0]!.id}">Learner &lt;1&gt;</a></td><td data-label="Hourly rate">CAD 120.00</td><td data-label="This month" class="member-coaching">—</td><td data-label="Joined">2 Nov 2026</td></tr>`,
   );
   expect(first.text).toContain(
-    `<a href="/operator/coaching/${members[1]!.id}">Name needed</a></td><td data-label="Hourly rate">Not set</td>`,
+    `<a href="/operator?ownerId=${members[1]!.id}">Name needed</a></td><td data-label="Hourly rate">Not set</td>`,
   );
+  expect(first.text).not.toContain(">Coaches<");
   expect(first.text).toContain('href="/operator?page=2">Next');
   expect(first.text).not.toContain(">Previous<");
   expect(first.text).not.toContain("Clear search");
@@ -975,7 +993,9 @@ it("ADMINSTUDENT-01/DEFCOACH-04/ROLEADMIN-01 keeps the coaches control on the st
   // HIDE-01: roles are on and billing is off, so the menu says exactly that.
   const menu =
     '<a href="/operator/roles">Roles</a><a href="/operator/changes">History</a><a href="/staff">More</a></nav>';
-  expect(res.text).toContain(`<a href="/operator">Students</a>${menu}`);
+  expect(res.text).toContain(
+    `<a href="/operator" aria-current="page">Students</a>${menu}`,
+  );
   expect(app.locals.adminMenu).toEqual({ invoices: false, roles: true });
   const admin = await client
     .get("/admin")

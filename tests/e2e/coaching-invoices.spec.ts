@@ -222,7 +222,7 @@ async function save(f: Fixture, p: Page, hours = "1", minutes = "30") {
     p.getByRole("button", { name: "Save draft" }).click(),
   ]);
   await expect(
-    p.getByRole("heading", { name: "Coaching hours", exact: true }),
+    p.getByRole("heading", { name: "Coaching", exact: true }),
   ).toBeVisible();
 }
 /** #844 ADMINFORMS-01: the return form sits in a closed disclosure. */
@@ -455,7 +455,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await friendly(o, "owner-set-rate");
     await o.getByRole("button", { name: "Save hourly rate" }).click();
 
-    // 4. The student reports last month's hours from Coaching hours.
+    // 4. The student reports last month's hours from Coaching.
     await menu(s).getByRole("link", { name: "Coaching", exact: true }).click();
     await expect(s).toHaveURL(f.origin + "/account/coaching");
     // MONTHNAV-01: the previous-month link opens last month.
@@ -585,9 +585,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       s.locator("dt").filter({ hasText: "Recorded payment" }).locator("+ dd"),
     ).toHaveText("CAD 213.75");
     await friendly(s, "student-invoice-paid");
-    await s
-      .getByRole("link", { name: "Courses and invoices", exact: true })
-      .click();
+    await s.getByRole("link", { name: "All invoices", exact: true }).click();
     await expect(s.getByText(/CAD 213\.75 — Paid/)).toBeVisible();
     // DASH-04: invoiced, sent and fully paid on the manager dashboard.
     await menu(o).getByRole("link", { name: "Admin", exact: true }).click();
@@ -646,7 +644,7 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
     ).toHaveCount(0);
     await m.page.goto(`${f.origin}/operator/coaching/${m.id}`);
     await expect(
-      m.page.getByRole("heading", { name: "Review coaching hours" }),
+      m.page.getByRole("heading", { name: "Saved periods" }),
     ).toHaveCount(0);
     await admin
       .getByLabel("Reason", { exact: true })

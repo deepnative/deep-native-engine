@@ -19,6 +19,7 @@ import {
   changeText,
   type ChangeHistoryResult,
 } from "../../src/staff-change-history.ts";
+import { mainHtml } from "../support/portal-layout.ts";
 import { csrf } from "../../src/session.ts";
 
 const origin = "http://127.0.0.1:3000",
@@ -344,7 +345,16 @@ it("ROLEADMIN-01 renders the Roles page without a remove button for the actor's 
   expect(res.text).toContain("hours of students assigned to them");
   for (const gone of ["portal-actions", "Administration console", "learner"])
     expect(res.text).not.toContain(gone);
-  expect(res.text).toContain("&lt;Ada&gt;");
+  // #850 ROLES-01: a person is their name and email hint, never an account id.
+  expect(res.text).toContain(
+    '<td>&lt;Ada&gt; <span class="small">· ad…@example.test</span><br><span class="small">Granted 4 Nov 2026</span></td>',
+  );
+  expect(res.text).toContain("<td>Name needed</td>");
+  expect(res.text).not.toContain(ada);
+  expect(mainHtml(res.text)).not.toContain("<code>");
+  expect(mainHtml(res.text)).not.toMatch(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/,
+  );
   expect(res.text).toContain('Admin <span class="small">(you)</span>');
   expect(res.text).toContain('aria-label="Remove coach role from &lt;Ada&gt;"');
   expect(res.text).toContain('aria-label="Remove admin role from Name needed"');

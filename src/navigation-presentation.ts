@@ -11,8 +11,14 @@ const owns: Record<string, (path: string) => boolean> = {
     p === "/account/coaching" || p.startsWith("/account/coaching/"),
   "/account/sign-out": (p) => p === "/account/sign-out",
   "/email/sign-in": (p) => p === "/email/sign-in",
+  // SEAM-01 (#850): a coach's page, and the tools under the admin menu's More.
+  "/coach": (p) => p === "/coach",
   "/admin": (p) =>
-    p === "/admin" || p.startsWith("/admin/") || p.startsWith("/operator"),
+    p === "/admin" ||
+    p.startsWith("/admin/") ||
+    p.startsWith("/operator") ||
+    p === "/staff" ||
+    p.startsWith("/moderate/"),
   "/account": (p) =>
     (p === "/account" || p.startsWith("/account/")) &&
     !owns["/account/coaching"]!(p) &&

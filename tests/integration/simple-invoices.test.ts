@@ -1041,7 +1041,7 @@ it("NOEMAIL-01/02/03 a coaching month with no invoice email is requested, issued
   const page = (await get("/account/coaching", m.token)).text;
   expect(page).not.toContain("Invoice email");
   expect(page).toContain('<input type="hidden" name="email" value="">');
-  expect(page).toContain("The invoice will be under Courses and invoices.");
+  expect(page).toContain("The invoice will be under Invoices.");
   const name = /<input type="hidden" name="name" value="([^"]*)">/.exec(
     page,
   )![1]!;
@@ -1084,7 +1084,7 @@ it("NOEMAIL-01/02/03 a coaching month with no invoice email is requested, issued
   const control = (await get(`/operator/invoices/${issued.invoiceId}`, admin))
     .text;
   expect(control).toContain(
-    "This invoice has no email address, so it is not sent by email. The student can open it under Courses and invoices.",
+    "This invoice has no email address, so it is not sent by email. The student can open it under Invoices.",
   );
   expect(control).not.toContain(
     `action="/operator/invoices/${issued.invoiceId}/email"`,

@@ -272,7 +272,7 @@ test("[L269] both verified owner identities explicitly enter finite billing admi
         })
         .fill("1.00");
       await page
-        .getByLabel("Starts on (UTC date)")
+        .getByLabel("Starts on", { exact: true })
         .fill(new Date().toISOString().slice(0, 10));
       const [prepared] = await Promise.all([
         page.waitForResponse(
@@ -475,13 +475,20 @@ test("[L277] ADMINSTUDENT-01/ADMINCON01–04 opens an exact student, composes ex
       "href",
       `/operator/coaching/${f.id}`,
     );
-    // The coaches and course billing for this student are one small page.
-    await found.getByRole("link", { name: /^Coaches for / }).click();
-    await expect(page).toHaveURL(`${f.origin}/operator?ownerId=${f.id}`);
+    // #850 SEAM-01: the coaches and course billing for this student are on
+    // that page, and the old small page's address leads to it.
+    await expect(found.getByRole("link", { name: /^Coaches/ })).toHaveCount(0);
+    await page.goto(`${f.origin}/operator?ownerId=${f.id}`);
+    await expect(page).toHaveURL(`${f.origin}/operator/coaching/${f.id}`);
     await expect(
-      page.getByRole("link", { name: "Hours, rate and invoices", exact: true }),
-    ).toHaveAttribute("href", `/operator/coaching/${f.id}`);
-    await expect(page.locator(".member-table")).toHaveCount(0);
+      page
+        .getByRole("navigation", { name: "Administration", exact: true })
+        .getByRole("link", { name: "Students", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    await expect(page.locator("#student-coaches > summary")).toContainText(
+      "Coaches:",
+    );
+    await page.locator("#student-courses > summary").click();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
@@ -507,7 +514,7 @@ test("[L277] ADMINSTUDENT-01/ADMINCON01–04 opens an exact student, composes ex
       })
       .fill("12.00");
     await page
-      .getByLabel("Starts on (UTC date)")
+      .getByLabel("Starts on", { exact: true })
       .fill(new Date().toISOString().slice(0, 10));
     await page
       .getByRole("button", { name: "Prepare course billing proposal" })
@@ -788,15 +795,18 @@ test("[L287] ADMINHOME-01/ADMINTABLE-01..05 an administrator reads hours awaitin
       "href",
       /\/operator\/coaching\/[0-9a-f-]+\?month=2020-01$/,
     );
-    // ADMINHOME-01: name, hourly rate, this month, coaches and joined; no
-    // starting point, goal or account reference.
+    // ADMINHOME-01: name, hourly rate, this month and joined; no starting
+    // point, goal or account reference. #850: coaches are on the student's
+    // page, and the joined date reads as a date.
     await expect(table.locator("thead th")).toHaveText([
       "Name",
       "Hourly rate",
       `This month${label(current)}`,
-      "Coaches",
       "Joined",
     ]);
+    await expect(rows.first().locator("td").last()).toHaveText(
+      /^\d{1,2} [A-Z][a-z]{2} \d{4}$/,
+    );
     await expect(table.locator("code")).toHaveCount(0);
     await expect(rows.first().locator("td").nth(1)).toHaveText("Not set");
     // CONSOLEMONTHS-01: this month's hours and state, linked to that month.
@@ -847,14 +857,9 @@ test("[L287] ADMINHOME-01/ADMINTABLE-01..05 an administrator reads hours awaitin
     await expect(page).toHaveURL(/\/operator\/coaching\/[0-9a-f-]+$/);
     await page.goBack();
     await expect(page.getByText("Showing 26–50 of 60")).toBeVisible();
-    await page
-      .getByRole("link", { name: "Coaches for Invented learner 30" })
-      .click();
     await expect(
-      page.getByRole("heading", { name: "Invented learner 30", level: 1 }),
-    ).toBeVisible();
-    await expect(page.locator(".member-table")).toHaveCount(0);
-    await page.goBack();
+      page.getByRole("link", { name: "Coaches for Invented learner 30" }),
+    ).toHaveCount(0);
 
     await pager.getByRole("link", { name: "Next" }).click();
     await expect(page.getByText("Showing 51–60 of 60")).toBeVisible();
@@ -1199,6 +1204,9 @@ test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, 
 
     // DEFCOACH-03/04: Ada starts with the default coaches; move her to the new coach.
     await page.goto(`${owner.origin}/operator?ownerId=${adaId}`);
+    // #850 SEAM-01: the coaches sit folded on the student's page.
+    await expect(page).toHaveURL(`${owner.origin}/operator/coaching/${adaId}`);
+    await page.locator("#student-coaches > summary").click();
     const coaches = page.getByRole("group", {
       name: "Coaches for this student",
     });
@@ -1212,7 +1220,7 @@ test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, 
     await coaches.getByLabel("Invented Coach").check();
     await page.getByRole("button", { name: "Save coaches" }).click();
     await expect(page).toHaveURL(
-      `${owner.origin}/operator?ownerId=${adaId}#learner-coach`,
+      `${owner.origin}/operator/coaching/${adaId}#learner-coach`,
     );
     await expect(coaches.getByLabel("Invented Coach")).toBeChecked();
     await expect(coaches.getByLabel("Invented Owner")).not.toBeChecked();
@@ -1305,6 +1313,7 @@ test("[L301] CHANGELOG-01/02/03/04 an administrator reads who changed roles and 
     await page.getByLabel("Coach", { exact: true }).check();
     await page.getByRole("button", { name: "Give role" }).click();
     await page.goto(`${owner.origin}/operator?ownerId=${adaId}`);
+    await page.locator("#student-coaches > summary").click();
     const coaches = page.getByRole("group", {
       name: "Coaches for this student",
     });

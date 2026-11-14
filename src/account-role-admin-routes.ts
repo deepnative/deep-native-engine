@@ -134,11 +134,12 @@ export function mountAccountRoleAdmin(
       `<input type="hidden" name="${name}" value="${escape(value)}">`;
     const rows = result.value.holders
       .map((h) => {
+        // ROLES-01 (#850): a name and the email hint, never an account id.
         const who = h.people.length
           ? h.people
               .map(
                 (p) =>
-                  `${escape(p.name ?? "Name needed")} <span class="small">· <code>${escape(p.id)}</code></span>`,
+                  `${escape(p.name ?? "Name needed")}${h.hint ? ` <span class="small">· ${escape(h.hint)}</span>` : ""}`,
               )
               .join("<br>")
           : h.hint
