@@ -28,10 +28,13 @@ async function sampleInvoice(f: Fixture) {
   if (!reference) throw Error("Student reference missing");
   await admin.page.goto(f.origin + "/staff");
   await admin.page
-    .getByRole("link", { name: "Course billing and invoices", exact: true })
+    .getByRole("navigation", { name: "Administration", exact: true })
+    .getByRole("link", { name: "Invoices", exact: true })
     .click();
+  // INVOICELIST-01: course billing sits closed below the invoice table.
+  await admin.page.getByText("Prepare course billing", { exact: true }).click();
   await admin.page
-    .getByLabel("Learner", { exact: true })
+    .getByLabel("Student", { exact: true })
     .selectOption(reference);
   for (const [id, amount] of [
     ["FND-001", "10.00"],

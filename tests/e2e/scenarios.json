@@ -2420,7 +2420,7 @@
       "id": "L272",
       "actor": "Verified selected administrator recovering uncertain entry",
       "preconditions": "Actual entry transaction commits but its acknowledgement is lost",
-      "steps": "ADMINONLY05: inspect failed entry, deliberate duplicate refusal, explicitly end then reenter",
+      "steps": "ADMINONLY05: inspect failed entry, deliberate duplicate refusal, explicitly end the earlier session from Administration then reenter",
       "expected": "No staff cookie on uncertainty or automatic replay; recovery requires explicit end and entry",
       "issues": [565],
       "critical": true
@@ -2465,7 +2465,7 @@
       "id": "L277",
       "actor": "Current verified administrator and learner",
       "preconditions": "Separate finite administrator session and an invented published course",
-      "steps": "ADMINCON01–04: open unified console, search an exact reference and select the learner, inspect minimal summaries, compose existing course terms, explicitly end authority and try direct console access",
+      "steps": "ADMINSTUDENT-01/ADMINCON01–04 (#845): open Students, search an exact reference, see the name open the one student page, open the student's small coaches and course page, compose existing course terms, explicitly end authority and try direct access",
       "expected": "Proposal belongs only to selected account without charge or private-writing exposure; ended authority fails closed and learner draft remains",
       "issues": [570],
       "critical": true
@@ -2555,8 +2555,8 @@
       "id": "L287",
       "actor": "Platform administrator with 60 learner accounts",
       "preconditions": "Dedicated synthetic PostgreSQL database with 60 invented named learners, verified owner identity, port0 server; desktop/mobile Chromium",
-      "steps": "ADMINTABLE-01..05: enter administration, read the first 25 learners, page forward, select a learner from page 2, page to the last rows, search part of a name and clear the search; CONSOLEMONTHS-01..03: read each learner's coaching hours and status for this month, last month and the latest earlier month, and open a month's coaching page; CONSOLECOACH-02: jump to the chosen learner's summary",
-      "expected": "The table is sorted by name with an exact count and Previous/Next, the selection stays through paging, search filters and counts only matches, private work is not shown, and the page avoids sideways scrolling and controls under 40px on desktop and mobile",
+      "steps": "ADMINHOME-01 (#845): enter administration and land on Students, read the hours awaiting review first, then the table of name, hourly rate, this month, coaches and joined; ADMINTABLE-01..05: read the first 25 students, page forward, open a student and their coaches from page 2, page to the last rows, search part of a name and clear the search; CONSOLEMONTHS-01/02: read each student's hours and status for this month and open that month's coaching page",
+      "expected": "Awaiting hours link to their month; the table is sorted by name with an exact count and Previous/Next and shows no account reference, a name opens the one student page, search filters and counts only matches, private work is not shown, and the page avoids sideways scrolling and controls under 40px on desktop and mobile",
       "issues": [641, 654, 732],
       "critical": true
     },

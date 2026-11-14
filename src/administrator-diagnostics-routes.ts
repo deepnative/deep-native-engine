@@ -5,6 +5,7 @@ import type {
   SiteDiagnosis,
 } from "./administrator-diagnostics.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
+import { adminMenuFor } from "./administration-presentation.ts";
 import { COOKIE, csrf, validCsrf } from "./session.ts";
 import {
   staffCookie,
@@ -86,7 +87,7 @@ export function mountAdministratorDiagnostics(
       .send(
         page(
           "Diagnostics",
-          `<div class="portal-page"><div class="portal-intro"><h1>Diagnostics</h1><p>Read-only checks of this engine’s data. Counts are live; nothing here changes an account or sends email. Each email lookup is recorded.</p></div>${extra}${lookupForm(token, options.secret, message)}<section class="portal-card"><h2>Site</h2>${siteTable(site)}</section><div class="portal-footer">${portalActions([["/operator", "Administration console"]])}</div></div>`,
+          `<div class="portal-page">${adminMenuFor(res)}<div class="portal-intro"><h1>Diagnostics</h1><p>Read-only checks of this engine’s data. Counts are live; nothing here changes an account or sends email. Each email lookup is recorded.</p></div>${extra}${lookupForm(token, options.secret, message)}<section class="portal-card"><h2>Site</h2>${siteTable(site)}</section></div>`,
         ),
       );
   // Resolves the administrator credential, or answers the request itself.

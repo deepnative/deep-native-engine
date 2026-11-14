@@ -33,7 +33,9 @@ export async function prepareBundle(
   },
 ) {
   await admin.goto(f.origin + "/operator/invoices");
-  await admin.getByLabel("Learner", { exact: true }).selectOption(reference);
+  // INVOICELIST-01: course billing sits closed below the invoice table.
+  await admin.getByText("Prepare course billing", { exact: true }).click();
+  await admin.getByLabel("Student", { exact: true }).selectOption(reference);
   for (const [id, amount] of terms.amounts) {
     await admin.locator(`input[name="courses"][value='["${id}",2]']`).check();
     await admin.locator(`input[name="amount_${id}_2"]`).fill(amount);

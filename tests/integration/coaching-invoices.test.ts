@@ -150,6 +150,23 @@ it("HOUR02/03/04/07 different member rates produce private exact invoices, expli
   expect(
     ready(await invoices.adminOverview(admin, a.id)).invoices.map((i) => i.id),
   ).toEqual([ai.invoiceId]);
+  // INVOICELIST-01: the list row names the student, the month and the money.
+  expect(
+    ready(await invoices.adminOverview(admin, a.id)).invoices[0],
+  ).toMatchObject({
+    id: ai.invoiceId,
+    delivery: "not_sent",
+    number: first.document.number,
+    student: expect.stringContaining("Invented"),
+    totalCents: "20340",
+    paidCents: "0",
+    refundedCents: "0",
+    voided: false,
+    coaching: expect.objectContaining({ month }),
+    terms: false,
+    firstLine: first.document.lines[0]!.description,
+    lineCount: first.document.lines.length,
+  });
   expect(first.document.coaching).toMatchObject({
     month,
     minutes: 90,

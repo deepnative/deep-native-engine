@@ -124,8 +124,21 @@ it("OFFPUR-05 exposes configured billing tools only to the current platform admi
   });
   expect((await get()).text).toContain('href="/operator/invoices"');
 });
-it("ADMIN-LAYOUT-01 staff tools render as a titled button list with grouped session actions", async () => {
-  const f = fixture(true);
+it("ADMINNAV-01/HIDE-01 an administrator's staff page is More tools: the menu, plain grouped links, nothing the menu already has", async () => {
+  const f = fixture(true, {
+    administratorEntry: {
+      status: vi.fn(),
+      enter: vi.fn(),
+      end: vi.fn(),
+    },
+    administratorDiagnostics: {
+      site: vi.fn(),
+      email: vi.fn(),
+      work: vi.fn(),
+    } as unknown as Parameters<typeof app>[1]["administratorDiagnostics"],
+    circleDiscussionEnabled: true,
+    circleDiscussion: {} as Parameters<typeof app>[1]["circleDiscussion"],
+  });
   f.admit.mockResolvedValue({
     kind: "ready",
     role: "platform_admin",
@@ -140,13 +153,38 @@ it("ADMIN-LAYOUT-01 staff tools render as a titled button list with grouped sess
       .set("Cookie", `dne_staff=${staff}`)
   ).text;
   const main = mainHtml(html);
-  expect(main).toContain('<div class="portal-page">');
+  expect(html).toContain("<title>More tools ·");
+  // Roles are off in this fixture, so Roles and History get no menu link.
   expect(main).toContain(
-    '<li><a href="/operator/invoices" class="button secondary">Course billing and invoices</a></li>',
+    '<div class="portal-page"><nav class="admin-menu" aria-label="Administration"><a href="/operator">Students</a><a href="/operator/invoices">Invoices</a><a href="/staff" aria-current="page">More</a></nav><h1>More tools</h1>',
   );
-  expect(main).toMatch(/<ul class="portal-tools">/);
+  expect(main).not.toContain("eyebrow");
+  expect(main).not.toContain("portal-tools");
+  expect(main).not.toContain("portal-card");
+  expect([...main.matchAll(/<h2>([^<]+)<\/h2>/g)].map((m) => m[1])).toEqual([
+    "Reports",
+    "Test and simulation tools",
+    "Staff session",
+  ]);
+  expect(main).toContain(
+    '<section class="admin-section"><h2>Reports</h2><ul class="more-tools"><li><a href="/operator/coaching">Coaching hours by month</a></li><li><a href="/operator/invoice-reconciliation">Invoice and cash reconciliation</a></li><li><a href="/operator/diagnostics">Diagnostics</a></li></ul></section>',
+  );
+  // No second link to what the menu holds, and no circle report pages: an
+  // administrator has no per-circle grant, so those would answer 403.
+  const tools = main.slice(main.indexOf("<h1>"));
+  for (const gone of [
+    'href="/operator"',
+    'href="/operator/invoices"',
+    'href="/operator/roles"',
+    'href="/operator/changes"',
+    "/moderate/circles/",
+    "Administration console",
+    "member",
+    "learner",
+  ])
+    expect(tools).not.toContain(gone);
   expect(main).toMatch(
-    /<section class="portal-card"><h2>Staff session<\/h2>[\s\S]*action="\/staff\/sign-out"/,
+    /<section class="admin-section"><h2>Staff session<\/h2>[\s\S]*action="\/staff\/sign-out"/,
   );
   expectPortalActions(html, [
     ["/learn", "Your learning space"],
@@ -158,7 +196,103 @@ it("ADMIN-LAYOUT-01 staff tools render as a titled button list with grouped sess
     ["/learn", "Your learning space"],
   ]);
 });
-
+it("ADMINNAV-01 More tools groups every tool that is on under plain headings, and says so when none is", async () => {
+  const on = {} as never;
+  const all = fixture(true, {
+    supportRequests: { time: on } as never,
+    supportAssignment: on,
+    localSupportAssignment: true,
+    reviewTimeGrantAdmin: on,
+    reviewTimeGrantAdministration: "enabled",
+    supportTimeGrantAdmin: on,
+    supportTimeGrantAdministration: "enabled",
+    sampleAssignments: on,
+    sampleAssignmentAdministration: true,
+    tracks: on,
+    metrics: on,
+    ledgerReconciliation: on,
+    proposals: on,
+    circleGrantAdmin: on,
+    eventCancellations: on,
+    eventAttendance: on,
+    studyUnitFixtures: on,
+    localTestUnitIssuance: true,
+    eventRehearsals: on,
+    workflowReviewStaff: on,
+    staffCapacity: on,
+    memberRecordAccess: on,
+    sampleHoldCancellations: on,
+    agreementOutcomes: on,
+    manualObservations: on,
+  });
+  let opened: Server | undefined;
+  const page = async (f: ReturnType<typeof fixture>) => {
+    f.admit.mockResolvedValue({
+      kind: "ready",
+      role: "platform_admin",
+      deadline: performance.now() + 60000,
+      expiresAt: new Date(Date.now() + 60000),
+    });
+    // One server at a time; afterEach closes the last one.
+    if (opened) await closeLoopback(opened);
+    opened = server = await listenLoopback(f.application);
+    return mainHtml(
+      (
+        await request(server)
+          .get("/staff")
+          .set("Host", host)
+          .set("Cookie", `dne_staff=${staff}`)
+          .expect(200)
+      ).text,
+    );
+  };
+  const main = await page(all);
+  expect([...main.matchAll(/<h2>([^<]+)<\/h2>/g)].map((m) => m[1])).toEqual([
+    "Reports",
+    "Support and reviews",
+    "Permissions",
+    "Events",
+    "Test and simulation tools",
+    "Staff session",
+  ]);
+  for (const [href, label] of [
+    ["/operator/course-agreements", "Course agreement outcomes"],
+    ["/operator/staff-capacity", "Staff capacity"],
+    ["/operator/delivery-cost", "Delivery cost"],
+    ["/operator/metrics/report", "Learning and participation snapshot"],
+    ["/operator/support", "Your granted support requests"],
+    ["/operator/support-assignment", "Support request assignments"],
+    ["/operator/sample-assignments/pending", "Pending feedback requests"],
+    ["/operator/sample-assignments", "Private sample assignments"],
+    ["/operator/workflow-reviews", "Assign private workflow review"],
+    ["/moderate/proposals", "Private proposal moderation"],
+    [
+      "/operator/member-records",
+      "Download a student&#39;s records (with their permission)",
+    ],
+    ["/operator/circle-grants", "Circle moderation grants"],
+    ["/moderate/circle-reference", "My moderation reference"],
+    ["/operator/review-time-grants", "Private review-minute permissions"],
+    ["/operator/support-time-grants", "Private support-minute permissions"],
+    ["/operator/event-rehearsals", "Schedule a private rehearsal"],
+    ["/operator/event-attendance", "Private rehearsal attendance"],
+    ["/operator/event-cancellations", "Event cancellation"],
+    ["/operator/support-time", "Your granted support test effort"],
+    ["/operator/experts", "Synthetic expert registry"],
+    ["/operator/sample-holds", "Staff sample holds"],
+    ["/operator/ledger-reconciliation", "Synthetic accounting inspection"],
+    ["/operator/study-test-units", "Issue local study test units"],
+    ["/operator/local-ai", "Local simulation control"],
+    ["/operator/test-receipts", "Synthetic observation register"],
+  ])
+    expect(main).toContain(`<li><a href="${href}">${label}</a></li>`);
+  const bare = await page(
+    fixture(false, { localAiControl: undefined, catalog: undefined }),
+  );
+  expect(bare).toContain(
+    "<h1>More tools</h1><p>No other tools are switched on for this site.</p>",
+  );
+});
 it("HOLDCANCEL-NAV-01/02 links Staff sample holds for operators and administrators only", async () => {
   const holds = { list: vi.fn(), cancel: vi.fn() };
   const link = 'href="/operator/sample-holds"';

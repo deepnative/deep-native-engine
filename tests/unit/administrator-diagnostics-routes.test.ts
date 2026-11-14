@@ -97,7 +97,11 @@ it("DIAG-02 shows site counts and an email lookup form to an administrator", asy
   expect(page.status).toBe(200);
   expect(page.headers["cache-control"]).toBe("no-store");
   expect(f.store.site).toHaveBeenCalledExactlyOnceWith(credential);
+  // ADMINNAV-01: the menu replaces the link back to the old console.
+  expect(page.text).not.toContain("Administration console");
+  expect(page.text).not.toContain("portal-footer");
   for (const text of [
+    '<div class="portal-page"><nav class="admin-menu" aria-label="Administration"><a href="/operator">Students</a>',
     "<h1>Diagnostics</h1>",
     '<th scope="row">Accounts</th><td>12</td>',
     '<th scope="row">Sign-in links, last 24 hours</th><td>6</td>',

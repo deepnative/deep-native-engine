@@ -99,7 +99,9 @@ async function signin(page: Page, token: string) {
     .getByRole("button", { name: "Sign in to staff tools", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Your local staff tools" }),
+    page.getByRole("heading", {
+      name: /^(Your local staff tools|More tools)$/,
+    }),
   ).toBeVisible();
 }
 test("[L177] SUPADM-05-BOUNDARIES SUPADM-08-READS-ROLLBACK actual staff roles, explicit identity and disabled/live administration deny safely", async ({

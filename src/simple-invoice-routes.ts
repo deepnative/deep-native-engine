@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { csrf, validCsrf } from "./session.ts";
 import { page, escape } from "./views.ts";
-import { portalActions } from "./backend-portal-presentation.ts";
 import {
   parseInvoiceMoney,
   invoicePaymentStatus,
@@ -16,9 +15,15 @@ import {
   type SimpleInvoiceDocument,
 } from "./simple-invoice-views.ts";
 import type {
+  AdminInvoiceRow,
   InvoiceFailure,
   SimpleInvoiceStore,
 } from "./simple-invoice-store.ts";
+import {
+  adminMenuFor,
+  shortInvoiceNumber,
+} from "./administration-presentation.ts";
+import { periodLabel } from "./coaching-values.ts";
 export interface InvoiceSender {
   send(
     address: string,
@@ -48,7 +53,7 @@ function error(
     .send(
       page(
         "Invoice request not confirmed",
-        `<h1>Invoice request not confirmed</h1><p role="alert">${kind === "unavailable" ? "The outcome is uncertain. Inspect the original operation before trying another action." : kind === "conflict" ? "The current record differs from this form. Inspect the latest state before another action." : "This invoice request is not available or was not accepted."}</p>${key ? `<p><a href="${admin ? adminPath : memberPath}/operations/${escape(key)}">Inspect original operation</a></p>` : ""}<p><a href="${admin ? adminPath : memberPath}">Courses and invoices</a></p>`,
+        `<h1>Invoice request not confirmed</h1><p role="alert">${kind === "unavailable" ? "The outcome is uncertain. Inspect the original operation before trying another action." : kind === "conflict" ? "The current record differs from this form. Inspect the latest state before another action." : "This invoice request is not available or was not accepted."}</p>${key ? `<p><a href="${admin ? adminPath : memberPath}/operations/${escape(key)}">Inspect original operation</a></p>` : ""}<p><a href="${admin ? adminPath : memberPath}">${admin ? "Invoices" : "Courses and invoices"}</a></p>`,
       ),
     );
 }
@@ -57,6 +62,34 @@ function billingPage(profile: BillingProfile, anti: string, message = "") {
     "Billing recipient",
     `<section class="invoice-workspace"><h1>Billing recipient</h1>${message ? `<p role="alert">${escape(message)}</p>` : ""}<p>Save the name, email and optional company to suggest on future course proposals and coaching months. The company is shown on invoices when set. This does not change your sign-in email, authorize a charge, enroll you, or edit an issued invoice. Review the recipient and exact terms each time.</p><form method="post" action="/account/billing">${hidden("csrf", anti)}${hidden("revision", profile.revision)}<label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="${escape(profile.name)}" required></label><label>Invoice email<input name="email" type="email" autocomplete="email" maxlength="254" value="${escape(profile.email)}" required></label><label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value="${escape(profile.company ?? "")}"></label><button>Save billing recipient</button></form><p>Do not enter card numbers, CVV, bank credentials or payment secrets. This private profile is included in your account export and removed with your learning account; issued financial records follow their separate retention policy.</p><p><a href="${memberPath}">Review courses and invoices</a> · <a href="/account">My account</a></p></section>`,
   );
+}
+/** INVOICELIST-01: one issued invoice as a row an administrator can scan. */
+function invoiceRow(i: AdminInvoiceRow) {
+  const cad = (cents: number) => `CAD ${(cents / 100).toFixed(2)}`;
+  const total = Number(i.totalCents),
+    paid = Number(i.paidCents),
+    refunded = Number(i.refundedCents);
+  const what = i.coaching
+    ? `Coaching · ${periodLabel({ key: i.coaching.month, start: i.coaching.periodStart, end: i.coaching.periodEnd })}`
+    : i.terms
+      ? "Coaching package"
+      : `${escape(i.firstLine ?? "Courses")}${i.lineCount > 1 ? ` and ${i.lineCount - 1} more` : ""}`;
+  const payment = i.voided
+    ? "Void"
+    : refunded > 0
+      ? refunded === paid
+        ? "Refunded"
+        : "Partly refunded"
+      : paid >= total
+        ? "Paid"
+        : paid > 0
+          ? "Partly paid"
+          : "Unpaid";
+  const status = i.voided
+    ? payment
+    : `${i.delivery === "sent" ? "Sent" : i.delivery === "not_sent" ? "Not sent" : i.delivery === "sending" ? "Sending" : "Sending unconfirmed"} · ${payment}`;
+  const number = shortInvoiceNumber(i.number ?? i.id);
+  return `<tr><td data-label="Student">${escape(i.student ?? "Name needed")}</td><td data-label="For">${what}</td><td data-label="Total">${cad(total)}</td><td data-label="Balance">${i.voided ? "—" : cad(total - paid)}</td><td data-label="Status">${status}</td><td data-label="Invoice"><a href="${adminPath}/${i.id}" aria-label="Open invoice ${escape(number)}">Open</a><span>${escape(number)}</span></td></tr>`;
 }
 // Delivery states as administrators read them.
 const DELIVERY = {
@@ -197,20 +230,15 @@ export function mountSimpleInvoiceRoutes(
     const r = await store.adminOverview(token(res), selected);
     if (r.kind !== "ready") return error(res, r.kind, undefined, true);
     const anti = csrf(token(res), options.secret);
+    const invoices = r.value.invoices.map(invoiceRow).join("");
     return res.send(
       page(
-        "Course billing administration",
-        `<section class="invoice-workspace portal-workspace"><h1>Course billing administration</h1>${prepared ? '<p role="status">Course billing proposal prepared. The learner can now review and accept it in Courses and invoices.</p>' : ""}<p>Prepare courses for a registered student. No invoice is issued until the student accepts the exact terms.</p>${portalActions(
-          [
-            ["/operator", "Administration console"],
-            ["/operator/coaching", "Coaching administration"],
-            [
-              "/operator/invoice-reconciliation",
-              "Invoice and cash reconciliation",
-            ],
-            ["/operator/course-agreements", "Course agreement outcomes"],
-          ],
-        )}<section class="portal-card"><h2>Prepare course billing</h2><form method="post" action="${adminPath}/plans">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}<label for="invoice-owner">Learner</label><select id="invoice-owner" name="ownerId" required>${r.value.members.map((m) => `<option value="${m.id}">${escape(m.displayName ?? "Name needed")} · ${escape(m.id)}</option>`).join("")}</select><fieldset><legend>Consolidate courses</legend>${r.value.courses.map((c) => `<label class="check"><input type="checkbox" name="courses" value="${escape(JSON.stringify([c.id, c.version]))}"><span>${escape(c.title)} · ${escape(c.id)} version ${c.version}</span></label><label>Amount for ${escape(c.title)} (CAD)<input name="amount_${escape(c.id)}_${c.version}" inputmode="decimal" value="0.00"></label>`).join("")}</fieldset><label for="invoice-cadence">Billing</label><select id="invoice-cadence" name="cadence"><option value="one_time">One-time</option><option value="monthly">Recurring monthly</option></select><label>Starts on (UTC date)<input type="date" name="startsOn" required></label>${store.tax ? `<p>${escape(store.tax.label)} at ${taxRate(store.tax)} is added to each invoice from its course subtotal.</p>` : '<label>Configured tax amount per invoice (CAD)<input name="tax" inputmode="decimal" value="0.00" required></label>'}<button>Prepare course billing proposal</button></form></section><section class="portal-card"><h2>Recurring invoices</h2><form method="post" action="${adminPath}/due">${hidden("csrf", anti)}<button>Generate due recurring invoices</button></form></section><section class="portal-card"><h2>Issued invoice references</h2><ul class="portal-list">${r.value.invoices.map((i) => `<li><a href="${adminPath}/${i.id}">${i.id}</a> · ${escape(i.delivery)}</li>`).join("")}</ul></section></section>`,
+        "Invoices",
+        `<section class="invoice-workspace portal-workspace">${adminMenuFor(res, "invoices")}<h1>Invoices</h1>${prepared ? '<p role="status">Course billing proposal prepared. The student can now review and accept it in Courses and invoices.</p>' : ""}${
+          invoices
+            ? `<div class="table-scroll" tabindex="0" role="region" aria-label="Invoices"><table class="member-table stack-table invoice-list"><thead><tr><th scope="col">Student</th><th scope="col">For</th><th scope="col">Total</th><th scope="col">Balance</th><th scope="col">Status</th><th scope="col">Invoice</th></tr></thead><tbody>${invoices}</tbody></table></div>`
+            : '<p role="status">No invoices have been issued yet.</p>'
+        }<details class="admin-details"${selected ? " open" : ""}><summary>Prepare course billing</summary><p>Prepare courses for a registered student. No invoice is issued until the student accepts the exact terms.</p><form method="post" action="${adminPath}/plans">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}<label for="invoice-owner">Student</label><select id="invoice-owner" name="ownerId" required>${r.value.members.map((m) => `<option value="${m.id}">${escape(m.displayName ?? "Name needed")}</option>`).join("")}</select><fieldset><legend>Courses</legend>${r.value.courses.map((c) => `<label class="check"><input type="checkbox" name="courses" value="${escape(JSON.stringify([c.id, c.version]))}"><span>${escape(c.title)} · ${escape(c.id)} version ${c.version}</span></label><label>Amount for ${escape(c.title)} (CAD)<input name="amount_${escape(c.id)}_${c.version}" inputmode="decimal" value="0.00"></label>`).join("")}</fieldset><label for="invoice-cadence">Billing</label><select id="invoice-cadence" name="cadence"><option value="one_time">One-time</option><option value="monthly">Recurring monthly</option></select><label>Starts on (UTC date)<input type="date" name="startsOn" required></label>${store.tax ? `<p>${escape(store.tax.label)} at ${taxRate(store.tax)} is added to each invoice from its course subtotal.</p>` : '<label>Configured tax amount per invoice (CAD)<input name="tax" inputmode="decimal" value="0.00" required></label>'}<button>Prepare course billing proposal</button></form></details><section class="admin-section" aria-labelledby="recurring-invoices"><h2 id="recurring-invoices">Recurring invoices</h2><form method="post" action="${adminPath}/due">${hidden("csrf", anti)}<button class="secondary">Generate due recurring invoices</button></form></section></section>`,
       ),
     );
   });

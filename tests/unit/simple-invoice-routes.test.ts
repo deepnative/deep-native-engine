@@ -5,7 +5,7 @@ import { expect, it, vi } from "vitest";
 import { mountSimpleInvoiceRoutes } from "../../src/simple-invoice-routes.ts";
 import type { SimpleInvoiceStore } from "../../src/simple-invoice-store.ts";
 import { csrf } from "../../src/session.ts";
-import { expectPortalActions, mainHtml } from "../support/portal-layout.ts";
+import { mainHtml } from "../support/portal-layout.ts";
 import { withLoopback } from "../support/loopback-server.ts";
 const token = "a".repeat(64),
   secret = "invoice-test",
@@ -65,7 +65,7 @@ function fixture(disabled = false, noSender = false) {
       ready({
         members: [{ id }],
         courses: [{ id: "FND-001", version: 2, title: "Claim checking" }],
-        invoices: [{ id, delivery: "not_sent" }],
+        invoices: [],
       }),
     ),
     invoice: vi.fn().mockResolvedValue(ready(invoice)),
@@ -337,7 +337,10 @@ it("OFFPUR-01/03 accepts or cancels only explicit original-key requests and reta
   f.service.overview.mockResolvedValueOnce({ kind: "denied" });
   expect((await f.get(base)).status).toBe(403);
   f.service.adminOverview.mockResolvedValueOnce({ kind: "denied" });
-  expect((await f.get(admin)).status).toBe(403);
+  const refused = await f.get(admin);
+  expect(refused.status).toBe(403);
+  // INVOICELIST-01: the administrator's list has one name everywhere.
+  expect(refused.text).toContain('<a href="/operator/invoices">Invoices</a>');
 });
 it("OFFPUR-08 prepares the selected courses and validates malformed or ambiguous amounts", async () => {
   const f = fixture();
@@ -743,29 +746,136 @@ it("BILLPROFILE02 preserves empty invalid attempted recipient fields with a safe
   expect(r.text).toContain("Recipient not saved");
   expect(r.text).toContain('value=""');
 });
-it("ADMIN-LAYOUT-02 course billing administration titles each task card and offers navigation as buttons", async () => {
+it("INVOICELIST-01/ADMINNAV-01 the Invoices page leads with a table in words and keeps course billing closed below", async () => {
   const f = fixture();
+  const row = {
+    id,
+    revision: 1,
+    delivery: "not_sent",
+    number: "INV-<7>",
+    student: "Mei <Tanaka>",
+    totalCents: "72000",
+    paidCents: "0",
+    refundedCents: "0",
+    voided: false,
+    coaching: { month: "2026-09" },
+    terms: false,
+    firstLine: "Coaching",
+    lineCount: 1,
+  };
+  const other = (n: number, extra: object) => ({
+    ...row,
+    id: `${n}${id.slice(1)}`,
+    coaching: null,
+    ...extra,
+  });
+  f.service.adminOverview.mockResolvedValue(
+    ready({
+      members: [{ id, displayName: "Mei <Tanaka>" }, { id: other(2, {}).id }],
+      courses: [{ id: "FND-001", version: 2, title: "Claim checking" }],
+      invoices: [
+        row,
+        other(2, {
+          delivery: "sent",
+          paidCents: "72000",
+          coaching: {
+            month: "2026-10-16",
+            periodStart: "2026-10-16",
+            periodEnd: "2026-10-29",
+          },
+        }),
+        other(3, {
+          delivery: "sending",
+          paidCents: "1000",
+          firstLine: "Claim <checking>",
+          lineCount: 3,
+        }),
+        other(4, { delivery: "unconfirmed", voided: true, terms: true }),
+        other(5, {
+          delivery: "sent",
+          paidCents: "72000",
+          refundedCents: "72000",
+          student: null,
+          number: null,
+          firstLine: null,
+        }),
+        other(6, {
+          delivery: "unconfirmed",
+          paidCents: "72000",
+          refundedCents: "100",
+        }),
+        other(7, { number: "DN-80d5695a-5ef7-459e-bd78-63fc26a5491d" }),
+      ],
+    }),
+  );
   const html = (await f.get("/operator/invoices")).text;
-  expectPortalActions(html, [
-    ["/operator", "Administration console"],
-    ["/operator/coaching", "Coaching administration"],
-  ]);
+  expect(html).toContain("<title>Invoices ·");
   const main = mainHtml(html);
   expect(main).toContain(
-    '<section class="invoice-workspace portal-workspace">',
+    '<section class="invoice-workspace portal-workspace"><nav class="admin-menu" aria-label="Administration"><a href="/operator">Students</a><a href="/operator/invoices" aria-current="page">Invoices</a><a href="/operator/roles">Roles</a><a href="/operator/changes">History</a><a href="/staff">More</a></nav><h1>Invoices</h1><div class="table-scroll" tabindex="0" role="region" aria-label="Invoices"><table class="member-table stack-table invoice-list"><thead><tr><th scope="col">Student</th><th scope="col">For</th><th scope="col">Total</th><th scope="col">Balance</th><th scope="col">Status</th><th scope="col">Invoice</th></tr></thead>',
   );
-  for (const title of [
-    "Prepare course billing",
-    "Recurring invoices",
-    "Issued invoice references",
-  ])
-    expect(main).toMatch(
-      new RegExp(`<section class="portal-card"><h2>${title}</h2>`),
-    );
+  // The id is never the link text; the invoice number is beside "Open".
+  expect(main).toContain(
+    `<tr><td data-label="Student">Mei &lt;Tanaka&gt;</td><td data-label="For">Coaching · September 2026</td><td data-label="Total">CAD 720.00</td><td data-label="Balance">CAD 720.00</td><td data-label="Status">Not sent · Unpaid</td><td data-label="Invoice"><a href="/operator/invoices/${id}" aria-label="Open invoice INV-&lt;7&gt;">Open</a><span>INV-&lt;7&gt;</span></td></tr>`,
+  );
+  expect(main).not.toContain(`>${id}<`);
+  const cells = [...main.matchAll(/<tr><td.*?<\/tr>/g)].map((m) =>
+    [...m[0].matchAll(/<td data-label="(?:For|Balance|Status)">(.*?)<\/td>/g)]
+      .map((c) => c[1])
+      .join(" | "),
+  );
+  expect(cells.slice(1)).toEqual([
+    "Coaching · 16 Oct 2026 to 29 Oct 2026 | CAD 0.00 | Sent · Paid",
+    "Claim &lt;checking&gt; and 2 more | CAD 710.00 | Sending · Partly paid",
+    "Coaching package | — | Void",
+    "Courses | CAD 0.00 | Sent · Refunded",
+    "Coaching | CAD 0.00 | Sending unconfirmed · Partly refunded",
+    "Coaching | CAD 720.00 | Not sent · Unpaid",
+  ]);
+  expect(main).toContain(
+    'aria-label="Open invoice DN-80d5695a">Open</a><span>DN-80d5695a</span>',
+  );
+  expect(main).not.toContain("5ef7-459e");
+  // A deleted account with no number still has a name and a short reference.
+  expect(main).toContain(
+    `<td data-label="Student">Name needed</td><td data-label="For">Courses</td>`,
+  );
+  expect(main).toContain(`<span>5${id.slice(1, 8)}</span>`);
+  // Course billing sits below the table, closed, and names students only.
+  expect(main.indexOf("</table>")).toBeLessThan(main.indexOf("<details"));
+  expect(main).toContain(
+    '<details class="admin-details"><summary>Prepare course billing</summary>',
+  );
+  expect(main).toContain(
+    `<label for="invoice-owner">Student</label><select id="invoice-owner" name="ownerId" required><option value="${id}">Mei &lt;Tanaka&gt;</option><option value="${other(2, {}).id}">Name needed</option></select>`,
+  );
   expect(main).toContain('action="/operator/invoices/plans"');
-  expect(main).toContain('action="/operator/invoices/due"');
+  // Generating due invoices is its own section, outside the closed form.
+  expect(main).toContain(
+    '</form></details><section class="admin-section" aria-labelledby="recurring-invoices"><h2 id="recurring-invoices">Recurring invoices</h2><form method="post" action="/operator/invoices/due">',
+  );
+  for (const gone of [
+    "portal-actions",
+    "portal-card",
+    "Course billing administration",
+    "Issued invoice references",
+    "Administration console",
+    "Learner",
+  ])
+    expect(main).not.toContain(gone);
+  // Preparing for one student opens the form.
+  expect(
+    mainHtml((await f.get(`/operator/invoices?ownerId=${id}`)).text),
+  ).toContain('<details class="admin-details" open>');
+  f.service.adminOverview.mockResolvedValue(
+    ready({ members: [], courses: [], invoices: [] }),
+  );
+  const none = mainHtml((await f.get("/operator/invoices")).text);
+  expect(none).toContain(
+    '<p role="status">No invoices have been issued yet.</p><details',
+  );
+  expect(none).not.toContain("<table");
 });
-
 it("AUDIT-01/02/03 shows readable delivery states, month names and button navigation", async () => {
   const f = fixture();
   for (const [delivery, text] of [
@@ -835,7 +945,7 @@ it("GAPS-02 confirms a prepared proposal and keeps the learner selected", async 
   const page = await f.get(done.headers.location!);
   expect(page.status).toBe(200);
   expect(page.text).toContain(
-    '<p role="status">Course billing proposal prepared. The learner can now review and accept it in Courses and invoices.</p>',
+    '<p role="status">Course billing proposal prepared. The student can now review and accept it in Courses and invoices.</p>',
   );
   expect((await f.get(`${admin}?ownerId=${id}`)).text).not.toContain(
     "Course billing proposal prepared",

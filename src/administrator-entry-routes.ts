@@ -13,9 +13,13 @@ import {
   staffCookie,
 } from "./staff-entry-selection.ts";
 import { invoiceUuid } from "./simple-invoice-values.ts";
-import { BACKGROUNDS, GOALS, type Background, type Goal } from "./content.ts";
 import { page, escape } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
+import {
+  adminMenu,
+  shortInvoiceNumber,
+  type AdminMenuAvailable,
+} from "./administration-presentation.ts";
 import { coachingStatus } from "./coaching-routes.ts";
 import { hours } from "./coaching-dashboard-views.ts";
 import { monthLabel, periodLabel } from "./coaching-values.ts";
@@ -30,33 +34,44 @@ import {
 import { hostingText } from "./hosting-presentation.ts";
 
 const CONSOLE_SEARCH_MAX = 120;
+const WORK_QUEUES = [
+  "support",
+  "feedback",
+  "workflow",
+  "contributions",
+] as const;
+const cad = (cents: number) => `CAD ${(cents / 100).toFixed(2)}`;
+const named = (name?: string | null) => escape(name ?? "Name needed");
 
-function learnersCard(v: AdministratorConsole, ownerId?: string) {
-  const href = (page: number, selected = ownerId, anchor = "") => {
-    const query = new URLSearchParams();
-    if (selected) query.set("ownerId", selected);
-    query.set("page", String(page));
+/** ADMINHOME-01: submitted hours first, each opening that student's month. */
+function awaitingReview(v: AdministratorConsole) {
+  const items = v.awaiting
+    .map(
+      (m) =>
+        `<li><a href="/operator/coaching/${escape(m.id)}?month=${escape(m.month)}">${named(m.displayName)}</a><span>${periodLabel({ key: m.month, start: m.periodStart, end: m.periodEnd })} · ${hours(m.minutes)}</span></li>`,
+    )
+    .join("");
+  return `<section class="admin-section" aria-labelledby="awaiting-review"><h2 id="awaiting-review">Awaiting review</h2>${items ? `<ul class="admin-list">${items}</ul>` : '<p role="status">No hours are waiting for review.</p>'}</section>`;
+}
+
+/** ADMINHOME-01: one row per student; the name opens the student's page. */
+function studentsTable(v: AdministratorConsole) {
+  const href = (page: number) => {
+    const query = new URLSearchParams({ page: String(page) });
     if (v.search) query.set("q", v.search);
-    return escape(`/operator?${query}${anchor}`);
+    return escape(`/operator?${query}`);
   };
-  // CONSOLEMONTHS-01..03: this month's and last month's hours and where they
-  // stand, then the latest earlier month, each linking to its coaching page.
-  type Member = AdministratorConsole["members"][number];
-  const month = (
-    m: Member,
-    saved: LatestCoaching | null | undefined,
-    named = false,
-  ) => {
-    if (!saved) return '<td class="member-coaching">—</td>';
+  type Student = AdministratorConsole["members"][number];
+  // CONSOLEMONTHS-01: this month's hours and where they stand. #832: a
+  // defined period is named by its dates.
+  const month = (m: Student) => {
+    const saved: LatestCoaching | null | undefined = m.thisMonth;
+    if (!saved) return "—";
     const link = `/operator/coaching/${escape(m.id)}?month=${escape(saved.month)}`;
-    // #832: a defined period is named by its dates; with several ending in
-    // the month, this is the latest.
-    return named || saved.month.length === 10
-      ? `<td class="member-coaching"><a href="${link}">${periodLabel({ key: saved.month, start: saved.periodStart, end: saved.periodEnd })}</a><span>${hours(saved.minutes)} · ${coachingStatus(saved)}</span></td>`
-      : `<td class="member-coaching"><a href="${link}">${hours(saved.minutes)}</a><span>${coachingStatus(saved)}</span></td>`;
+    return saved.month.length === 10
+      ? `<a href="${link}">${periodLabel({ key: saved.month, start: saved.periodStart, end: saved.periodEnd })}</a><span>${hours(saved.minutes)} · ${coachingStatus(saved)}</span>`
+      : `<a href="${link}">${hours(saved.minutes)}</a><span>${coachingStatus(saved)}</span>`;
   };
-  const coaching = (m: Member) =>
-    month(m, m.thisMonth) + month(m, m.lastMonth) + month(m, m.coaching, true);
   const first = (v.page - 1) * v.pageSize + 1,
     last = first + v.members.length - 1,
     pages = Math.max(Math.ceil(v.total / v.pageSize), 1);
@@ -64,13 +79,47 @@ function learnersCard(v: AdministratorConsole, ownerId?: string) {
   const rows = v.members
     .map(
       (m) =>
-        `<tr${m.id === ownerId ? ' aria-current="true"' : ""}><td><a href="${href(v.page, m.id, "#selected-member")}">${escape(m.displayName ?? "Name needed")}</a></td><td>${escape(BACKGROUNDS[m.background as Background] ?? m.background)}</td><td>${escape(GOALS[m.goal as Goal] ?? m.goal)}</td>${coaching(m)}<td>${m.joined.toISOString().slice(0, 10)}</td><td><code>${escape(m.id)}</code></td></tr>`,
+        `<tr><td data-label="Name"><a href="/operator/coaching/${escape(m.id)}">${named(m.displayName)}</a></td><td data-label="Hourly rate">${m.rateCents == null ? "Not set" : cad(m.rateCents)}</td><td data-label="This month" class="member-coaching">${month(m)}</td><td data-label="Coaches"><a href="/operator?ownerId=${escape(m.id)}" aria-label="Coaches for ${named(m.displayName)}">Coaches</a></td><td data-label="Joined">${m.joined.toISOString().slice(0, 10)}</td></tr>`,
     )
     .join("");
   const list = v.members.length
-    ? `<p role="status">Showing ${count(first)}–${count(last)} of ${count(v.total)}</p><div class="table-scroll" tabindex="0" role="region" aria-label="Learner accounts"><table class="member-table"><thead><tr><th scope="col">Name</th><th scope="col">Starting point</th><th scope="col">Goal</th><th scope="col">This month<span>${monthLabel(v.months.current)}</span></th><th scope="col">Last month<span>${monthLabel(v.months.previous)}</span></th><th scope="col">Earlier coaching</th><th scope="col">Joined</th><th scope="col">Account reference</th></tr></thead><tbody>${rows}</tbody></table></div><nav class="member-pager" aria-label="Learner pages">${v.page > 1 ? `<a class="button secondary" href="${href(v.page - 1)}">Previous</a>` : ""}<span>Page ${count(v.page)} of ${count(pages)}</span>${v.page < pages ? `<a class="button secondary" href="${href(v.page + 1)}">Next</a>` : ""}</nav>`
-    : `<p role="status">${v.search ? "No learner accounts match this search." : "No learner accounts available."}</p>`;
-  return `<section class="portal-card" id="learners"><h2>Learners</h2><form class="portal-search" method="get" action="/operator">${ownerId ? `<input type="hidden" name="ownerId" value="${escape(ownerId)}">` : ""}<label for="console-search">Search by name or account reference</label><div><input id="console-search" type="text" name="q" maxlength="${CONSOLE_SEARCH_MAX}" value="${escape(v.search)}"><button>Search</button></div></form>${v.search ? '<p><a href="/operator">Clear search</a></p>' : ""}${list}</section>`;
+    ? `<p role="status">Showing ${count(first)}–${count(last)} of ${count(v.total)}</p><div class="table-scroll" tabindex="0" role="region" aria-label="Students"><table class="member-table stack-table"><thead><tr><th scope="col">Name</th><th scope="col">Hourly rate</th><th scope="col">This month<span>${monthLabel(v.months.current)}</span></th><th scope="col">Coaches</th><th scope="col">Joined</th></tr></thead><tbody>${rows}</tbody></table></div>${pages > 1 ? `<nav class="member-pager" aria-label="Student pages">${v.page > 1 ? `<a class="button secondary" href="${href(v.page - 1)}">Previous</a>` : ""}<span>Page ${count(v.page)} of ${count(pages)}</span>${v.page < pages ? `<a class="button secondary" href="${href(v.page + 1)}">Next</a>` : ""}</nav>` : ""}`
+    : `<p role="status">${v.search ? "No students match this search." : "No students yet."}</p>`;
+  return `<section class="admin-section" aria-labelledby="all-students"><h2 id="all-students">All students</h2><form class="portal-search" method="get" action="/operator"><label for="console-search">Search by name</label><div><input id="console-search" type="text" name="q" maxlength="${CONSOLE_SEARCH_MAX}" value="${escape(v.search)}"><button>Search</button></div></form>${v.search ? '<p><a href="/operator">Clear search</a></p>' : ""}${list}</section>`;
+}
+
+/**
+ * ADMINSTUDENT-01: old "selected learner" links land on a small page for one
+ * student: the way to their hours, their coaches, and any course billing.
+ */
+function studentPage(
+  chosen: NonNullable<AdministratorConsole["selected"]>,
+  coachCard: string,
+  billing: boolean,
+  menu: string,
+) {
+  const id = escape(chosen.member.id);
+  const group = (title: string, items: string[]) =>
+    items.length
+      ? `<div><h3>${title}</h3><ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul></div>`
+      : "";
+  const records =
+    group(
+      "Enrollments",
+      chosen.enrollments.map((e) => `${escape(e.title)} · ${escape(e.id)}`),
+    ) +
+    group(
+      "Course bundles",
+      chosen.plans.map((p) => `Course bundle · ${escape(p.state)}`),
+    ) +
+    group(
+      "Invoices",
+      chosen.invoices.map(
+        (i) =>
+          `<a href="/operator/invoices/${escape(i.id)}">${escape(shortInvoiceNumber(i.number))}</a> · ${cad(Number(i.totalCents))} · ${i.delivery === "sent" ? "Sent" : "Not sent"}`,
+      ),
+    );
+  return `<div class="portal-page student-page">${menu}<h1>${named(chosen.member.displayName)}</h1>${portalActions([[`/operator/coaching/${id}`, "Hours, rate and invoices"]], true)}${coachCard}<section class="portal-card" aria-labelledby="student-courses"><h2 id="student-courses">Courses</h2>${records ? `<div class="portal-columns">${records}</div>` : "<p>No course enrollment, bundle or course invoice yet.</p>"}${billing ? `<p><a href="/operator/invoices?ownerId=${id}">Prepare course billing for this student</a></p>` : "<p>Billing is switched off on this site.</p>"}</section></div>`;
 }
 
 function memberToken(req: Request) {
@@ -95,6 +144,12 @@ export function mountAdministratorEntry(
   workQueues?: WorkQueueTools,
 ) {
   const member = memberToken;
+  // ADMINNAV-01 / HIDE-01: the menu links only to areas this site has on.
+  const available: AdminMenuAvailable = {
+    invoices: Boolean(options.simpleInvoices),
+    roles: Boolean(options.roleAdmin),
+  };
+  app.locals.adminMenu = available;
   const fail = (res: Response, status: number) =>
     res.status(status).send(
       page(
@@ -159,7 +214,7 @@ export function mountAdministratorEntry(
       );
     const v = result.value,
       chosen = v.selected;
-    // COACHLINK-01 / #689: the selected learner's coaches, chosen from coach-role holders.
+    // COACHLINK-01 / #689: the student's coaches, chosen from coach-role holders.
     const coachCard =
       chosen && options.roleAdmin
         ? coachAssignmentCard(
@@ -171,62 +226,41 @@ export function mountAdministratorEntry(
             csrf(cookie.value, options.secret),
           )
         : "";
-    const summaries = chosen
-      ? `<section class="portal-card" aria-labelledby="selected-member"><h2 id="selected-member">Selected learner</h2><p class="portal-summary">${escape(chosen.member.displayName ?? "Name needed")} · ${escape(BACKGROUNDS[chosen.member.background as Background] ?? chosen.member.background)} · ${escape(GOALS[chosen.member.goal as Goal] ?? chosen.member.goal)}</p><p class="portal-reference">Account reference: <code>${escape(chosen.member.id)}</code></p><p>Only enrollment and billing summaries are shown. Private writing and files are not available here.</p><div class="portal-columns"><div><h3>Enrollments</h3><ul>${chosen.enrollments.map((e) => `<li>${escape(e.title)} · ${escape(e.id)}</li>`).join("") || "<li>No recorded enrollment.</li>"}</ul></div><div><h3>Course bundles</h3><ul>${chosen.plans.map((p) => `<li>${escape(p.id)} · ${escape(p.state)}</li>`).join("") || "<li>No course bundles.</li>"}</ul></div><div><h3>Invoices</h3><ul>${chosen.invoices.map((i) => `<li><a href="/operator/invoices/${escape(i.id)}">${escape(i.number)}</a> · CAD ${(Number(i.totalCents) / 100).toFixed(2)} · delivery ${escape(i.delivery)}</li>`).join("") || "<li>No issued invoices.</li>"}</ul></div></div>${
-          options.simpleInvoices
-            ? portalActions(
-                [
-                  [
-                    `/operator/invoices?ownerId=${escape(chosen.member.id)}`,
-                    "Compose courses for this learner",
-                  ],
-                  [
-                    `/operator/coaching/${escape(chosen.member.id)}`,
-                    "Coaching hours and rates",
-                  ],
-                ],
-                true,
-              )
-            : "<p>Billing is disabled. No proposal, invoice or rate can be created from this console.</p>"
-        }</section>${coachCard}`
-      : "";
-    // WAITWORK-08: a failed read says so, never shows zero, and keeps the console.
+    const menu = adminMenu(chosen ? undefined : "students", available);
+    if (chosen)
+      return res.send(
+        page(
+          chosen.member.displayName ?? "Student",
+          studentPage(chosen, coachCard, Boolean(options.simpleInvoices), menu),
+        ),
+      );
+    // WAITWORK-08: a failed read says so, never shows zero, and keeps the page.
+    // HIDE-01: with nothing waiting or assigned anywhere, the card is left out.
     let waiting = "";
     if (workQueues && options.administratorDiagnostics) {
       const work = await options.administratorDiagnostics
         .work(cookie.value)
         .catch(() => undefined);
       waiting =
-        work?.kind === "ready"
-          ? workWaitingCard(work.value, workQueues)
-          : workWaitingUnavailable();
+        work?.kind !== "ready"
+          ? workWaitingUnavailable()
+          : WORK_QUEUES.some(
+                (key) =>
+                  workQueues[key] &&
+                  (work.value[key].waiting > 0 ||
+                    (work.value[key].assigned ?? 0) > 0),
+              )
+            ? workWaitingCard(work.value, workQueues)
+            : "";
     }
+    // HIDE-01: published courses are listed only when there are some.
+    const courses = v.courses.length
+      ? `<section class="admin-section" aria-labelledby="courses"><h2 id="courses">Courses</h2><p>Published lessons that can be put on a course invoice.</p><ul class="admin-list">${v.courses.map((c) => `<li>${escape(c.title)}<span>${escape(c.id)} version ${c.version}</span></li>`).join("")}</ul></section>`
+      : "";
     return res.send(
       page(
-        "Administration console",
-        `<div class="portal-page administrator-console"><div class="portal-intro"><h1>Administration console</h1><p>Manage the selected learner’s courses and billing. Registration and a proposal do not create enrollment or a charge; the learner must accept exact billing terms.</p><nav class="portal-actions" aria-label="Administration sections"><a href="#learners" class="button secondary">Learners</a><a href="#courses" class="button secondary">Courses/services</a><a href="#invoices" class="button secondary">Invoices</a></nav></div>${waiting}${learnersCard(v, target)}${summaries}<section class="portal-card" id="courses"><h2>Courses/services</h2><p>Published lesson versions only. Planned services, prices and support capacity are not published offers. These are course candidates; final eligibility is checked for the exact learner.</p><ul>${v.courses.map((c) => `<li>${escape(c.title)} · ${escape(c.id)} version ${c.version}</li>`).join("") || "<li>No published course candidates.</li>"}</ul></section><section class="portal-card" id="invoices"><h2>Invoices</h2>${
-          options.simpleInvoices
-            ? `<p>Select a learner above to inspect their retained invoices or compose a proposal for that exact account.</p>${portalActions(
-                [
-                  ["/operator/invoices", "Courses and invoices"],
-                  ["/operator/coaching", "Coaching administration"],
-                ],
-              )}`
-            : "<p>Invoicing is disabled. Learning accounts and saved work remain available.</p>"
-        }</section><div class="portal-footer">${portalActions([
-          ...(options.roleAdmin
-            ? ([
-                ["/operator/roles", "Roles"],
-                ["/operator/changes", "Change history"],
-              ] as [string, string][])
-            : []),
-          ["/operator/diagnostics", "Diagnostics"],
-          // FRICTION-11: /admin needs a member account, so offer it only then.
-          ...(member(req)
-            ? ([["/admin", "Administrator session"]] as [string, string][])
-            : []),
-          ["/account", "My learning account"],
-        ])}</div></div>`,
+        "Students",
+        `<div class="portal-page administrator-console">${menu}<h1>Students</h1>${awaitingReview(v)}${studentsTable(v)}${waiting}${courses}</div>`,
       ),
     );
   });
@@ -238,23 +272,23 @@ export function mountAdministratorEntry(
     const result = await attempt("status", token);
     if (!result || result.kind !== "ready")
       return fail(res, result?.kind === "denied" ? 403 : 503);
+    const anti = `<input type="hidden" name="csrf" value="${csrf(token, options.secret)}">`;
+    // This browser holds an administration cookie once entered, until it is
+    // ended or expires. It only chooses what the page offers first: ending
+    // stays on the page either way, and both routes still decide for
+    // themselves.
+    const staff = staffCookie(req.headers.cookie),
+      entered = staff.kind === "value" && staffCredential(staff.value);
+    const end = (label: string) =>
+      `<form method="post" action="/admin/end">${anti}<button class="secondary" type="submit">${label}</button></form>`;
     return res.send(
       page(
         "Administration",
-        `<div class="portal-page"><div class="portal-intro"><h1>Administration</h1><p>Enter an administrator session of up to eight hours. Your learning account stays separate, and entering creates no invoice, enrollment or payment. If you already entered, use the tools below; end a session before entering again.</p></div><section class="portal-card" aria-labelledby="admin-session"><h2 id="admin-session">Administrator session</h2><div class="portal-actions"><form method="post" action="/admin/enter"><input type="hidden" name="csrf" value="${csrf(token, options.secret)}"><button type="submit">Enter administration</button></form><form method="post" action="/admin/end"><input type="hidden" name="csrf" value="${csrf(token, options.secret)}"><button class="secondary" type="submit">End administration for this sign-in</button></form></div></section><section class="portal-card" aria-labelledby="admin-tools"><h2 id="admin-tools">Administration tools</h2>${portalActions(
-          [
-            ["/operator", "Administration console"],
-            ["/operator/invoices", "Courses and invoices"],
-            ["/operator/coaching", "Coaching administration"],
-            ...(options.roleAdmin
-              ? ([
-                  ["/operator/roles", "Roles"],
-                  ["/operator/changes", "Change history"],
-                ] as [string, string][])
-              : []),
-            ["/staff", "Staff tools"],
-          ],
-        )}</section><section class="portal-card" aria-labelledby="admin-learning"><h2 id="admin-learning">Your learning account</h2>${portalActions([["/account", "My learning account"]])}</section></div>`,
+        `<div class="portal-page admin-entry">${entered ? adminMenu(undefined, available) : ""}<h1>Administration</h1><p>${entered ? "You are in an administrator session. It lasts up to eight hours and ends when you choose End administration." : "An administrator session lasts up to eight hours and stays separate from your learning account."}</p><div class="portal-actions">${
+          entered
+            ? `<a href="/operator" class="button">Go to Students</a>${end("End administration")}`
+            : `<form method="post" action="/admin/enter">${anti}<button type="submit">Enter administration</button></form>${end("End an earlier session")}`
+        }</div></div>`,
       ),
     );
   });
