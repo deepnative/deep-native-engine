@@ -273,7 +273,7 @@ it("PERIOD832-03 a period is invoiced only after it has ended, once, and the inv
     admin,
   );
   expect(early.text).toContain(
-    `This period ends on ${dayLabel(day(7))}. Its invoice can be issued from ${dayLabel(day(8))} (UTC date)`,
+    `This period ends on ${dayLabel(day(7))}. Its invoice can be issued from ${dayLabel(day(8))};`,
   );
   expect(early.text).not.toContain("Issue coaching invoice");
   const refused = await post(`/operator/coaching/${m.id}/issue`, admin, {
@@ -305,6 +305,13 @@ it("PERIOD832-03 a period is invoiced only after it has ended, once, and the inv
   // The ended period: issued once, at 10 hours × CAD 120.00.
   const issued = ready(await issue(m.id, m.ended));
   const invoice = ready(await invoices.invoice(admin, issued.invoiceId, true));
+  // #844 LINK-01: the administrator's invoice links back to that student's period.
+  expect(invoice.ownerId).toBe(m.id);
+  expect(
+    (await get(`/operator/invoices/${issued.invoiceId}`, admin)).text,
+  ).toContain(
+    `<a href="/operator/coaching/${m.id}?month=${m.ended}">return its coaching month for correction</a>`,
+  );
   expect(invoice.document.lines).toEqual([
     {
       description: `Coaching · ${day(-20)} to ${day(-7)}`,
@@ -552,7 +559,7 @@ it("PERIOD832-08 the dashboard counts a period in the month it ends and shows th
   ]);
   const page = await get(`/operator/coaching?month=${ends}`, admin);
   expect(page.status).toBe(200);
-  expect(page.text).toContain("Pending periods");
+  expect(page.text).toContain("Awaiting review</h2>");
   expect(issued.invoiceId).toBeTruthy();
 });
 

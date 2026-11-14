@@ -122,15 +122,13 @@ test("[F-ECO-07-A] optional coaching shows only the administrator's actual terms
 
       // Monthly coaching has no price until the administrator records one.
       await member.goto(f.origin + "/account/coaching");
-      await expect(member.locator("body")).toContainText(
-        "No rate is set for this month",
-      );
+      await expect(member.locator("body")).toContainText("Rate: not set yet");
       await admin.goto(`${f.origin}/operator/coaching/${reference}`);
       await admin.getByLabel("Hourly rate (CAD)").fill("85.00");
       await admin.getByRole("button", { name: "Save hourly rate" }).click();
       await member.reload();
       await expect(member.locator("body")).toContainText(
-        "Applicable rate: CAD 85.00 per hour · version 1",
+        "Rate: CAD 85.00 per hour",
       );
 
       // A prepared course bundle shows exactly its own prices, never the
@@ -215,13 +213,11 @@ test("[F-ECO-07-C] cancelling a monthly bundle stops future invoices, the agreem
       // There are no cancellation or refund rules; the student is pointed to
       // the service contact (owner decision, 10 Nov 2026).
       await member.goto(f.origin + "/account/coaching");
-      const terms = member.locator('section[aria-labelledby="coaching-terms"]');
-      await expect(
-        terms.getByRole("heading", { name: "Your coaching terms" }),
-      ).toBeVisible();
-      await expect(terms).toContainText(
-        "There are no cancellation or refund rules.",
-      );
+      // #844 STUDENT-01: the line is on the page once, with or without terms.
+      const terms = member.locator("main p", {
+        hasText: "There are no cancellation or refund rules.",
+      });
+      await expect(terms).toHaveCount(1);
       await expect(
         terms.getByRole("link", { name: "info@deepnative.io" }),
       ).toHaveAttribute("href", "mailto:info@deepnative.io");

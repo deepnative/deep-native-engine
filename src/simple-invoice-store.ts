@@ -66,6 +66,8 @@ type BillingChangeAction =
   | "invoice_voided";
 export interface StoredInvoice {
   id: string;
+  /** #844 LINK-01: the student it was issued to; absent once they are gone. */
+  ownerId?: string | null;
   document: SimpleInvoiceDocument;
   totalCents: number;
   paidCents: number;
@@ -1835,7 +1837,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         if (!admin) await owner(tx, actor);
         const row = (
           await tx.query<StoredInvoice>(
-            `SELECT ${invoiceColumns} FROM simple_invoices WHERE id=$1 AND ($2::boolean OR owner_id=$3) FOR SHARE`,
+            `SELECT ${invoiceColumns},owner_id AS "ownerId" FROM simple_invoices WHERE id=$1 AND ($2::boolean OR owner_id=$3) FOR SHARE`,
             [id, admin, actor],
           )
         ).rows[0];

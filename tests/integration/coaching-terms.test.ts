@@ -261,9 +261,11 @@ it("TERMS316-05 only a platform administrator with a valid form can save", async
 it("TERMS316-06 the student sees their own current terms read-only, with the contact line, and nobody else's", async () => {
   const m = await member(),
     other = await member();
+  // #844 STUDENT-01: no terms, no card; the contact line is still there.
   const none = text((await get("/account/coaching", m.token)).text);
+  expect(none).not.toContain("Your coaching terms");
   expect(none).toContain(
-    "Your administrator hasn't set your coaching terms yet.",
+    "There are no cancellation or refund rules. To ask about changes, contact info@deepnative.io.",
   );
   ready(await terms.save(admin, input(m.id)));
   const page = await get("/account/coaching", m.token);
@@ -287,9 +289,9 @@ it("TERMS316-06 the student sees their own current terms read-only, with the con
   expect(page.text).not.toContain('name="price"');
   expect(ready(await terms.own(m.token))).toMatchObject({ version: 1 });
   expect(ready(await terms.own(other.token))).toBeNull();
-  expect(text((await get("/account/coaching", other.token)).text)).toContain(
-    "Your administrator hasn't set your coaching terms yet.",
-  );
+  expect(
+    text((await get("/account/coaching", other.token)).text),
+  ).not.toContain("Your coaching terms");
 });
 
 it("TERMS316-07 the student's download has every version without the administrator, and deleting the account removes them", async () => {

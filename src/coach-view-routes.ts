@@ -1,10 +1,9 @@
 import type { Express, Request, Response } from "express";
 import type { CoachView } from "./coach-view.ts";
 import { hours } from "./coaching-dashboard-views.ts";
-import { monthLabel, periodLabel } from "./coaching-values.ts";
+import { monthLabel, monthNav, periodLabel } from "./coaching-values.ts";
 import { COOKIE } from "./session.ts";
 import { uniqueCookie } from "./staff-entry-selection.ts";
-import { shiftMonth } from "./simple-invoice-store.ts";
 import { escape, page } from "./views.ts";
 
 function memberToken(req: Request) {
@@ -54,9 +53,7 @@ export function mountCoachView(app: Express, store: CoachView | undefined) {
       return refuse(res, "denied");
     const result = await store.summary(token, month);
     if (result.kind !== "ready") return refuse(res, result.kind);
-    const v = result.value,
-      previous = shiftMonth(v.month, -1),
-      next = shiftMonth(v.month, 1);
+    const v = result.value;
     const rows = v.rows
       .map(
         (r) =>
@@ -64,14 +61,14 @@ export function mountCoachView(app: Express, store: CoachView | undefined) {
       )
       .join("");
     const table = rows
-      ? `<div class="table-scroll" tabindex="0" role="region" aria-label="Coaching hours"><table class="member-table coach-hours"><thead><tr><th scope="col">Name</th><th scope="col">Hours</th><th scope="col">Status</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ? `<div class="table-scroll" tabindex="0" role="region" aria-label="Coaching hours"><table class="member-table coach-hours"><caption class="visually-hidden">Coaching hours for ${monthLabel(v.month)}</caption><thead><tr><th scope="col">Name</th><th scope="col">Hours</th><th scope="col">Status</th></tr></thead><tbody>${rows}</tbody></table></div>`
       : v.assigned
         ? '<p role="status">No coaching hours saved for this month.</p>'
-        : '<p role="status">No learners are assigned to you yet. Ask an administrator to assign learners to you in the Administration console.</p>';
+        : '<p role="status">No students are assigned to you yet. Ask an administrator to assign students to you in the Administration console.</p>';
     res.send(
       page(
         "Coaching",
-        `<section class="portal-workspace"><h1>Coaching</h1><p>Coaching hours people have saved for ${monthLabel(v.month)}. A billing period shorter or longer than a calendar month is listed in the month it ends. Rates, amounts and invoices stay in Administration.</p><form class="portal-search" method="get" action="/coach"><label for="coach-month">Month</label><div><input id="coach-month" name="month" type="month" value="${v.month}" max="${v.today}"><button type="submit">Show month</button></div></form><p class="portal-actions"><a href="/coach?month=${previous}">Previous month</a>${next <= v.today ? ` <a href="/coach?month=${next}">Next month</a>` : ""}</p><section class="portal-card"><h2>${monthLabel(v.month)}</h2>${table}</section></section>`,
+        `<section class="portal-workspace"><h1>Coaching</h1><p>Coaching hours your students have saved. A billing period shorter or longer than a calendar month is listed in the month it ends.</p>${monthNav("/coach", v.month, v.today)}<section class="portal-card"><h2>${monthLabel(v.month)}</h2>${table}</section></section>`,
       ),
     );
   });

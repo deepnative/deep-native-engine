@@ -23,6 +23,7 @@ import {
   parseCoachingDuration,
   addDays,
   dayLabel,
+  monthNav,
   periodLabel,
   scheduleLabel,
   type BillingSchedule,
@@ -32,6 +33,7 @@ import {
   adminTermsInvoiceSection,
   adminTermsSection,
   memberTermsSection,
+  NO_CANCELLATION,
   parseCoachingTerms,
   renewalsSection,
   TERMS_FIELDS,
@@ -56,17 +58,6 @@ const memberPath = "/account/coaching",
   adminPath = "/operator/coaching";
 const hidden = (name: string, value: string | number) =>
   `<input type="hidden" name="${name}" value="${escape(String(value))}">`;
-// #842 MONTHNAV-01: previous and next month links instead of a month box.
-function shiftMonth(month: string, by: number) {
-  const d = new Date(`${month}-01T00:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() + by);
-  return d.toISOString().slice(0, 7);
-}
-function monthNav(base: string, month: string, today: string) {
-  const prev = shiftMonth(month, -1),
-    next = shiftMonth(month, 1);
-  return `<nav class="month-nav" aria-label="Months"><a href="${base}?month=${prev}">‹ ${periodLabel({ key: prev })}</a>${next <= today ? `<a href="${base}?month=${next}">${periodLabel({ key: next })} ›</a>` : ""}</nav>`;
-}
 const money = (cents: number) => `CAD ${(cents / 100).toFixed(2)}`;
 function failure(
   res: Response,
@@ -88,7 +79,7 @@ function failure(
     .send(
       page(
         "Coaching request not confirmed",
-        `<h1>Coaching request not confirmed</h1><p role="alert">${kind === "unavailable" ? "The outcome is uncertain. Inspect the original operation before another action." : kind === "conflict" ? "This form is out of date or the current state does not allow this action. Reopen the period and review its rate, revision and invoice status." : (detail ?? (admin && kind === "denied" ? 'Your administrator session has ended or was not entered. Open <a href="/admin">Administration</a>, end the earlier session if it asks you to, then enter administration and try again.' : "The request was not accepted. Check the period, whole hours and minutes, recipient and explicit amounts using the current form."))}</p>${key ? `<p><a href="${admin ? "/operator/invoices" : "/account/purchases"}/operations/${escape(key)}">Inspect original operation</a></p>` : ""}<p><a href="${admin ? adminPath : memberPath}">Return to coaching hours</a></p>`,
+        `<h1>Coaching request not confirmed</h1><p role="alert">${kind === "unavailable" ? "The outcome is uncertain. Inspect the original operation before another action." : kind === "conflict" ? "This form is out of date or the current state does not allow this action. Reopen the period and review its rate and invoice status." : (detail ?? (admin && kind === "denied" ? 'Your administrator session has ended or was not entered. Open <a href="/admin">Administration</a>, end the earlier session if it asks you to, then enter administration and try again.' : "The request was not accepted. Check the period, whole hours and minutes, recipient and explicit amounts using the current form."))}</p>${key ? `<p><a href="${admin ? "/operator/invoices" : "/account/purchases"}/operations/${escape(key)}">Inspect original operation</a></p>` : ""}<p><a href="${admin ? adminPath : memberPath}">Return to coaching hours</a></p>`,
       ),
     );
 }
@@ -98,13 +89,15 @@ function studentGonePage() {
     "Student account not found",
     `<section class="invoice-workspace portal-workspace"><h1>Student account not found</h1><p role="alert">No student account has this reference now. If the student deleted their account, their coaching terms, hours and allowances were removed with it.</p><p>Invoices already issued to a deleted account are kept for the tax record and stay listed under Courses and invoices, without a link to the account.</p>${portalActions(
       [
-        [adminPath, "Choose another member"],
+        [adminPath, "Choose another student"],
         ["/operator/invoices", "Courses and invoices"],
       ],
     )}</section>`,
   );
 }
 /** HOURTABLE-01/02: saved periods with hours, amount, readable status and invoice. */
+// #844 TABLE-01: the explicit roles keep this a table for assistive technology
+// when a phone lays each row out as a block.
 /** A saved month's state as members and administrators read it. */
 export function coachingStatus(m: {
   state: string;
@@ -162,13 +155,8 @@ function draftPrint(
     )
     .digest("hex");
 }
-const STEPS = [
-  "Save hours",
-  "Rate set",
-  "Request invoice",
-  "Administrator review",
-  "Invoice issued",
-];
+// #844 STUDENT-01: the student's own four steps; the rate is not one of them.
+const STEPS = ["Save hours", "Request invoice", "Review", "Invoice issued"];
 /**
  * #836 NEXTSTEP-01/02: where the student's month stands and the one thing
  * to do next. It reads the same entry and rate as the forms; it decides
@@ -186,7 +174,6 @@ function studentNextStep(s: {
   amount: number | null;
   label: string;
   unit: string;
-  rateLine: string;
   periodEnd: string | null;
 }) {
   const { e, rate, amount, label } = s,
@@ -203,15 +190,15 @@ function studentNextStep(s: {
       ? `Enter your coaching hours for ${label} below, then choose Save and request invoice.`
       : `Enter your coaching hours for ${label} below and save them. Your hourly rate isn't set yet; ask your coach or administrator to set it, then request the invoice here.`;
   } else if (e.state === "submitted") {
-    [step, status] = [3, "Awaiting review"];
+    [step, status] = [2, "Awaiting review"];
     message = `Your invoice request is with your administrator for review. The invoice appears here once it is issued; nothing is charged on this site.${s.periodEnd ? ` The invoice can be issued after this ${s.unit} ends on ${dayLabel(s.periodEnd)}.` : ""}`;
   } else if (e.state === "invoiced") {
-    [step, status] = [4, "Invoice issued"];
+    [step, status] = [3, "Invoice issued"];
     message = "Your invoice has been issued.";
     if (e.invoiceId)
       action = button(
         `/account/purchases/invoices/${escape(e.invoiceId)}`,
-        "View the invoice",
+        "View invoice",
       );
   } else if (e.returnReason) {
     [step, status] = [0, "Returned for correction"];
@@ -220,11 +207,11 @@ function studentNextStep(s: {
     [step, status] = [1, "Draft, not sent yet"];
     message = `Your ${hours} are saved. Your hourly rate isn't set yet, so the invoice can't be requested. Ask your coach or administrator to set it, then come back here to request the invoice.`;
   } else if (amount === null) {
-    [step, status] = [2, "Draft, not sent yet"];
+    [step, status] = [1, "Draft, not sent yet"];
     message =
       "The saved hours at this rate exceed the invoice amount limit. Correct your hours or ask your administrator to review the rate.";
   } else {
-    [step, status] = [2, "Draft, not sent yet"];
+    [step, status] = [1, "Draft, not sent yet"];
     message = `Ready to request: ${hours} at ${money(rate.cents)} per hour is ${money(amount)} before tax.${amount === 0 ? " A zero total creates no invoice." : ""} Check your hours below and choose Save and request invoice.`;
   }
   const steps = STEPS.map((name, i) =>
@@ -234,7 +221,7 @@ function studentNextStep(s: {
         ? `<li class="done">${name}</li>`
         : `<li>${name}</li>`,
   ).join("");
-  return `<section class="portal-card next-step" aria-labelledby="next-step"><h3 id="next-step">Next step</h3><ol class="coaching-steps">${steps}</ol><p class="next-step-message">${message}</p>${action}<p class="small">Status: ${status}</p>${s.rateLine.replace("<p>", '<p class="small">')}</section>`;
+  return `<section class="portal-card next-step" aria-labelledby="next-step"><h3 id="next-step">Next step</h3><ol class="coaching-steps">${steps}</ol><p class="next-step-message">${message}</p>${action}<p class="small">Status: ${status} · Rate: ${rate ? `${money(rate.cents)} per hour` : "not set yet"}</p></section>`;
 }
 /** OVR832-07: each administrator change, with the figure it replaced. */
 function hoursChangesSection(rows: CoachingHoursOverride[], admin: boolean) {
@@ -285,15 +272,15 @@ function adminBillingSection(
         : String(length.days);
   const option = (value: string, label: string) =>
     `<option value="${value}"${value === chosen ? " selected" : ""}>${label}</option>`;
-  return `<section class="portal-card" aria-labelledby="billing-period"><h2 id="billing-period">Billing period</h2><p>${
+  return `<details class="coaching-details" id="billing-period"><summary>Billing period: ${b.schedules.length ? billingSummary(b, today) : "calendar month"}</summary><p>${
     b.schedules.length
       ? `This student’s billing period: <strong>${billingSummary(b, today)}</strong>.`
       : "No billing period is set, so this student reports hours by calendar month. Set one to have them report per period; 2 weeks is the usual choice."
   } The student reports hours for each period, and a period can be invoiced once it has ended.</p><form method="post" action="${action}">${hiddenFields}<label>Billing period length<select name="length" required>${option("14", "2 weeks")}${option("7", "1 week")}${option("month", "1 month")}${option("custom", "Custom number of days")}</select></label><label>Custom number of days (1 to 31)<input name="days" type="number" min="1" max="31" step="1" value="${custom ? length!.days : ""}"></label>${
     b.nextStart
       ? `<p>A new length applies from ${dayLabel(b.nextStart)}, the day after the current period ends. Periods already saved, submitted or invoiced are not changed.</p>`
-      : `<label>First period starts on (UTC date)<input name="startsOn" type="date" value="${length?.startsOn ?? ""}" required></label><p>Periods run back to back from this date. It must be after the last month or period this student has already saved hours for.</p>`
-  }<button>Save billing period</button></form></section>`;
+      : `<label>First period starts on<input name="startsOn" type="date" value="${length?.startsOn ?? ""}" required></label><p>Periods run back to back from this date. It must be after the last month or period this student has already saved hours for.</p>`
+  }<button>Save billing period</button></form></details>`;
 }
 /** PERIOD832-02: what the student is told about their billing period. */
 function memberBillingSection(b: Billing, today: string) {
@@ -332,9 +319,9 @@ function savedMonthsTable(
     const invoice = m.invoiceId
       ? `<a href="${invoicePath}${escape(m.invoiceId)}">View invoice</a>`
       : "—";
-    return `<tr><th scope="row"><a href="${base}?month=${m.month}">${periodLabel({ key: m.month, start: m.periodStart, end: m.periodEnd })}</a></th><td>${hours(m.minutes)}${m.overridden ? ' <span class="small">changed by an administrator</span>' : ""}</td><td>${amount}</td><td>${status}</td><td>${invoice}</td></tr>`;
+    return `<tr role="row"><th scope="row" role="rowheader"><a href="${base}?month=${m.month}">${periodLabel({ key: m.month, start: m.periodStart, end: m.periodEnd })}</a></th><td role="cell" data-label="Hours">${hours(m.minutes)}${m.overridden ? ' <span class="small">changed by an administrator</span>' : ""}</td><td role="cell" data-label="Amount">${amount}</td><td role="cell" data-label="Status">${status}</td><td role="cell" data-label="Invoice">${invoice}</td></tr>`;
   });
-  return `<div class="table-scroll" role="region" aria-labelledby="saved-months" tabindex="0"><table class="coaching-months"><thead><tr><th scope="col">Period</th><th scope="col">Hours</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Invoice</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
+  return `<div class="table-scroll" role="region" aria-labelledby="saved-months" tabindex="0"><table class="coaching-months stack-table" role="table" aria-labelledby="saved-months"><caption class="visually-hidden">Saved periods</caption><thead role="rowgroup"><tr role="row"><th scope="col" role="columnheader">Period</th><th scope="col" role="columnheader">Hours</th><th scope="col" role="columnheader">Amount</th><th scope="col" role="columnheader">Status</th><th scope="col" role="columnheader">Invoice</th></tr></thead><tbody role="rowgroup">${rows.join("")}</tbody></table></div>`;
 }
 
 export function mountCoachingRoutes(
@@ -398,17 +385,41 @@ export function mountCoachingRoutes(
       const due = await options.coachingTerms.renewalsDue(token(res));
       if (due.kind !== "ready")
         return failure(res, due.kind === "invalid" ? "denied" : due.kind, true);
-      renewals = renewalsSection(due.value, adminPath);
+      // #844 PACKAGE-01: no card until a renewal is actually due.
+      if (due.value.length) renewals = renewalsSection(due.value, adminPath);
     }
+    // #844 NAMES-01: one table of students. Anyone with no rate or hours yet
+    // is still a row, so a new student can be opened from here.
+    const listed = new Set(dashboard.value.contractors.map((c) => c.id));
+    const students = {
+      ...dashboard.value,
+      contractors: [
+        ...dashboard.value.contractors,
+        ...result.value.members
+          .filter((m) => !listed.has(m.id))
+          .map((m) => ({
+            id: m.id,
+            displayName: m.displayName ?? null,
+            rateCents: null,
+            minutes: null,
+            previousMinutes: null,
+            yearMinutes: 0,
+            status: "not_started" as const,
+            sent: null,
+            balanceCents: null,
+            periodKey: null,
+          })),
+      ],
+    };
     res.send(
       page(
         "Coaching administration",
-        `<section class="invoice-workspace portal-workspace"><h1>Coaching administration</h1><p>Choose a member to set an agreed hourly rate or billing period, or to review submitted hours. Registration and rate assignment create no invoice.</p>${portalActions(
+        `<section class="invoice-workspace portal-workspace"><h1>Coaching administration</h1><p>Choose a student to set an hourly rate or billing period, or to review submitted hours.</p>${portalActions(
           [
             ["/operator/invoices", "Courses and invoices"],
             ["/operator", "Administration console"],
           ],
-        )}${coachingDashboardSection(dashboard.value, adminPath, sort)}${renewals}<section class="portal-card"><h2>Members</h2><ul class="portal-list">${result.value.members.map((m) => `<li><a href="${adminPath}/${m.id}">${escape(m.displayName ?? "Name needed")}</a><p class="small">Account reference: <code>${escape(m.id)}</code></p></li>`).join("") || "<li>No members available.</li>"}</ul></section><section class="portal-card"><h2>Pending periods</h2><ul class="portal-list">${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${escape(m.displayName ?? "Name needed")} · ${periodLabel({ key: m.month, start: m.periodStart, end: m.periodEnd })}</a><p class="small">Account reference: <code>${escape(m.ownerId)}</code></p></li>`).join("") || "<li>No submitted hours await review.</li>"}</ul></section></section>`,
+        )}${coachingDashboardSection(students, adminPath, sort)}<section class="portal-card" aria-labelledby="awaiting-review"><h2 id="awaiting-review">Awaiting review</h2><ul class="portal-list">${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${escape(m.displayName ?? "Name needed")} · ${periodLabel({ key: m.month, start: m.periodStart, end: m.periodEnd })}</a></li>`).join("") || "<li>No submitted hours await review.</li>"}</ul></section>${renewals}</section>`,
       ),
     );
   });
@@ -479,7 +490,11 @@ export function mountCoachingRoutes(
       const picker = periodic
         ? `<form class="period-picker" method="get" action="${base}"><label>Billing period<select name="month">${choices.map((p) => `<option value="${p.key}"${p.key === v.month ? " selected" : ""}>${periodLabel(p)}${p.key === v.periods[0]!.key ? " (current)" : ""}</option>`).join("")}</select></label><button class="secondary">Open period</button></form>`
         : monthNav(base, v.month.slice(0, 7), v.today);
-      const rateLine = `<p>${v.rate ? `Applicable rate: ${money(v.rate.cents)} per hour · version ${v.rate.version} · effective ${periodLabel({ key: v.rate.effectiveMonth })}` : admin ? `No rate is set for this ${unit}. Set it under Hourly rate.` : `No rate is set for this ${unit}. Ask the administrator to enter your agreed rate before submitting; you can save a draft now.`}</p>`;
+      // #844 STUDENT-01/PLAIN-01: the rate is stated once, in Next step for
+      // the student and in the Hourly rate card for the administrator.
+      const noRate = v.rate
+        ? ""
+        : `<p>No rate is set for this ${unit}. Set it under Hourly rate.</p>`;
       // NEXTSTEP-03: a plain confirmation after the student's save or request.
       const done =
         !admin && e && req.query.done === "saved"
@@ -492,15 +507,15 @@ export function mountCoachingRoutes(
       let body = `${picker}${
         period
           ? admin
-            ? `<h2>${label}</h2><p>Status: ${e ? escape(e.state) : "No saved draft or submission"}${e ? ` · revision ${e.revision}` : ""}</p>${e?.returnReason ? `<p role="status">Returned for correction: ${escape(e.returnReason)}</p>` : ""}${rateLine}`
-            : `<h2>${label}</h2>${studentNextStep({ e, rate: v.rate, amount, label, unit, rateLine, periodEnd: defined && period.end >= v.date ? period.end : null })}`
+            ? `<h2>${label}</h2><p>Status: ${e ? coachingStatus({ state: e.state, returned: Boolean(e.returnReason) }) : "No hours saved"}</p>${e?.returnReason ? `<p role="status">Returned for correction: ${escape(e.returnReason)}</p>` : ""}${noRate}`
+            : `<h2>${label}</h2>${studentNextStep({ e, rate: v.rate, amount, label, unit, periodEnd: defined && period.end >= v.date ? period.end : null })}`
           : `<h2>No billing period has started</h2><p role="status">${admin ? "This student’s" : "Your"} first billing period starts on ${dayLabel(v.billing.schedules[0]!.startsOn)}. Hours can be reported from that day.</p>`
       }`;
       if (admin) body += hoursChangesSection(v.overrides, admin);
-      if (e && (admin || e.state !== "draft"))
-        body += `<p>Saved duration: ${coachingDuration(e.minutes)}</p><p>Invoice recipient: ${escape(e.name)}${e.company ? ` · ${escape(e.company)}` : ""}${e.email ? ` · ${escape(e.email)}` : ""}</p>`;
-      if (snapshot)
-        body += `<h2>Submitted snapshot</h2><p>${periodLabel({ key: snapshot.month, start: snapshot.periodStart, end: snapshot.periodEnd })} · ${coachingDuration(snapshot.minutes)} · ${money(snapshot.rate.cents)} per hour · rate version ${snapshot.rate.version} · subtotal ${money(snapshot.subtotalCents)}</p><p>Recipient: ${escape(snapshot.name)}${snapshot.company ? ` · ${escape(snapshot.company)}` : ""}${snapshot.email ? ` · ${escape(snapshot.email)}` : ""} · ${snapshot.sample ? "Sample, not payable" : "Configured offline invoice"}</p><p>${admin ? `Submitted revision ${e!.submittedRevision}. This snapshot stays retained after correction.` : "This record of what you submitted is kept, even if the hours are corrected later."}</p>`;
+      // #844 PLAIN-01: what was saved and what was submitted, one line each,
+      // for the administrator only. The student reads theirs in Next step.
+      if (admin && e)
+        body += `${snapshot && e.state !== "draft" ? "" : `<p>Saved hours: ${hours(e.minutes)}</p>`}${snapshot ? `<p>Submitted: ${hours(snapshot.minutes)} at ${money(snapshot.rate.cents)} per hour = ${money(snapshot.subtotalCents)}</p>` : ""}<p>Invoice to: ${escape(e.name)}${e.company ? ` · ${escape(e.company)}` : ""}${e.email ? ` · ${escape(e.email)}` : ""}</p>`;
       if (!admin && period && (!e || e.state === "draft")) {
         // #838 ONEPAGE-01..03: hours, recipient and the invoice request are
         // one form. Save draft comes first, so Enter never requests.
@@ -524,32 +539,32 @@ export function mountCoachingRoutes(
           rate = v.rate,
           fields = `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", e?.revision ?? 0)}${hidden("month", v.month)}${e ? hidden("saved", draftPrint(e.minutes, e.name, e.email, e.company ?? "")) : ""}`,
           request = rate
-            ? `<h3>Request the invoice</h3><p>Rate: ${money(rate.cents)} per hour, set by your administrator. The subtotal is your hours × this rate, before ${hst ? `${escape(hst.label)}. ${escape(hst.label)} at ${taxRate(hst)} is added when the invoice is issued` : "separately supplied tax"}.</p>${e && amount === 0 ? "<p>A zero-total submission creates no invoice.</p>" : ""}${e && amount === null ? '<p role="alert">The saved duration at this rate exceeds the invoice amount limit. Correct the draft or ask the administrator to review the rate.</p>' : ""}<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm these hours, recipient and the rate ${money(rate.cents)} per hour (version ${rate.version}) for ${label}. ${v.sample ? "This is a sample, not payable." : "I submit for configured offline invoicing; issued financial records may be retained after account deletion."}</span></label>${hidden("rateId", rate.id)}${hidden("sample", String(v.sample))}<div class="form-actions"><button class="secondary" name="action" value="save" formnovalidate>Save draft</button><button name="action" value="request" formaction="${base}/request">Save and request invoice</button></div>`
+            ? `<h3>Request the invoice</h3><p>The subtotal is your hours × your hourly rate, before ${hst ? `${escape(hst.label)}. ${escape(hst.label)} at ${taxRate(hst)} is added when the invoice is issued` : "tax"}.</p>${e && amount === 0 ? "<p>A zero-total submission creates no invoice.</p>" : ""}${e && amount === null ? '<p role="alert">The saved duration at this rate exceeds the invoice amount limit. Correct the draft or ask the administrator to review the rate.</p>' : ""}<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm these hours, recipient and the rate ${money(rate.cents)} per hour for ${label}. ${v.sample ? "This is a sample, not payable." : "I submit for configured offline invoicing; issued financial records may be retained after account deletion."}</span></label>${hidden("rateId", rate.id)}${hidden("sample", String(v.sample))}<div class="form-actions"><button class="secondary" name="action" value="save" formnovalidate>Save draft</button><button name="action" value="request" formaction="${base}/request">Save and request invoice</button></div>`
             : `<h3>Request the invoice</h3><p class="rate-missing">Your hourly rate for ${label} isn't set yet, so the invoice can't be requested. Ask your coach or administrator to set it. You can save your hours now and request the invoice here once it's set.</p><div class="form-actions"><button name="action" value="save">Save draft</button><button type="button" disabled>Save and request invoice</button></div>`;
-        body += `<h2>Your hours</h2><form id="hours-form" method="post" action="${base}/save">${fields}<label>Whole hours<input name="hours" type="number" min="0" max="${defined ? period.days * 24 : 744}" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label>${hidden("name", to.name)}${hidden("email", to.email)}${hidden("company", to.company)}<p class="invoice-to">Invoice to: <strong>${escape(to.name)}</strong>${to.company ? ` · ${escape(to.company)}` : ""}${to.email ? ` · ${escape(to.email)}` : ""}. <a href="/account/billing">Change</a>${to.email ? "" : '<br><span class="small">The invoice will be under Courses and invoices.</span>'}</p>${request}</form>`;
+        body += `<h2>Your hours</h2><form id="hours-form" method="post" action="${base}/save">${fields}<div class="duration-fields"><label>Hours<input name="hours" type="number" min="0" max="${defined ? period.days * 24 : 744}" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label></div>${hidden("name", to.name)}${hidden("email", to.email)}${hidden("company", to.company)}<p class="invoice-to">Invoice to: <strong>${escape(to.name)}</strong>${to.company ? ` · ${escape(to.company)}` : ""}${to.email ? ` · ${escape(to.email)}` : ""}. <a href="/account/billing">Change</a>${to.email ? "" : '<br><span class="small">The invoice will be under Courses and invoices.</span>'}</p>${request}</form>`;
       }
       if (e?.invoiceId)
-        body += `<p><a href="${admin ? "/operator/invoices/" : "/account/purchases/invoices/"}${e.invoiceId}">View issued invoice</a></p><p>To correct an issued ${unit}, the administrator must first void its unpaid invoice. Paid or partially paid invoices cannot be corrected here; contact the administrator for financial review.</p>`;
+        body += `${admin ? `<p><a href="/operator/invoices/${e.invoiceId}">View issued invoice</a></p>` : ""}<p>To correct an issued ${unit}, the administrator must first void its unpaid invoice. Paid or partially paid invoices cannot be corrected here; contact the administrator for financial review.</p>`;
       if (e?.previousInvoiceId)
         body += `<p><a href="${admin ? "/operator/invoices/" : "/account/purchases/invoices/"}${e.previousInvoiceId}">View preserved original invoice</a></p>`;
       if (admin && e && e.state !== "draft") {
         // PERIOD832-03: a defined period is invoiced only after its last day.
         if (e.state === "submitted" && defined && period!.end >= v.date)
-          body += `<p role="status">This period ends on ${dayLabel(period!.end)}. Its invoice can be issued from ${dayLabel(addDays(period!.end, 1))} (UTC date); until then you can change the hours or return them for correction.</p>`;
+          body += `<p role="status">This period ends on ${dayLabel(period!.end)}. Its invoice can be issued from ${dayLabel(addDays(period!.end, 1))}; until then you can change the hours or return them for correction.</p>`;
         else if (
           e.state === "submitted" &&
           snapshot &&
           snapshot.subtotalCents > 0 &&
           snapshot.sample === v.sample
         )
-          body += `<h2>Issue the reviewed invoice</h2><form method="post" action="${base}/issue">${form("issue", e.revision)}${hst ? `<p>${escape(hst.label)} at ${taxRate(hst)} (${money(salesTaxCents(snapshot.subtotalCents, hst))}) is added to the subtotal.</p>` : `<label>${v.sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${v.sample ? 'value="0.00"' : ""} required></label>`}<label class="check"><input type="checkbox" name="confirm" value="issue" required><span>I reviewed this exact submitted revision and the ${hst ? `computed ${escape(hst.label)}` : "separately supplied tax"}.</span></label><button>Issue coaching invoice</button></form>`;
+          body += `<h2>Issue the reviewed invoice</h2><form method="post" action="${base}/issue">${form("issue", e.revision)}${hst ? `<p>${escape(hst.label)} at ${taxRate(hst)} (${money(salesTaxCents(snapshot.subtotalCents, hst))}) is added to the subtotal.</p>` : `<label>${v.sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${v.sample ? 'value="0.00"' : ""} required></label>`}<label class="check"><input type="checkbox" name="confirm" value="issue" required><span>I reviewed these submitted hours and the ${hst ? `computed ${escape(hst.label)}` : "separately supplied tax"}.</span></label><button>Issue coaching invoice</button></form>`;
         else if (e.state === "submitted")
-          body += `<p role="status">${snapshot?.sample !== v.sample ? "The submitted billing mode differs from current configuration. Return it and ask the member to explicitly confirm the current mode." : "This zero-total submission is retained. No invoice can be issued."}</p>`;
-        body += `<h2>Return for correction</h2><p>An issued ${unit} can only be returned after its invoice is void and unpaid, with no delivery in progress or unconfirmed. Other financial corrections require administrator review outside this action.</p><form method="post" action="${base}/return">${form("return", e.revision)}<label>Correction reason<input name="reason" maxlength="500" required></label><button class="secondary">Return ${unit} for correction</button></form>`;
+          body += `<p role="status">${snapshot?.sample !== v.sample ? "The submitted billing mode differs from current configuration. Return it and ask the student to confirm the current mode." : "This zero-total submission is retained. No invoice can be issued."}</p>`;
+        body += `<details class="coaching-details"><summary>Return for correction</summary><p>An issued ${unit} can only be returned after its invoice is void and unpaid, with no delivery in progress or unconfirmed. Other financial corrections require administrator review outside this action.</p><form method="post" action="${base}/return">${form("return", e.revision)}<label>Correction reason<input name="reason" maxlength="500" required></label><button class="secondary">Return ${unit} for correction</button></form></details>`;
       }
       // #832 OVR832-01..03/06: change hours the student saved or submitted.
       if (admin && e && e.state !== "invoiced")
-        body += `<h2>Change this student’s hours</h2><p>Correct hours the student has saved or submitted. The student sees the earlier figure, the new figure and your reason on their coaching page and in Download my records. ${e.state === "submitted" ? `The ${unit} stays awaiting review at the rate the student confirmed, and its subtotal is recalculated.` : "The draft stays the student’s to submit."}</p><form method="post" action="${base}/override">${form("override", e.revision)}<label>Whole hours<input name="hours" type="number" min="0" max="${defined ? period!.days * 24 : 744}" step="1" value="${Math.floor(e.minutes / 60)}" required></label><label>Additional minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${e.minutes % 60}" required></label><label>Reason for the change<input name="reason" maxlength="500" required></label><button>Change hours</button></form>`;
+        body += `<details class="coaching-details"><summary>Change this student’s hours</summary><p>Correct hours the student has saved or submitted. The student sees the earlier figure, the new figure and your reason on their coaching page and in Download my records. ${e.state === "submitted" ? `The ${unit} stays awaiting review at the rate the student confirmed, and its subtotal is recalculated.` : "The draft stays the student’s to submit."}</p><form method="post" action="${base}/override">${form("override", e.revision)}<div class="duration-fields"><label>Hours<input name="hours" type="number" min="0" max="${defined ? period!.days * 24 : 744}" step="1" value="${Math.floor(e.minutes / 60)}" required></label><label>Minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${e.minutes % 60}" required></label></div><label>Reason for the change<input name="reason" maxlength="500" required></label><button>Change hours</button></form></details>`;
       else if (admin && !e && period)
         body += `<p>The student has not saved hours for this ${unit}. An administrator cannot enter new hours for a student; once the student saves hours, you can change them here.</p>`;
       if (!admin) body += hoursChangesSection(v.overrides, admin);
@@ -570,34 +585,53 @@ export function mountCoachingRoutes(
       // #840 SIMPLE-02: packages and agreed changes are optional and live on
       // their own page; the student keeps their terms card, with the contact
       // line, and the folded agreed changes beside the hours.
-      if (admin)
-        side += `<p class="coaching-more"><a href="${base}/package">Coaching package and agreed changes (optional)</a></p>`;
-      else {
+      // #844 PACKAGE-01/STUDENT-01: the package link, the terms card and the
+      // agreed changes appear only once there is something in them. The
+      // contact line is on the student's page once either way.
+      const refused = (kind: string) =>
+        failure(res, (kind === "invalid" ? "denied" : kind) as never, admin);
+      let foot = "";
+      if (admin) {
+        let has = false;
+        if (options.coachingTerms) {
+          const t = await options.coachingTerms.forStudent(
+            token(res),
+            v.ownerId,
+          );
+          if (t.kind !== "ready") return refused(t.kind);
+          has = t.value !== null;
+        }
+        if (!has && options.agreedChanges) {
+          const a = await options.agreedChanges.forStudent(
+            token(res),
+            v.ownerId,
+          );
+          if (a.kind !== "ready") return refused(a.kind);
+          has = a.value.length > 0;
+        }
+        if (has)
+          side += `<p class="coaching-more"><a href="${base}/package">Coaching package and agreed changes</a></p>`;
+      } else {
+        foot = `<p class="small coaching-contact">${NO_CANCELLATION}</p>`;
         if (options.coachingTerms) {
           const t = await options.coachingTerms.own(token(res));
-          if (t.kind !== "ready")
-            return failure(
-              res,
-              t.kind === "invalid" ? "denied" : t.kind,
-              admin,
-            );
-          side += memberTermsSection(t.value);
+          if (t.kind !== "ready") return refused(t.kind);
+          if (t.value) {
+            side += memberTermsSection(t.value);
+            foot = "";
+          }
         }
         if (options.agreedChanges) {
           const a = await options.agreedChanges.own(token(res));
-          if (a.kind !== "ready")
-            return failure(
-              res,
-              a.kind === "invalid" ? "denied" : a.kind,
-              admin,
-            );
-          side += `<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>${memberAgreedSection(a.value)}</details>`;
+          if (a.kind !== "ready") return refused(a.kind);
+          if (a.value.length)
+            side += `<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>${memberAgreedSection(a.value)}</details>`;
         }
       }
-      body = `<section class="invoice-workspace coaching-page${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review coaching hours" : "Coaching hours"}</h1>${done ? `<p class="notice" role="status">${done}</p>` : ""}${admin || v.sample ? `<p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p>` : ""}<p>${admin ? `Member: <strong>${escape(v.displayName ?? "Name needed")}</strong> · account reference <code>${escape(v.ownerId)}</code>` : `Choose the ${periodic ? "billing period" : "month"} you want to invoice, enter your coaching hours and minutes, then request the invoice. Your administrator reviews it before it is issued; nothing is charged on this site. Coaching is optional; your learning access does not depend on a rate or invoice.`}</p><div class="coaching-layout"><div class="coaching-main">${body}</div>${side ? `<aside class="coaching-side">${side}</aside>` : ""}</div>${
+      body = `<section class="invoice-workspace coaching-page${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review coaching hours" : "Coaching hours"}</h1>${done ? `<p class="notice" role="status">${done}</p>` : ""}${admin || v.sample ? `<p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p>` : ""}<p>${admin ? `Student: <strong>${escape(v.displayName ?? "Name needed")}</strong>` : `Enter your hours for the ${periodic ? "billing period" : "month"}, then request the invoice; your administrator reviews it before it is issued and nothing is charged on this site.`}</p><div class="coaching-layout"><div class="coaching-main">${body}</div>${side ? `<aside class="coaching-side">${side}</aside>` : ""}</div>${foot}${
         admin
           ? portalActions([
-              [adminPath, "Choose another member"],
+              [adminPath, "Choose another student"],
               ["/operator/invoices", "Courses and invoices"],
             ])
           : '<p class="account-links"><a class="button secondary" href="/account">My account</a> <a class="button secondary" href="/account/purchases">Courses and invoices</a></p>'
@@ -648,7 +682,7 @@ export function mountCoachingRoutes(
     res.send(
       page(
         "Coaching package",
-        `<section class="invoice-workspace portal-workspace coaching-page"><h1>Coaching package</h1><p>Member: <strong>${escape(r.value.displayName ?? "Name needed")}</strong></p><p>Optional. Most students only need an hourly rate, which you set on their <a href="${base}">hours page</a>. Use this page for a prepaid coaching package with allowances, its invoice, or a change you agreed with the student.</p><div class="coaching-layout"><div class="coaching-main">${main}</div><aside class="coaching-side">${side}</aside></div><p class="account-links"><a class="button secondary" href="${base}">Back to hours and rate</a></p></section>`,
+        `<section class="invoice-workspace portal-workspace coaching-page"><h1>Coaching package</h1><p>Student: <strong>${escape(r.value.displayName ?? "Name needed")}</strong></p><p>Optional. Most students only need an hourly rate, which you set on their <a href="${base}">hours page</a>. Use this page for a prepaid coaching package with allowances, its invoice, or a change you agreed with the student.</p><div class="coaching-layout"><div class="coaching-main">${main}</div><aside class="coaching-side">${side}</aside></div><p class="account-links"><a class="button secondary" href="${base}">Back to hours and rate</a></p></section>`,
       ),
     );
   });
@@ -975,7 +1009,7 @@ export function mountCoachingRoutes(
           admin,
           req.body.operationId,
           action === "issue"
-            ? "The invoice was not issued. A billing period can be invoiced only after its last day (UTC date); also check the amount and the current form."
+            ? "The invoice was not issued. A billing period can be invoiced only after its last day; also check the amount and the current form."
             : undefined,
         );
       return res.redirect(

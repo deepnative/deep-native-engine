@@ -44,12 +44,17 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
     await a.getByLabel("Hourly rate (CAD)").fill("120.00");
     await a.getByLabel("Applies from").fill(day(-400).slice(0, 7));
     await a.getByRole("button", { name: "Save hourly rate" }).click();
-    const billing = a.getByRole("region", { name: "Billing period" });
+    // #844 ADMINFORMS-01: the billing period sits in a disclosure that names it.
+    const billing = a.locator("details#billing-period");
+    await expect(billing.locator("summary")).toHaveText(
+      "Billing period: calendar month",
+    );
+    await billing.locator("summary").click();
     await expect(billing).toContainText(
       "No billing period is set, so this student reports hours by calendar month.",
     );
     await expect(a.getByLabel("Billing period length")).toHaveValue("14");
-    await a.getByLabel("First period starts on (UTC date)").fill(day(-20));
+    await a.getByLabel("First period starts on").fill(day(-20));
     await a.getByRole("button", { name: "Save billing period" }).click();
     await expect(billing).toContainText(
       `This student’s billing period: 2 weeks, from ${dayLabel(day(-20))}.`,
@@ -57,9 +62,7 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
     await expect(billing).toContainText(
       `A new length applies from ${dayLabel(day(8))}, the day after the current period ends.`,
     );
-    await expect(a.getByLabel("First period starts on (UTC date)")).toHaveCount(
-      0,
-    );
+    await expect(a.getByLabel("First period starts on")).toHaveCount(0);
     expect(await noSidewaysScroll(a)).toBe(true);
     await a.screenshot({
       path: info.outputPath("admin-billing-period.png"),
@@ -81,8 +84,8 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
     const report = async (period: string, hours: string) => {
       await picker.selectOption({ label: period });
       await s.getByRole("button", { name: "Open period" }).click();
-      await s.getByLabel("Whole hours").fill(hours);
-      await s.getByLabel("Additional minutes").fill("0");
+      await s.getByLabel("Hours", { exact: true }).fill(hours);
+      await s.getByLabel("Minutes", { exact: true }).fill("0");
       await s.getByRole("button", { name: "Save draft" }).click();
       await s.getByRole("checkbox", { name: /I confirm these hours/ }).check();
       await s.getByRole("button", { name: "Save and request invoice" }).click();
@@ -107,7 +110,7 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
     await a.goto(f.origin + "/operator/coaching");
     const pending = a
       .locator("section.portal-card")
-      .filter({ has: a.getByRole("heading", { name: "Pending periods" }) });
+      .filter({ has: a.getByRole("heading", { name: "Awaiting review" }) });
     await expect(pending.getByRole("link")).toHaveText([
       `Sample learner · ${ended}`,
       `Sample learner · ${running}`,
@@ -117,7 +120,7 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
       .click();
     await expect(
       a.getByText(
-        `This period ends on ${dayLabel(day(7))}. Its invoice can be issued from ${dayLabel(day(8))} (UTC date)`,
+        `This period ends on ${dayLabel(day(7))}. Its invoice can be issued from ${dayLabel(day(8))};`,
         { exact: false },
       ),
     ).toBeVisible();
@@ -132,7 +135,7 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
       .click();
     await a
       .getByRole("checkbox", {
-        name: /I reviewed this exact submitted revision/,
+        name: /I reviewed these submitted hours/,
       })
       .check();
     await a.getByRole("button", { name: "Issue coaching invoice" }).click();
@@ -151,6 +154,7 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
     // 6. The administrator chooses one week. It starts when the running
     //    period ends, and nothing the student saved changes.
     await a.goto(`${f.origin}/operator/coaching/${id}`);
+    await billing.locator("summary").click();
     await a.getByLabel("Billing period length").selectOption("7");
     await a.getByRole("button", { name: "Save billing period" }).click();
     await expect(billing).toContainText(

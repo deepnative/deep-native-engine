@@ -161,9 +161,16 @@ it("ROLES-03 Coaching lists each person's hours and status with no billing", asy
     "A billing period shorter or longer than a calendar month is listed in the month it ends.",
   );
   expect(r.text).not.toMatch(/\$|CAD|cents|per hour/i);
-  expect(r.text).toContain('href="/coach?month=2026-09"');
-  expect(r.text).toContain('href="/coach?month=2026-11"');
-  expect(r.text).toContain('max="2026-11"');
+  // #844 MONTHNAV-02: the same previous and next links as the student page.
+  expect(r.text).toContain(
+    '<nav class="month-nav" aria-label="Months"><a href="/coach?month=2026-09">‹ September 2026</a><a href="/coach?month=2026-11">November 2026 ›</a></nav>',
+  );
+  expect(r.text).not.toContain('type="month"');
+  expect(r.text).not.toContain("Show month");
+  // #844 TABLE-01: the table is named.
+  expect(r.text).toContain(
+    '<caption class="visually-hidden">Coaching hours for October 2026</caption>',
+  );
 });
 
 it("ROLES-03 the current month has no next link and an empty month says so", async () => {
@@ -174,18 +181,18 @@ it("ROLES-03 the current month has no next link and an empty month says so", asy
   const r = await (await f.http()).get("/coach").set("Cookie", member);
   expect(f.summary).toHaveBeenCalledWith(token, undefined);
   expect(r.text).toContain("No coaching hours saved for this month.");
-  expect(r.text).not.toContain("No learners are assigned to you");
+  expect(r.text).not.toContain("No students are assigned to you");
   expect(r.text).not.toContain('href="/coach?month=2026-12"');
 });
 
-it("ROLE-LABEL-03 a coach with no assigned learners is told so and who to ask", async () => {
+it("ROLE-LABEL-03 #844 NAMES-01 a coach with no assigned students is told so and who to ask", async () => {
   const f = fixture({
     kind: "ready",
     value: { month: "2026-11", today: "2026-11", assigned: 0, rows: [] },
   });
   const r = await (await f.http()).get("/coach").set("Cookie", member);
   expect(r.text).toContain(
-    "No learners are assigned to you yet. Ask an administrator to assign learners to you in the Administration console.",
+    "No students are assigned to you yet. Ask an administrator to assign students to you in the Administration console.",
   );
   expect(r.text).not.toContain("No coaching hours saved for this month.");
 });

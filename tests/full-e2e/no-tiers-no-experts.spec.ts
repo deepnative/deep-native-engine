@@ -133,10 +133,8 @@ test("[F-BUILD-09-C] no tier can be bought, and capacity and scope are stated as
     await requiredCheck(2, async () => {
       // No administrator has agreed a scope: the student's pages say so.
       await member.goto(f.origin + "/account/coaching");
-      await expect(termsSection(member)).toContainText(
-        "Your administrator hasn't set your coaching terms yet.",
-      );
-      await expect(termsSection(member).locator("form")).toHaveCount(0);
+      // #844 STUDENT-01: with no terms there is no terms card at all.
+      await expect(termsSection(member)).toHaveCount(0);
       await member.goto(f.origin + "/account/purchases");
       await expect(offeredPlan(member)).toHaveCount(0);
       await noWayToBuy(member);
@@ -166,9 +164,7 @@ test("[F-BUILD-09-C] no tier can be bought, and capacity and scope are stated as
       expect(own.status()).toBe(403);
       await nothingSold(f, reference);
       await member.goto(f.origin + "/account/coaching");
-      await expect(termsSection(member)).toContainText(
-        "Your administrator hasn't set your coaching terms yet.",
-      );
+      await expect(termsSection(member)).toHaveCount(0);
     });
   } finally {
     await f.close();

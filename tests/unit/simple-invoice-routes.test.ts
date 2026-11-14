@@ -569,11 +569,13 @@ it("NOEMAIL-03 an invoice with no email address offers no send form and says whe
   expect(f.sender.send).not.toHaveBeenCalled();
   expect(f.service.finishEmail).not.toHaveBeenCalled();
 });
-it("HOUR08 coaching invoice controls direct an unpaid correction back to the retained month", async () => {
+it("HOUR08 #844 LINK-01 coaching invoice controls link an unpaid correction to that student's month", async () => {
   const f = fixture();
-  f.service.invoice.mockResolvedValueOnce(
+  const owner = "99999999-9999-4999-8999-999999999999";
+  const coachingInvoice = (ownerId: string | null) =>
     ready({
       ...invoice,
+      ownerId,
       document: {
         ...doc,
         coaching: {
@@ -586,10 +588,17 @@ it("HOUR08 coaching invoice controls direct an unpaid correction back to the ret
           replacesInvoiceId: null,
         },
       },
-    }),
-  );
+    });
+  f.service.invoice.mockResolvedValueOnce(coachingInvoice(owner));
   const response = await f.get(`/operator/invoices/${id}`);
-  expect(response.text).toContain("return its coaching month for correction");
+  expect(response.text).toContain(
+    `<a href="/operator/coaching/${owner}?month=2026-10">return its coaching month for correction</a>`,
+  );
+  // An invoice whose student account is gone keeps the general link.
+  f.service.invoice.mockResolvedValueOnce(coachingInvoice(null));
+  expect((await f.get(`/operator/invoices/${id}`)).text).toContain(
+    '<a href="/operator/coaching">return its coaching month for correction</a>',
+  );
   expect(response.text).toContain(
     "Paid or partially paid corrections are unavailable",
   );

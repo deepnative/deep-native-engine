@@ -92,7 +92,7 @@ it("OFFPUR-06 keeps the original invoice visible after an unpaid void and requir
   expect(html).toContain("<dt>Total</dt><dd>CAD 100.01</dd>");
 });
 
-it("HOUR04/08 prints explicit coaching quantity, rate version and preserved replacement reference", () => {
+it("HOUR04/08 #844 PLAIN-01 prints the coaching quantity and rate, no version or revision number, and the preserved replacement reference", () => {
   for (const replacesInvoiceId of [null, "invented-original"]) {
     const html = simpleInvoiceDocument({
       ...invoice,
@@ -107,7 +107,10 @@ it("HOUR04/08 prints explicit coaching quantity, rate version and preserved repl
       },
     });
     expect(html).toContain("1 hour 30 minutes");
-    expect(html).toContain("CAD 120.00 per hour · rate version 2");
+    expect(html).toContain(
+      "<p>Month: October 2026 · 1 hour 30 minutes · CAD 120.00 per hour</p>",
+    );
+    expect(html).not.toMatch(/rate version|revision/i);
     expect(html).toContain("Coaching charges");
     expect(html.includes("Replaces void invoice")).toBe(
       replacesInvoiceId !== null,
@@ -145,7 +148,7 @@ it("PERIOD832-03 a coaching invoice for a defined billing period names its dates
   ).toContain("<h2>Monthly coaching</h2><p>Month: October 2026 · ");
 });
 
-it("TERMSINV318-01 an invoice issued from coaching terms names the version and period", () => {
+it("TERMSINV318-01 #844 PLAIN-01 an invoice issued from coaching terms names the period, not a version number", () => {
   const html = simpleInvoiceDocument({
     ...invoice,
     coachingTerms: {
@@ -155,9 +158,8 @@ it("TERMSINV318-01 an invoice issued from coaching terms names the version and p
     },
   });
   expect(html).toContain("<h2>Coaching terms</h2>");
-  expect(html).toContain(
-    "Terms version 3 · coaching period 2026-12-01 to 2027-05-31",
-  );
+  expect(html).toContain("<p>Coaching period 2026-12-01 to 2027-05-31</p>");
+  expect(html).not.toMatch(/version/i);
   expect(html).toContain("Coaching charges");
   expect(simpleInvoiceDocument(invoice)).not.toContain("Coaching terms");
 });

@@ -149,7 +149,7 @@ test("[F-ROADMAP-07-D] after training a goal change updates next actions, only a
       // The coaching rate is still the administrator's original version.
       await member.goto(f.origin + "/account/coaching");
       await expect(member.locator("body")).toContainText(
-        "Applicable rate: CAD 85.00 per hour · version 1",
+        "Rate: CAD 85.00 per hour",
       );
       expect(
         (
