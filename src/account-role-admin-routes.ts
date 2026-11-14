@@ -6,6 +6,7 @@ import {
   type LearnerCoachResult,
 } from "./account-role-admin.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
+import { adminMenuFor } from "./administration-presentation.ts";
 import { csrf, validCsrf } from "./session.ts";
 import { changeHistoryBody } from "./staff-change-history.ts";
 import { escape, page } from "./views.ts";
@@ -53,13 +54,13 @@ function refuse(res: Response, kind: Kind) {
       title,
       `<section class="reading"><h1>${title}</h1><p>${text}</p>${portalActions([
         ["/operator/roles", "Roles"],
-        ["/operator", "Administration console"],
+        ["/operator", "Students"],
       ])}</section>`,
     ),
   );
 }
 
-/** COACHLINK-01 / #689 DEFCOACH-04: the coaches control on the selected learner's console card. */
+/** COACHLINK-01 / #689 DEFCOACH-04: the coaches control on a student's page. */
 export function coachAssignmentCard(
   result: LearnerCoachResult,
   learnerId: string,
@@ -74,9 +75,9 @@ export function coachAssignmentCard(
         `<label class="check"><input type="checkbox" name="coach" value="${c.emailHash}"${assigned.includes(c.emailHash) ? " checked" : ""}><span>${escape(c.label)}</span></label>`,
     )
     .join("");
-  return `<section class="portal-card" aria-labelledby="learner-coach"><h2 id="learner-coach">Coaches</h2><p>Each coach ticked here sees this learner's monthly hours on their Coaching page. New learners start with the default coaches.</p>${
+  return `<section class="portal-card" aria-labelledby="learner-coach"><h2 id="learner-coach">Coaches</h2><p>Each coach ticked here sees this student's monthly hours on their Coaching page. New students start with the default coaches.</p>${
     coaches.length
-      ? `<form class="coach-choices" method="post" action="/operator/coach-assignments"><input type="hidden" name="csrf" value="${anti}"><input type="hidden" name="learnerId" value="${escape(learnerId)}"><fieldset><legend>Coaches for this learner</legend>${choices}</fieldset><button type="submit">Save coaches</button></form>`
+      ? `<form class="coach-choices" method="post" action="/operator/coach-assignments"><input type="hidden" name="csrf" value="${anti}"><input type="hidden" name="learnerId" value="${escape(learnerId)}"><fieldset><legend>Coaches for this student</legend>${choices}</fieldset><button type="submit">Save coaches</button></form>`
       : '<p role="status">Nobody holds the coach role yet. Grant it on <a href="/operator/roles">Roles</a>.</p>'
   }</section>`;
 }
@@ -159,13 +160,7 @@ export function mountAccountRoleAdmin(
     res.send(
       page(
         "Roles",
-        `<section class="portal-workspace role-admin"><h1>Roles</h1><p>Everyone is a student. Coaches see the monthly hours of learners assigned to them. Admins can enter administration. Roles follow a verified email; only its fingerprint is stored, never the address.</p><section class="portal-card" aria-labelledby="grant-role"><h2 id="grant-role">Give a role</h2><form method="post" action="/operator/roles/grant">${hidden("csrf", anti)}<label for="grant-email">Verified email</label><input id="grant-email" name="email" type="email" maxlength="254" autocomplete="off" required><fieldset><legend>Roles</legend>${GRANTED_ROLES.map((role) => `<label class="check"><input type="checkbox" name="${role}" value="yes"><span>${ROLE_LABEL[role]}</span></label>`).join("")}</fieldset><p class="small">The role takes effect when the person signs in with this email. They can sign up later.</p><button type="submit">Give role</button></form></section><section class="portal-card" aria-labelledby="role-holders"><h2 id="role-holders">People with roles</h2>${rows ? `<div class="table-scroll" tabindex="0" role="region" aria-label="People with roles"><table class="member-table role-holders"><thead><tr><th scope="col">Person</th><th scope="col">Roles</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p role="status">Nobody holds a coach or admin role.</p>'}</section>${portalActions(
-          [
-            ["/operator/changes", "Change history"],
-            ["/operator", "Administration console"],
-            ["/admin", "Administration"],
-          ],
-        )}</section>`,
+        `<section class="portal-workspace role-admin">${adminMenuFor(res, "roles")}<h1>Roles</h1><p>Everyone is a student. Coaches see the monthly hours of students assigned to them. Admins can enter administration. Roles follow a verified email; only its fingerprint is stored, never the address.</p><section class="portal-card" aria-labelledby="grant-role"><h2 id="grant-role">Give a role</h2><form method="post" action="/operator/roles/grant">${hidden("csrf", anti)}<label for="grant-email">Verified email</label><input id="grant-email" name="email" type="email" maxlength="254" autocomplete="off" required><fieldset><legend>Roles</legend>${GRANTED_ROLES.map((role) => `<label class="check"><input type="checkbox" name="${role}" value="yes"><span>${ROLE_LABEL[role]}</span></label>`).join("")}</fieldset><p class="small">The role takes effect when the person signs in with this email. They can sign up later.</p><button type="submit">Give role</button></form></section><section class="portal-card" aria-labelledby="role-holders"><h2 id="role-holders">People with roles</h2>${rows ? `<div class="table-scroll" tabindex="0" role="region" aria-label="People with roles"><table class="member-table role-holders"><thead><tr><th scope="col">Person</th><th scope="col">Roles</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p role="status">Nobody holds a coach or admin role.</p>'}</section></section>`,
       ),
     );
   });
@@ -183,7 +178,11 @@ export function mountAccountRoleAdmin(
       return res.send(
         page(
           "Change history",
-          changeHistoryBody(result.value, before === undefined),
+          changeHistoryBody(
+            result.value,
+            before === undefined,
+            adminMenuFor(res, "history"),
+          ),
         ),
       );
     const [status, title, text] = {
@@ -209,7 +208,7 @@ export function mountAccountRoleAdmin(
         `<section class="reading"><h1>${title}</h1><p>${text}</p>${portalActions(
           [
             ["/operator/changes", "Change history"],
-            ["/operator", "Administration console"],
+            ["/operator", "Students"],
           ],
         )}</section>`,
       ),

@@ -135,7 +135,6 @@ it.each(STAFF_ROLES)(
         "/operator/metrics",
         "/operator/ledger-reconciliation",
         "/moderate/proposals",
-        "/moderate/circles/",
         "/operator/local-ai",
         "/operator/test-receipts",
       ],
@@ -148,6 +147,10 @@ it.each(STAFF_ROLES)(
       expect(r.text).not.toContain('href="/operator/local-ai-holds"');
     if (role !== "platform_admin")
       expect(r.text).not.toContain('href="/operator/local-ai"');
+    // HIDE-01: circle reports need a per-circle grant, so only moderators
+    // are offered them.
+    if (role !== "moderator")
+      expect(r.text).not.toContain('href="/moderate/circles/');
     expect(r.text).not.toContain(credential);
     expect(f.create).not.toHaveBeenCalled();
     expect(f.session).not.toHaveBeenCalled();

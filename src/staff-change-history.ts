@@ -1,5 +1,4 @@
 import type { PoolClient } from "pg";
-import { portalActions } from "./backend-portal-presentation.ts";
 import { escape } from "./views.ts";
 
 export const CHANGE_HISTORY_PAGE = 30;
@@ -157,14 +156,18 @@ export function changeText(entry: ChangeEntry) {
 const when = (at: Date) =>
   `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 
-export function changeHistoryBody(history: ChangeHistory, first: boolean) {
+export function changeHistoryBody(
+  history: ChangeHistory,
+  first: boolean,
+  menu = "",
+) {
   const items = history.entries
     .map(
       (entry) =>
         `<li><time datetime="${entry.at.toISOString()}">${when(entry.at)}</time><br>${changeText(entry)}</li>`,
     )
     .join("");
-  return `<div class="portal-page"><div class="portal-intro"><h1>Change history</h1><p>Who changed a role, a learner's coaches or someone's billing, and when, newest first. Entries can't be edited, and they stay when an account is deleted.</p></div><section class="portal-card" aria-labelledby="change-entries"><h2 id="change-entries">Changes</h2>${
+  return `<div class="portal-page">${menu}<div class="portal-intro"><h1>Change history</h1><p>Who changed a role, a student's coaches or someone's billing, and when, newest first. Entries can't be edited, and they stay when an account is deleted.</p></div><section class="portal-card" aria-labelledby="change-entries"><h2 id="change-entries">Changes</h2>${
     items
       ? `<ul>${items}</ul>`
       : `<p role="status">${first ? "No changes are recorded." : "There are no older entries."}</p>`
@@ -172,10 +175,5 @@ export function changeHistoryBody(history: ChangeHistory, first: boolean) {
     history.older
       ? `<p><a href="/operator/changes?before=${encodeURIComponent(history.older)}">Older entries</a></p>`
       : ""
-  }</section><section class="portal-card" aria-labelledby="change-covers"><h2 id="change-covers">What this covers</h2><p>Roles and coach assignments, offering plans, setting coaching rates, returning hours, issuing invoices, recording payments and refunds and voiding invoices.</p><p>It doesn't list what members do themselves, invoices the scheduled run creates, or invoices being emailed. It doesn't list time-limited staff access to a member's work. Members see that under When staff opened my work.</p><p>Signed test events on sample invoices are listed as test events. No staff member acted on them and no money moved.</p><p>Issuing invoices, returning hours and setting rates are listed only from when this history began. Older records didn't say who did them.</p></section><div class="portal-footer">${portalActions(
-    [
-      ["/operator/roles", "Roles"],
-      ["/operator", "Administration console"],
-    ],
-  )}</div></div>`;
+  }</section><section class="portal-card" aria-labelledby="change-covers"><h2 id="change-covers">What this covers</h2><p>Roles and coach assignments, offering plans, setting coaching rates, returning hours, issuing invoices, recording payments and refunds and voiding invoices.</p><p>It doesn't list what members do themselves, invoices the scheduled run creates, or invoices being emailed. It doesn't list time-limited staff access to a member's work. Members see that under When staff opened my work.</p><p>Signed test events on sample invoices are listed as test events. No staff member acted on them and no money moved.</p><p>Issuing invoices, returning hours and setting rates are listed only from when this history began. Older records didn't say who did them.</p></section></div>`;
 }

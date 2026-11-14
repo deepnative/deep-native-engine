@@ -21,6 +21,7 @@ import {
 import { CIRCLES } from "./circles.ts";
 import { escape, page, hidden } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
+import { adminMenuFor } from "./administration-presentation.ts";
 export interface StaffTools {
   library: boolean;
   worklist: boolean;
@@ -38,6 +39,8 @@ export interface StaffTools {
   proposals: boolean;
   /** FRICTION-11: the administration console is available here. */
   console?: boolean;
+  /** #845: administrator diagnostics are available here. */
+  diagnostics?: boolean;
   circles: boolean;
   circleGrants: boolean;
   eventCancellations?: boolean;
@@ -66,6 +69,167 @@ const labels = (): Record<StaffRole, string> => ({
   platform_admin: "Platform administrator",
   coach: "Coach",
 });
+const RECORDS = "Download a student's records (with their permission)";
+/**
+ * #845: the administrator's "More" page. Students, Invoices, Roles and
+ * History are in the menu, so they are not repeated here. HIDE-01: circle
+ * report pages need a per-circle grant this page cannot see, so they are
+ * not offered to administrators.
+ */
+function moreTools(tools: StaffTools) {
+  const groups: Array<[string, Array<[boolean, string, string]>]> = [
+    [
+      "Reports",
+      [
+        [
+          tools.invoices === true,
+          "/operator/coaching",
+          "Coaching hours by month",
+        ],
+        [
+          tools.invoices === true,
+          "/operator/invoice-reconciliation",
+          "Invoice and cash reconciliation",
+        ],
+        [
+          tools.agreements === true,
+          "/operator/course-agreements",
+          "Course agreement outcomes",
+        ],
+        [tools.capacity === true, "/operator/staff-capacity", "Staff capacity"],
+        [tools.capacity === true, "/operator/delivery-cost", "Delivery cost"],
+        [
+          tools.metrics,
+          "/operator/metrics/report",
+          "Learning and participation snapshot",
+        ],
+        [tools.diagnostics === true, "/operator/diagnostics", "Diagnostics"],
+      ],
+    ],
+    [
+      "Support and reviews",
+      [
+        [tools.support, "/operator/support", "Your granted support requests"],
+        [
+          tools.assignments,
+          "/operator/support-assignment",
+          "Support request assignments",
+        ],
+        [
+          tools.sampleAssignments,
+          "/operator/sample-assignments/pending",
+          "Pending feedback requests",
+        ],
+        [
+          tools.sampleAssignments,
+          "/operator/sample-assignments",
+          "Private sample assignments",
+        ],
+        [
+          tools.workflowReviews === true,
+          "/operator/workflow-reviews",
+          "Assign private workflow review",
+        ],
+        [tools.proposals, "/moderate/proposals", "Private proposal moderation"],
+        [tools.recordAccess === true, "/operator/member-records", RECORDS],
+      ],
+    ],
+    [
+      "Permissions",
+      [
+        [
+          tools.circleGrants,
+          "/operator/circle-grants",
+          "Circle moderation grants",
+        ],
+        [
+          tools.circleGrants,
+          "/moderate/circle-reference",
+          "My moderation reference",
+        ],
+        [
+          tools.reviewTimeGrants === true,
+          "/operator/review-time-grants",
+          "Private review-minute permissions",
+        ],
+        [
+          tools.supportTimeGrants === true,
+          "/operator/support-time-grants",
+          "Private support-minute permissions",
+        ],
+      ],
+    ],
+    [
+      "Events",
+      [
+        [
+          tools.eventRehearsals === true,
+          "/operator/event-rehearsals",
+          "Schedule a private rehearsal",
+        ],
+        [
+          tools.eventAttendance === true,
+          "/operator/event-attendance",
+          "Private rehearsal attendance",
+        ],
+        [
+          tools.eventCancellations === true,
+          "/operator/event-cancellations",
+          "Event cancellation",
+        ],
+      ],
+    ],
+    [
+      "Test and simulation tools",
+      [
+        [
+          tools.supportTime,
+          "/operator/support-time",
+          "Your granted support test effort",
+        ],
+        [tools.experts, "/operator/experts", "Synthetic expert registry"],
+        [
+          tools.sampleHolds === true,
+          "/operator/sample-holds",
+          "Staff sample holds",
+        ],
+        [
+          tools.ledger,
+          "/operator/ledger-reconciliation",
+          hostingText(
+            "Synthetic accounting inspection",
+            "Test-unit accounting inspection",
+          ),
+        ],
+        [
+          tools.studyUnits === true,
+          "/operator/study-test-units",
+          hostingText("Issue local study test units", "Issue study test units"),
+        ],
+        [
+          tools.localAi,
+          "/operator/local-ai",
+          hostingText("Local simulation control", "AI simulation control"),
+        ],
+        [
+          tools.receipts,
+          "/operator/test-receipts",
+          "Synthetic observation register",
+        ],
+      ],
+    ],
+  ];
+  return (
+    groups
+      .map(([title, choices]) => {
+        const available = choices.filter(([enabled]) => enabled);
+        return available.length
+          ? `<section class="admin-section"><h2>${title}</h2><ul class="more-tools">${available.map(([, url, label]) => `<li><a href="${escape(url)}">${escape(label)}</a></li>`).join("")}</ul></section>`
+          : "";
+      })
+      .join("") || "<p>No other tools are switched on for this site.</p>"
+  );
+}
 function links(role: StaffRole, tools: StaffTools) {
   const choices: [boolean, string, string][] = [];
   // #193: roster records name a coach or a reviewer, so only they get the link.
@@ -87,13 +251,7 @@ function links(role: StaffRole, tools: StaffTools) {
       "My reviewer reference",
     ]);
   }
-  if (role === "platform_admin")
-    choices.push([
-      tools.console === true,
-      "/operator",
-      "Administration console",
-    ]);
-  if (role === "operator" || role === "platform_admin")
+  if (role === "operator")
     choices.push(
       [tools.support, "/operator/support", "Your granted support requests"],
       [
@@ -104,11 +262,7 @@ function links(role: StaffRole, tools: StaffTools) {
       [tools.experts, "/operator/experts", "Synthetic expert registry"],
       [tools.capacity === true, "/operator/staff-capacity", "Staff capacity"],
       [tools.capacity === true, "/operator/delivery-cost", "Delivery cost"],
-      [
-        tools.recordAccess === true,
-        "/operator/member-records",
-        "Download a member's records (with their permission)",
-      ],
+      [tools.recordAccess === true, "/operator/member-records", RECORDS],
       [
         tools.sampleHolds === true,
         "/operator/sample-holds",
@@ -144,7 +298,7 @@ function links(role: StaffRole, tools: StaffTools) {
         ),
       ],
     );
-  if (role === "moderator" || role === "platform_admin") {
+  if (role === "moderator") {
     choices.push([
       tools.circleGrants,
       "/moderate/circle-reference",
@@ -162,90 +316,6 @@ function links(role: StaffRole, tools: StaffTools) {
         `${circle.title}: granted sample reports`,
       ]);
   }
-  if (role === "platform_admin")
-    choices.push(
-      [
-        tools.invoices === true,
-        "/operator/invoices",
-        "Course billing and invoices",
-      ],
-      [
-        tools.invoices === true,
-        "/operator/invoice-reconciliation",
-        "Invoice and cash reconciliation",
-      ],
-      [
-        tools.agreements === true,
-        "/operator/course-agreements",
-        "Course agreement outcomes",
-      ],
-      [
-        tools.studyUnits === true,
-        "/operator/study-test-units",
-        hostingText("Issue local study test units", "Issue study test units"),
-      ],
-      [
-        tools.eventAttendance === true,
-        "/operator/event-attendance",
-        "Private rehearsal attendance",
-      ],
-      [
-        tools.eventRehearsals === true,
-        "/operator/event-rehearsals",
-        "Schedule a private rehearsal",
-      ],
-      [
-        tools.eventCancellations === true,
-        "/operator/event-cancellations",
-        "Event cancellation",
-      ],
-      [
-        tools.circleGrants,
-        "/operator/circle-grants",
-        "Circle moderation grants",
-      ],
-      [
-        tools.reviewTimeGrants === true,
-        "/operator/review-time-grants",
-        "Private review-minute permissions",
-      ],
-      [
-        tools.supportTimeGrants === true,
-        "/operator/support-time-grants",
-        "Private support-minute permissions",
-      ],
-      [
-        tools.sampleAssignments,
-        "/operator/sample-assignments/pending",
-        "Pending feedback requests",
-      ],
-      [
-        tools.sampleAssignments,
-        "/operator/sample-assignments",
-        "Private sample assignments",
-      ],
-      [
-        tools.assignments,
-        "/operator/support-assignment",
-        "Support request assignments",
-      ],
-      [
-        tools.localAi,
-        "/operator/local-ai",
-        hostingText("Local simulation control", "AI simulation control"),
-      ],
-      [
-        tools.receipts,
-        "/operator/test-receipts",
-        "Synthetic observation register",
-      ],
-    );
-  if (role === "platform_admin")
-    choices.push([
-      tools.workflowReviews === true,
-      "/operator/workflow-reviews",
-      "Assign private workflow review",
-    ]);
   if (role === "moderator")
     choices.push([
       tools.workflowReviews === true,
@@ -393,15 +463,22 @@ export function mountStaffEntryRoutes(
       const result = await store?.admit(credential);
       if (!result || result.kind !== "ready")
         return fail(res, result?.kind === "denied" ? 403 : 503);
-      const body = page(
-        hostingText("Your local staff tools", "Your staff tools"),
-        `<div class="portal-page"><div class="portal-intro"><p class="eyebrow">${hostingText("PRIVATE LOCAL STAFF", "PRIVATE STAFF")}</p><h1>${hostingText("Your local staff tools", "Your staff tools")}</h1><p>Current role: ${labels()[result.role]}.</p><p>Each destination checks your current role and exact existing grants. Opening these tools grants no private work, starts no effort and allocates no test minutes. Sample activity is not qualified service.</p></div><section class="portal-card"><h2>Available tools</h2>${links(result.role, tools)}</section><section class="portal-card"><h2>Staff session</h2>${signout(issueNonce(res))}<p>Staff signout affects this browser only. Your learner access and saved progress remain.</p>${portalActions(
-          [
-            ["/learn", "Your learning space"],
-            ["/staff/sign-in", "Use another staff credential"],
-          ],
-        )}</section></div>`,
-      );
+      const session = `${signout(issueNonce(res))}<p>Staff signout affects this browser only. Your learning account and saved progress remain.</p>${portalActions(
+        [
+          ["/learn", "Your learning space"],
+          ["/staff/sign-in", "Use another staff credential"],
+        ],
+      )}`;
+      const body =
+        result.role === "platform_admin"
+          ? page(
+              "More tools",
+              `<div class="portal-page">${adminMenuFor(res, "more")}<h1>More tools</h1>${moreTools(tools)}<section class="admin-section"><h2>Staff session</h2>${session}</section></div>`,
+            )
+          : page(
+              hostingText("Your local staff tools", "Your staff tools"),
+              `<div class="portal-page"><div class="portal-intro"><p class="eyebrow">${hostingText("PRIVATE LOCAL STAFF", "PRIVATE STAFF")}</p><h1>${hostingText("Your local staff tools", "Your staff tools")}</h1><p>Current role: ${labels()[result.role]}.</p><p>Each destination checks your current role and exact existing grants. Opening these tools grants no private work, starts no effort and allocates no test minutes. Sample activity is not qualified service.</p></div><section class="portal-card"><h2>Available tools</h2>${links(result.role, tools)}</section><section class="portal-card"><h2>Staff session</h2>${session}</section></div>`,
+            );
       if (
         !Number.isFinite(result.deadline) ||
         performance.now() >= result.deadline
