@@ -795,6 +795,7 @@ it("INVOICELIST-01/ADMINNAV-01 the Invoices page leads with a table in words and
           paidCents: "72000",
           refundedCents: "100",
         }),
+        other(7, { number: "DN-80d5695a-5ef7-459e-bd78-63fc26a5491d" }),
       ],
     }),
   );
@@ -820,7 +821,12 @@ it("INVOICELIST-01/ADMINNAV-01 the Invoices page leads with a table in words and
     "Coaching package | — | Void",
     "Courses | CAD 0.00 | Sent · Refunded",
     "Coaching | CAD 0.00 | Sending unconfirmed · Partly refunded",
+    "Coaching | CAD 720.00 | Not sent · Unpaid",
   ]);
+  expect(main).toContain(
+    'aria-label="Open invoice DN-80d5695a">Open</a><span>DN-80d5695a</span>',
+  );
+  expect(main).not.toContain("5ef7-459e");
   // A deleted account with no number still has a name and a short reference.
   expect(main).toContain(
     `<td data-label="Student">Name needed</td><td data-label="For">Courses</td>`,

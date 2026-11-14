@@ -382,6 +382,12 @@ it("ADMINSTUDENT-01/ADMINCON02 an old selected-student link is a small page for 
             totalCents: "1200",
             delivery: "not_sent",
           },
+          {
+            id,
+            number: `DN-${id}`,
+            totalCents: "5000",
+            delivery: "sent",
+          },
         ],
       },
     },
@@ -414,7 +420,11 @@ it("ADMINSTUDENT-01/ADMINCON02 an old selected-student link is a small page for 
   expect(main).toContain("<li>&lt;Foundations&gt; · local-foundation-1</li>");
   expect(main).toContain("<li>Course bundle · offered</li>");
   expect(main).toContain(
-    `<a href="/operator/invoices/${id}">&lt;Sample-1&gt;</a> · CAD 12.00 · delivery not_sent`,
+    `<a href="/operator/invoices/${id}">&lt;Sample-1&gt;</a> · CAD 12.00 · Not sent`,
+  );
+  // A number built on a long reference shows only its first eight characters.
+  expect(main).toContain(
+    `<a href="/operator/invoices/${id}">DN-11111111</a> · CAD 50.00 · Sent</li>`,
   );
   expect(main).toContain(
     `<a href="/operator/invoices?ownerId=${id}">Prepare course billing for this student</a>`,
@@ -568,7 +578,7 @@ it("ADMINHOME-01/ADMINTABLE-01/02/03/04 renders a paged student table that keeps
   // ADMINSTUDENT-01: the name opens the one student page. Each cell carries
   // its label for the stacked phone layout.
   expect(first.text).toContain(
-    `<tr><td data-label="Name"><a href="/operator/coaching/${members[0]!.id}">Learner &lt;1&gt;</a></td><td data-label="Hourly rate">CAD 120.00</td><td data-label="This month (November 2026)" class="member-coaching">—</td><td data-label="Coaches"><a href="/operator?ownerId=${members[0]!.id}" aria-label="Coaches for Learner &lt;1&gt;">Coaches</a></td><td data-label="Joined">2026-11-02</td></tr>`,
+    `<tr><td data-label="Name"><a href="/operator/coaching/${members[0]!.id}">Learner &lt;1&gt;</a></td><td data-label="Hourly rate">CAD 120.00</td><td data-label="This month" class="member-coaching">—</td><td data-label="Coaches"><a href="/operator?ownerId=${members[0]!.id}" aria-label="Coaches for Learner &lt;1&gt;">Coaches</a></td><td data-label="Joined">2026-11-02</td></tr>`,
   );
   expect(first.text).toContain(
     `<a href="/operator/coaching/${members[1]!.id}">Name needed</a></td><td data-label="Hourly rate">Not set</td>`,
@@ -873,8 +883,7 @@ it("ADMINHOME-01/CONSOLEMONTHS-01/02 shows this month's hours and status, linked
     .get("/operator")
     .set("Cookie", `dne_staff=${credential}`);
   expect(res.status).toBe(200);
-  const cell =
-    'data-label="This month (November 2026)" class="member-coaching">';
+  const cell = 'data-label="This month" class="member-coaching">';
   // CONSOLEMONTHS-01: the column names its month and links to it.
   expect(res.text).toContain(
     '<th scope="col">This month<span>November 2026</span></th>',

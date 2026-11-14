@@ -2437,6 +2437,9 @@ td code {
 .portal-workspace:has(> .admin-menu) {
   margin-top: 20px;
 }
+.portal-workspace:has(> .admin-menu) {
+  padding-top: 0;
+}
 .admin-entry > p {
   max-width: 60ch;
 }
@@ -2492,6 +2495,19 @@ td code {
 }
 .stack-table {
   font-variant-numeric: tabular-nums;
+}
+/* The invoice list needs the page width; its text columns may wrap. */
+.invoice-workspace:has(> .admin-menu) {
+  max-width: none;
+}
+.invoice-workspace > .admin-menu ~ .table-scroll {
+  margin-top: 24px;
+}
+.invoice-list td:nth-child(-n + 2) {
+  white-space: normal;
+}
+.invoice-list td:first-child {
+  min-width: 0;
 }
 .stack-table td span {
   display: block;
@@ -2551,7 +2567,8 @@ td code {
     background: var(--card);
   }
   .stack-table td,
-  .stack-table td:first-child {
+  .stack-table td:first-child,
+  .stack-table td.member-coaching {
     display: grid;
     grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
     gap: 12px;

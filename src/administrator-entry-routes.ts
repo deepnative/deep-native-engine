@@ -17,6 +17,7 @@ import { page, escape } from "./views.ts";
 import { portalActions } from "./backend-portal-presentation.ts";
 import {
   adminMenu,
+  shortInvoiceNumber,
   type AdminMenuAvailable,
 } from "./administration-presentation.ts";
 import { coachingStatus } from "./coaching-routes.ts";
@@ -75,11 +76,10 @@ function studentsTable(v: AdministratorConsole) {
     last = first + v.members.length - 1,
     pages = Math.max(Math.ceil(v.total / v.pageSize), 1);
   const count = (n: number) => n.toLocaleString("en-CA");
-  const thisMonth = `This month (${monthLabel(v.months.current)})`;
   const rows = v.members
     .map(
       (m) =>
-        `<tr><td data-label="Name"><a href="/operator/coaching/${escape(m.id)}">${named(m.displayName)}</a></td><td data-label="Hourly rate">${m.rateCents == null ? "Not set" : cad(m.rateCents)}</td><td data-label="${thisMonth}" class="member-coaching">${month(m)}</td><td data-label="Coaches"><a href="/operator?ownerId=${escape(m.id)}" aria-label="Coaches for ${named(m.displayName)}">Coaches</a></td><td data-label="Joined">${m.joined.toISOString().slice(0, 10)}</td></tr>`,
+        `<tr><td data-label="Name"><a href="/operator/coaching/${escape(m.id)}">${named(m.displayName)}</a></td><td data-label="Hourly rate">${m.rateCents == null ? "Not set" : cad(m.rateCents)}</td><td data-label="This month" class="member-coaching">${month(m)}</td><td data-label="Coaches"><a href="/operator?ownerId=${escape(m.id)}" aria-label="Coaches for ${named(m.displayName)}">Coaches</a></td><td data-label="Joined">${m.joined.toISOString().slice(0, 10)}</td></tr>`,
     )
     .join("");
   const list = v.members.length
@@ -116,7 +116,7 @@ function studentPage(
       "Invoices",
       chosen.invoices.map(
         (i) =>
-          `<a href="/operator/invoices/${escape(i.id)}">${escape(i.number)}</a> · ${cad(Number(i.totalCents))} · delivery ${escape(i.delivery)}`,
+          `<a href="/operator/invoices/${escape(i.id)}">${escape(shortInvoiceNumber(i.number))}</a> · ${cad(Number(i.totalCents))} · ${i.delivery === "sent" ? "Sent" : "Not sent"}`,
       ),
     );
   return `<div class="portal-page student-page">${menu}<h1>${named(chosen.member.displayName)}</h1>${portalActions([[`/operator/coaching/${id}`, "Hours, rate and invoices"]], true)}${coachCard}<section class="portal-card" aria-labelledby="student-courses"><h2 id="student-courses">Courses</h2>${records ? `<div class="portal-columns">${records}</div>` : "<p>No course enrollment, bundle or course invoice yet.</p>"}${billing ? `<p><a href="/operator/invoices?ownerId=${id}">Prepare course billing for this student</a></p>` : "<p>Billing is switched off on this site.</p>"}</section></div>`;

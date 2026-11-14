@@ -56,3 +56,14 @@ export function adminMenuFor(
     res.app.locals.adminMenu as AdminMenuAvailable | undefined,
   );
 }
+
+/**
+ * INVOICELIST-01: an invoice number as people read it. A number that ends in
+ * a full account-style reference keeps only its first eight characters.
+ */
+export function shortInvoiceNumber(number: string) {
+  return number.replace(
+    /([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+    "$1",
+  );
+}

@@ -19,7 +19,10 @@ import type {
   InvoiceFailure,
   SimpleInvoiceStore,
 } from "./simple-invoice-store.ts";
-import { adminMenuFor } from "./administration-presentation.ts";
+import {
+  adminMenuFor,
+  shortInvoiceNumber,
+} from "./administration-presentation.ts";
 import { periodLabel } from "./coaching-values.ts";
 export interface InvoiceSender {
   send(
@@ -85,7 +88,7 @@ function invoiceRow(i: AdminInvoiceRow) {
   const status = i.voided
     ? payment
     : `${i.delivery === "sent" ? "Sent" : i.delivery === "not_sent" ? "Not sent" : i.delivery === "sending" ? "Sending" : "Sending unconfirmed"} · ${payment}`;
-  const number = i.number ?? i.id.slice(0, 8);
+  const number = shortInvoiceNumber(i.number ?? i.id);
   return `<tr><td data-label="Student">${escape(i.student ?? "Name needed")}</td><td data-label="For">${what}</td><td data-label="Total">${cad(total)}</td><td data-label="Balance">${i.voided ? "—" : cad(total - paid)}</td><td data-label="Status">${status}</td><td data-label="Invoice"><a href="${adminPath}/${i.id}" aria-label="Open invoice ${escape(number)}">Open</a><span>${escape(number)}</span></td></tr>`;
 }
 // Delivery states as administrators read them.
