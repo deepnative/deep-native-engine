@@ -274,17 +274,20 @@ export function mountAdministratorEntry(
       return fail(res, result?.kind === "denied" ? 403 : 503);
     const anti = `<input type="hidden" name="csrf" value="${csrf(token, options.secret)}">`;
     // This browser holds an administration cookie once entered, until it is
-    // ended or expires. It only chooses which button to show: both actions
-    // stay available at their routes, which still decide.
+    // ended or expires. It only chooses what the page offers first: ending
+    // stays on the page either way, and both routes still decide for
+    // themselves.
     const staff = staffCookie(req.headers.cookie),
       entered = staff.kind === "value" && staffCredential(staff.value);
+    const end = (label: string) =>
+      `<form method="post" action="/admin/end">${anti}<button class="secondary" type="submit">${label}</button></form>`;
     return res.send(
       page(
         "Administration",
         `<div class="portal-page admin-entry">${entered ? adminMenu(undefined, available) : ""}<h1>Administration</h1><p>${entered ? "You are in an administrator session. It lasts up to eight hours and ends when you choose End administration." : "An administrator session lasts up to eight hours and stays separate from your learning account."}</p><div class="portal-actions">${
           entered
-            ? `<a href="/operator" class="button">Go to Students</a><form method="post" action="/admin/end">${anti}<button class="secondary" type="submit">End administration</button></form>`
-            : `<form method="post" action="/admin/enter">${anti}<button type="submit">Enter administration</button></form>`
+            ? `<a href="/operator" class="button">Go to Students</a>${end("End administration")}`
+            : `<form method="post" action="/admin/enter">${anti}<button type="submit">Enter administration</button></form>${end("End an earlier session")}`
         }</div></div>`,
       ),
     );

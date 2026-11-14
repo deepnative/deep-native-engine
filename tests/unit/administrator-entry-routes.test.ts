@@ -693,17 +693,18 @@ it("NAME03/05 names are primary, escaped and distinguishable without exposing pr
     expect(response.text).toContain(member.id);
   expect(response.text).not.toContain("<Sam>");
 });
-it("ADMINHOME-01/ADMIN-LAYOUT-01 the entry page is short: one sentence and the control for the current state", async () => {
+it("ADMINHOME-01/ADMIN-LAYOUT-01 the entry page is short: one sentence and the controls for the current state", async () => {
   const f = fixture({ billing: true });
   const client = await http(f.app);
   const before = await client.get("/admin").set("Cookie", `${COOKIE}=${token}`);
   expect(before.status).toBe(200);
   const anti = `<input type="hidden" name="csrf" value="${csrf(token, secret)}">`;
-  // Not entered: the sentence and Enter administration, nothing else.
+  // Not entered: the sentence and Enter administration. Ending stays on the
+  // page for a session this browser no longer holds.
   expect(mainHtml(before.text)).toContain(
-    `<div class="portal-page admin-entry"><h1>Administration</h1><p>An administrator session lasts up to eight hours and stays separate from your learning account.</p><div class="portal-actions"><form method="post" action="/admin/enter">${anti}<button type="submit">Enter administration</button></form></div></div>`,
+    `<div class="portal-page admin-entry"><h1>Administration</h1><p>An administrator session lasts up to eight hours and stays separate from your learning account.</p><div class="portal-actions"><form method="post" action="/admin/enter">${anti}<button type="submit">Enter administration</button></form><form method="post" action="/admin/end">${anti}<button class="secondary" type="submit">End an earlier session</button></form></div></div>`,
   );
-  for (const gone of ["admin-menu", "/admin/end", "/operator", "portal-card"])
+  for (const gone of ["admin-menu", "/operator", "portal-card"])
     expect(mainHtml(before.text)).not.toContain(gone);
   // Entered in this browser: the menu, one primary link and End administration.
   const after = await client

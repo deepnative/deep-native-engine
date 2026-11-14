@@ -841,7 +841,10 @@ it("INVOICELIST-01/ADMINNAV-01 the Invoices page leads with a table in words and
     `<label for="invoice-owner">Student</label><select id="invoice-owner" name="ownerId" required><option value="${id}">Mei &lt;Tanaka&gt;</option><option value="${other(2, {}).id}">Name needed</option></select>`,
   );
   expect(main).toContain('action="/operator/invoices/plans"');
-  expect(main).toContain('action="/operator/invoices/due"');
+  // Generating due invoices is its own section, outside the closed form.
+  expect(main).toContain(
+    '</form></details><section class="admin-section" aria-labelledby="recurring-invoices"><h2 id="recurring-invoices">Recurring invoices</h2><form method="post" action="/operator/invoices/due">',
+  );
   for (const gone of [
     "portal-actions",
     "portal-card",

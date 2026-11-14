@@ -582,6 +582,17 @@ it("CONSOLEMONTHS-01..03 lists this month, last month and the latest earlier mon
   await save(busy!, current, 720);
   await save(older!, "2020-03", 90);
   await save(older!, "2020-02", 30);
+  // ADMINHOME-01: the rate in effect this month, not a later or older one.
+  for (const [owner, month, cents, version] of [
+    [busy, "2020-01", 9000, 1],
+    [busy, previous, 12000, 2],
+    [busy, "2999-01", 99900, 3],
+    [older, "2999-01", 5000, 1],
+  ] as const)
+    await pool.query(
+      "INSERT INTO coaching_rates(id,owner_id,effective_month,cents,version) VALUES($1,$2,$3,$4,$5)",
+      [randomUUID(), owner, month, cents, version],
+    );
   // AC4: the three months come with the page of learners, not per row.
   const statements: string[] = [];
   const clients: Array<{ mockRestore(): void }> = [];
@@ -600,12 +611,38 @@ it("CONSOLEMONTHS-01..03 lists this month, last month and the latest earlier mon
   const listed = await view(admin.credential);
   spy.mockRestore();
   for (const spied of clients) spied.mockRestore();
+  // One statement for the page of students and one for the awaiting list.
   expect(
     statements.filter((text) => text.includes("coaching_months")),
+  ).toHaveLength(2);
+  expect(
+    statements.filter((text) => text.includes("coaching_rates")),
   ).toHaveLength(1);
+  // ADMINHOME-01: submitted hours awaiting review, oldest first, with names.
+  expect(listed.awaiting).toEqual([
+    {
+      id: busy,
+      displayName: "Invented learner 01",
+      month: "2020-01",
+      periodStart: "2020-01-01",
+      periodEnd: "2020-01-31",
+      minutes: 60,
+    },
+    {
+      id: busy,
+      displayName: "Invented learner 01",
+      month: previous,
+      periodStart: monthPeriod(previous).start,
+      periodEnd: monthPeriod(previous).end,
+      minutes: 600,
+    },
+  ]);
   expect(listed.months).toEqual({ current, previous });
   const row = (id: string | undefined) =>
     listed.members.find((m) => m.id === id)!;
+  expect(row(busy).rateCents).toBe(12000);
+  expect(row(older).rateCents).toBeNull();
+  expect(row(idle).rateCents).toBeNull();
   // CONSOLEMONTHS-01: this month and last month, each with its own hours.
   expect(row(busy).thisMonth).toEqual(summary(current, 720));
   expect(row(busy).lastMonth).toEqual(summary(previous, 600, "submitted"));

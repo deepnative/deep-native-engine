@@ -56,7 +56,7 @@ test("[L328] RECACCESS-01/03/04/07 a member lets an operator download one kind o
     await operator.goto(f.origin + "/staff");
     await operator
       .getByRole("link", {
-        name: "Download a member's records (with their permission)",
+        name: "Download a student's records (with their permission)",
       })
       .click();
     await operator.getByLabel("Student reference").fill(reference);
