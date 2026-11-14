@@ -173,7 +173,9 @@ function fixture(disabled = false) {
 }
 it("WORDING-04 does not call the opening month a past month", async () => {
   const text = (await fixture().get("/account/coaching")).text;
-  expect(text).toContain("Choose the month you want to invoice");
+  expect(text).toContain(
+    "Enter your hours for the month, then request the invoice",
+  );
   expect(text).not.toContain("past month");
 });
 it("HOUR01/02/09 keeps empty, disabled, sample and configured states honest and escapes private recipient text", async () => {
@@ -181,7 +183,7 @@ it("HOUR01/02/09 keeps empty, disabled, sample and configured states honest and 
   expect((await f.get("/account/coaching")).text).toContain(
     "Save and request invoice",
   );
-  expect((await f.get("/operator/coaching")).text).toContain("Pending periods");
+  expect((await f.get("/operator/coaching")).text).toContain("Awaiting review");
   f.service.adminOverview.mockResolvedValueOnce(
     ready({ members: [], coachingPending: [] }),
   );
@@ -290,34 +292,36 @@ it("HOUR04/08/09 admin review shows immutable submitted detail, correction links
     `/account/purchases/invoices/${id}`,
   );
 });
-it("HOUR07 admin review names the member before the secondary account reference", async () => {
+it("HOUR07 #844 PLAIN-01 admin review names the student, with no account reference", async () => {
   const f = fixture();
   f.service.coachingOverview.mockResolvedValueOnce(
     ready({ ...value, displayName: "Invented <Coaching> member" }),
   );
   const named = (await f.get(`/operator/coaching/${id}`)).text;
   expect(named).toContain(
-    `Member: <strong>Invented &lt;Coaching&gt; member</strong> · account reference <code>${id}</code>`,
+    "<p>Student: <strong>Invented &lt;Coaching&gt; member</strong></p>",
   );
   f.service.coachingOverview.mockResolvedValueOnce(
     ready({ ...value, displayName: null }),
   );
   expect((await f.get(`/operator/coaching/${id}`)).text).toContain(
-    "Member: <strong>Name needed</strong>",
+    "Student: <strong>Name needed</strong>",
   );
 });
-it("DASH-01/02 shows the month's summary and a contractor table above the existing lists", async () => {
+const noMembers = () => ready({ members: [], coachingPending: [] });
+it("DASH-01/02 shows the month's summary and a student table above the awaiting-review list", async () => {
   const f = fixture();
+  f.service.adminOverview.mockResolvedValue(noMembers());
   const r = await f.get("/operator/coaching?month=2026-09");
   expect(r.status).toBe(200);
   expect(f.service.coachingDashboard).toHaveBeenCalledWith(token, "2026-09");
   const html = r.text;
   expect(html).toContain('<h2 id="hours-title">Hours for September 2026</h2>');
   expect(html).toContain(
-    '<input type="month" name="month" value="2026-09" max="2026-10" required>',
+    'href="/operator/coaching?month=2026-08&amp;sort=name"',
   );
   for (const [label, figure, note] of [
-    ["Hours submitted", "4h 45m", "3 contractors"],
+    ["Hours submitted", "4h 45m", "3 students"],
     ["Awaiting review", "2", "all months · oldest waiting 3 days"],
     ["Invoiced", "CAD 1,234.56", "1 not yet sent"],
     ["Outstanding", "CAD 110.00", "on this month’s invoices"],
@@ -331,17 +335,21 @@ it("DASH-01/02 shows the month's summary and a contractor table above the existi
   expect(html).toContain("Ben &lt;Invented&gt;");
   expect(html).not.toContain("Ben <Invented>");
   expect(html).toContain(
-    "<td>CAD 95.00</td><td>2h 15m</td><td>1h</td><td>3h 15m</td><td>Awaiting review</td><td>—</td><td>—</td>",
+    '<td role="cell" data-label="Rate">CAD 95.00</td><td role="cell" data-label="Hours">2h 15m</td><td role="cell" data-label="Previous month">1h</td><td role="cell" data-label="Year to date">3h 15m</td><td role="cell" data-label="Status">Awaiting review</td><td role="cell" data-label="Invoice email">—</td><td role="cell" data-label="Balance">—</td>',
   );
-  expect(html).toContain("<td>Not sent</td><td>CAD 110.00</td>");
   expect(html).toContain(
-    "<td>0h</td><td>—</td><td>0h</td><td>Invoiced</td><td>Sent</td><td>Paid</td>",
+    '<td role="cell" data-label="Invoice email">Not sent</td><td role="cell" data-label="Balance">CAD 110.00</td>',
+  );
+  expect(html).toContain(
+    '<td role="cell" data-label="Hours">0h</td><td role="cell" data-label="Previous month">—</td><td role="cell" data-label="Year to date">0h</td><td role="cell" data-label="Status">Invoiced</td><td role="cell" data-label="Invoice email">Sent</td><td role="cell" data-label="Balance">Paid</td>',
   );
   expect(html).toContain("Name needed");
-  expect(html).toContain("<td>No rate</td>");
+  expect(html).toContain('<td role="cell" data-label="Rate">No rate</td>');
   // Default order is by name, missing names last; the existing lists remain.
   const order = (text: string) =>
-    [...text.matchAll(/<th scope="row"><a [^>]*>([^<]+)</g)].map((m) => m[1]);
+    [
+      ...text.matchAll(/<th scope="row" role="rowheader"><a [^>]*>([^<]+)</g),
+    ].map((m) => m[1]);
   expect(order(html)).toEqual([
     "Ada Invented",
     "Ben &lt;Invented&gt;",
@@ -352,9 +360,8 @@ it("DASH-01/02 shows the month's summary and a contractor table above the existi
     'aria-sort="ascending"><a href="/operator/coaching?month=2026-09&amp;sort=name">Name</a>',
   );
   expect(html.indexOf("Hours for September 2026")).toBeLessThan(
-    html.indexOf("<h2>Members</h2>"),
+    html.indexOf('<h2 id="awaiting-review">Awaiting review</h2>'),
   );
-  expect(html).toContain("<h2>Pending periods</h2>");
   const sorted = async (sort: string) =>
     order((await f.get(`/operator/coaching?month=2026-09&sort=${sort}`)).text);
   expect(await sorted("hours")).toEqual([
@@ -381,6 +388,7 @@ it("DASH-01/02 shows the month's summary and a contractor table above the existi
 });
 it("DASH-01 words an empty month and a same-day wait plainly", async () => {
   const f = fixture();
+  f.service.adminOverview.mockResolvedValue(noMembers());
   f.service.coachingDashboard.mockResolvedValueOnce(
     ready({
       ...dashboard,
@@ -396,11 +404,11 @@ it("DASH-01 words an empty month and a same-day wait plainly", async () => {
     }),
   );
   const html = (await f.get("/operator/coaching")).text;
-  expect(html).toContain("<dd>0h</dd><p>1 contractor</p>");
+  expect(html).toContain("<dd>0h</dd><p>1 student</p>");
   expect(html).toContain("all months · oldest submitted today");
   expect(html).toContain("<dd>CAD 1,234.56</dd><p>All sent</p>");
   expect(html).toContain(
-    "No contractor has a rate or submitted hours for this period.",
+    "No student has a rate or submitted hours for this month.",
   );
   f.service.coachingDashboard.mockResolvedValueOnce(
     ready({
@@ -424,10 +432,11 @@ it("DASH-01 words an empty month and a same-day wait plainly", async () => {
   expect((await f.get("/operator/coaching")).text).toContain(
     "<dd>CAD 0.00</dd><p>No invoices yet</p>",
   );
-  expect(full).toContain("Showing the first 100 contractors.");
+  expect(full).toContain("Showing the first 100 students.");
 });
-it("DASH-02 breaks sorting ties by name and keeps unnamed contractors last", async () => {
+it("DASH-02 breaks sorting ties by name and keeps unnamed students last", async () => {
   const f = fixture();
+  f.service.adminOverview.mockResolvedValue(noMembers());
   const tied = (name: string | null, n: number) =>
     contractor({
       id: `${n}${id.slice(1)}`,
@@ -450,7 +459,9 @@ it("DASH-02 breaks sorting ties by name and keeps unnamed contractors last", asy
     );
     const html = (await f.get(`/operator/coaching?sort=${sort}`)).text;
     expect(
-      [...html.matchAll(/<th scope="row"><a [^>]*>([^<]+)</g)].map((m) => m[1]),
+      [
+        ...html.matchAll(/<th scope="row" role="rowheader"><a [^>]*>([^<]+)</g),
+      ].map((m) => m[1]),
     ).toEqual(["Amy", "Zed", "Name needed", "Name needed"]);
   }
 });
@@ -706,13 +717,12 @@ it("ADMIN-LAYOUT-02 coaching administration groups its lists in cards and naviga
   expect(main).toContain(
     '<section class="invoice-workspace portal-workspace">',
   );
-  expect(main).toContain('<section class="portal-card"><h2>Members</h2>');
   expect(main).toContain(
-    '<section class="portal-card"><h2>Pending periods</h2>',
+    '<section class="portal-card" aria-labelledby="awaiting-review"><h2 id="awaiting-review">Awaiting review</h2>',
   );
   const review = (await f.get(`/operator/coaching/${id}`)).text;
   expectPortalActions(review, [
-    ["/operator/coaching", "Choose another member"],
+    ["/operator/coaching", "Choose another student"],
     ["/operator/invoices", "Courses and invoices"],
   ]);
   expect(mainHtml(review)).toContain(
@@ -787,16 +797,18 @@ it("HOURTABLE-01/02/03 lists saved months as a table with hours, amount, status 
   f.service.coachingOverview.mockResolvedValue(ready({ ...value, months }));
   const page = mainHtml((await f.get(`/account/coaching?month=${month}`)).text);
   const table = page.match(
-    /<table class="coaching-months"[\s\S]*?<\/table>/,
+    /<table class="coaching-months stack-table"[\s\S]*?<\/table>/,
   )?.[0];
   expect(table).toBeDefined();
   expect(page).toContain('<div class="table-scroll" role="region"');
   for (const header of ["Period", "Hours", "Amount", "Status", "Invoice"])
-    expect(table).toContain(`<th scope="col">${header}</th>`);
+    expect(table).toContain(
+      `<th scope="col" role="columnheader">${header}</th>`,
+    );
   const row = (label: string) =>
     table!.match(
       new RegExp(
-        `<tr><th scope="row"><a[^>]*>${label}</a></th>[\\s\\S]*?</tr>`,
+        `<tr role="row"><th scope="row" role="rowheader"><a[^>]*>${label}</a></th>[\\s\\S]*?</tr>`,
       ),
     )?.[0] ?? "";
   expect(row("October 2026")).toContain(
@@ -847,26 +859,35 @@ it("HOURTABLE-01 prices drafts at the newest applicable rate and labels an invoi
     }),
   );
   const page = mainHtml((await f.get(`/account/coaching?month=${month}`)).text);
-  expect(page).toMatch(/August 2026<\/a><\/th><td>1h<\/td><td>CAD 100\.00/);
-  expect(page).toMatch(/March 2026<\/a><\/th><td>1h<\/td><td>CAD 60\.00/);
-  expect(page).toMatch(/February 2026[\s\S]*?<td>Invoiced<\/td>/);
+  expect(page).toMatch(
+    /August 2026<\/a><\/th><td role="cell" data-label="Hours">1h<\/td><td role="cell" data-label="Amount">CAD 100\.00/,
+  );
+  expect(page).toMatch(
+    /March 2026<\/a><\/th><td role="cell" data-label="Hours">1h<\/td><td role="cell" data-label="Amount">CAD 60\.00/,
+  );
+  expect(page).toMatch(
+    /February 2026[\s\S]*?<td role="cell" data-label="Status">Invoiced<\/td>/,
+  );
   f.service.coachingOverview.mockResolvedValue(ready({ ...value, months: [] }));
   expect(
     mainHtml((await f.get(`/account/coaching?month=${month}`)).text),
   ).toContain("<p>No saved periods.</p>");
 });
 
-it("GAPS-03 tells the administrator to set a missing rate, and the member to ask for one", async () => {
+it("GAPS-03 tells the administrator to set a missing rate, and the student to ask for one", async () => {
   const f = fixture();
   const none = ready({ ...value, rate: null, rateVersion: null });
   f.service.coachingOverview.mockResolvedValue(none);
   const member = (await f.get("/account/coaching")).text;
-  expect(member).toContain("Ask the administrator to enter your agreed rate");
+  expect(member).toContain(
+    "Ask your coach or administrator to set it, then come back here to request the invoice.",
+  );
+  expect(member).toContain("Rate: not set yet");
   const staff = (await f.get(`/operator/coaching/${id}`)).text;
   expect(staff).toContain(
     "No rate is set for this month. Set it under Hourly rate.",
   );
-  expect(staff).not.toContain("Ask the administrator");
+  expect(staff).not.toContain("Ask your coach");
 });
 it("ISSUER-03 issues a configured coaching invoice with computed 13% HST and no tax field", async () => {
   const f = fixture();
@@ -1001,10 +1022,7 @@ it("RECIPIENT-01/05 shows a submitted company and falls back to Student without 
   );
   const review = (await f.get(`/operator/coaching/${id}`)).text;
   expect(review).toContain(
-    "Recipient: Invented &lt;member&gt; · Invented &lt;Co&gt; · recipient@example.invalid",
-  );
-  expect(review).toContain(
-    "Invoice recipient: Invented &lt;member&gt; · Invented &lt;Co&gt; · recipient@example.invalid",
+    "<p>Invoice to: Invented &lt;member&gt; · Invented &lt;Co&gt; · recipient@example.invalid</p>",
   );
   const app = express();
   app.use((_req, res, next) => {
@@ -1196,14 +1214,11 @@ it("NOEMAIL-02 a month submitted without an email reads its recipient with no em
       },
     }),
   );
-  for (const path of ["/account/coaching", `/operator/coaching/${id}`]) {
-    const text = (await f.get(path)).text;
-    expect(text).toContain("<p>Invoice recipient: Invented &lt;member&gt;</p>");
-    expect(text).toContain(
-      "<p>Recipient: Invented &lt;member&gt; · Sample, not payable</p>",
-    );
-    expect(text).not.toContain("no invoice email yet");
-  }
+  for (const path of ["/account/coaching", `/operator/coaching/${id}`])
+    expect((await f.get(path)).text).not.toContain("no invoice email yet");
+  expect((await f.get(`/operator/coaching/${id}`)).text).toContain(
+    "<p>Invoice to: Invented &lt;member&gt;</p>",
+  );
   expect((await f.get(`/operator/coaching/${id}`)).text).toContain(
     '<p role="status">Returned for correction: Earlier &lt;reason&gt;</p>',
   );
@@ -1315,7 +1330,9 @@ it("OVR832-01/02/07 an administrator gets a change-hours form for saved or submi
     }),
   );
   const admin = (await f.get(`/operator/coaching/${id}`)).text;
-  expect(admin).toContain("<h2>Change this student’s hours</h2>");
+  expect(admin).toContain(
+    '<details class="coaching-details"><summary>Change this student’s hours</summary>',
+  );
   expect(admin).toContain(
     `<form method="post" action="/operator/coaching/${id}/override">`,
   );
@@ -1498,7 +1515,9 @@ const twoWeeks = {
 it("PERIOD832-01/04 the administrator sees the billing period and a form that asks for a start date only before periods have started", async () => {
   const f = fixture();
   const none = (await f.get(`/operator/coaching/${id}`)).text;
-  expect(none).toContain('<h2 id="billing-period">Billing period</h2>');
+  expect(none).toContain(
+    '<details class="coaching-details" id="billing-period"><summary>Billing period: calendar month</summary>',
+  );
   expect(none).toContain(
     "No billing period is set, so this student reports hours by calendar month. Set one to have them report per period; 2 weeks is the usual choice.",
   );
@@ -1510,7 +1529,7 @@ it("PERIOD832-01/04 the administrator sees the billing period and a form that as
     '<option value="14" selected>2 weeks</option><option value="7">1 week</option><option value="month">1 month</option><option value="custom">Custom number of days</option>',
   );
   expect(none).toContain(
-    '<label>First period starts on (UTC date)<input name="startsOn" type="date" value="" required></label>',
+    '<label>First period starts on<input name="startsOn" type="date" value="" required></label>',
   );
   expect(none).toContain("<button>Save billing period</button>");
   // The student is told nothing about a setting that does not exist.
@@ -1589,10 +1608,7 @@ it("PERIOD832-02 a student on defined periods picks a started period, saves with
   expect(page).not.toContain("Calendar month (UTC)");
   expect(page).toContain("<h2>19 Oct 2026 to 1 Nov 2026</h2>");
   expect(page).toContain(
-    "Choose the billing period you want to invoice, enter your coaching hours and minutes",
-  );
-  expect(page).toContain(
-    "then request the invoice. Your administrator reviews it before it is issued",
+    "Enter your hours for the billing period, then request the invoice; your administrator reviews it before it is issued",
   );
   expect(page).toContain('name="hours" type="number" min="0" max="336"');
   expect(page).toContain('name="month" value="2026-10-19"');
@@ -1600,7 +1616,7 @@ it("PERIOD832-02 a student on defined periods picks a started period, saves with
     '<p class="invoice-to">Invoice to: <strong>Student</strong>. <a href="/account/billing">Change</a>',
   );
   expect(page).not.toContain('class="month-nav"');
-  expect(page).toContain("effective October 2026");
+  expect(page).toContain("Rate: CAD 120.00 per hour");
   // An earlier calendar month the student saved stays in the picker.
   f.service.coachingOverview.mockResolvedValue(
     ready({
@@ -1636,7 +1652,7 @@ it("PERIOD832-02 a student on defined periods picks a started period, saves with
     ready({ ...periodic, entry: periodEntry }),
   );
   expect((await f.get("/account/coaching")).text).toContain(
-    "I confirm these hours, recipient and the rate CAD 120.00 per hour (version 1) for 19 Oct 2026 to 1 Nov 2026.",
+    "I confirm these hours, recipient and the rate CAD 120.00 per hour for 19 Oct 2026 to 1 Nov 2026.",
   );
   // Before the first period starts mid-month there is nothing to report yet.
   f.service.coachingOverview.mockResolvedValue(
@@ -1685,16 +1701,14 @@ it("PERIOD832-03 the administrator is offered the invoice only after the period'
     f.service.coachingOverview.mockResolvedValue(ready({ ...review, date }));
     const early = (await f.get(`/operator/coaching/${id}`)).text;
     expect(early).toContain(
-      '<p role="status">This period ends on 1 Nov 2026. Its invoice can be issued from 2 Nov 2026 (UTC date); until then you can change the hours or return them for correction.</p>',
+      '<p role="status">This period ends on 1 Nov 2026. Its invoice can be issued from 2 Nov 2026; until then you can change the hours or return them for correction.</p>',
     );
     expect(early).not.toContain("Issue coaching invoice");
     expect(early).toContain("Return period for correction");
     expect(early).toContain(
       "The period stays awaiting review at the rate the student confirmed",
     );
-    expect(early).toContain(
-      "<h2>Submitted snapshot</h2><p>19 Oct 2026 to 1 Nov 2026 · ",
-    );
+    expect(early).toContain("<p>Submitted: ");
   }
   f.service.coachingOverview.mockResolvedValue(
     ready({ ...review, date: "2026-11-02" }),
@@ -1712,7 +1726,7 @@ it("PERIOD832-03 the administrator is offered the invoice only after the period'
   });
   expect(refused.status).toBe(422);
   expect(refused.text).toContain(
-    "The invoice was not issued. A billing period can be invoiced only after its last day (UTC date)",
+    "The invoice was not issued. A billing period can be invoiced only after its last day;",
   );
   // An invoiced period words its correction by period; with no hours saved,
   // the administrator is told so by period.
@@ -1865,7 +1879,7 @@ const card = (html: string) =>
   );
 const currentStep = (html: string) =>
   /<li aria-current="step">([^<]+)<\/li>/.exec(card(html))?.[1];
-it("NEXTSTEP-01 shows the five steps and starts at saving hours for a month with nothing saved", async () => {
+it("NEXTSTEP-01 #844 STUDENT-01 shows the four steps and starts at saving hours for a month with nothing saved", async () => {
   const f = fixture();
   f.service.coachingOverview.mockResolvedValue(
     ready({ ...value, entry: null }),
@@ -1873,7 +1887,7 @@ it("NEXTSTEP-01 shows the five steps and starts at saving hours for a month with
   const text = mainHtml((await f.get("/account/coaching")).text);
   expect(card(text)).toContain('<h3 id="next-step">Next step</h3>');
   expect(card(text)).toContain(
-    '<ol class="coaching-steps"><li aria-current="step">Save hours</li><li>Rate set</li><li>Request invoice</li><li>Administrator review</li><li>Invoice issued</li></ol>',
+    '<ol class="coaching-steps"><li aria-current="step">Save hours</li><li>Request invoice</li><li>Review</li><li>Invoice issued</li></ol>',
   );
   // ONEPAGE-01: the form is right below; the card points to it in words.
   expect(card(text)).toContain(
@@ -1891,7 +1905,7 @@ it("NEXTSTEP-02 names one plain next action for each state of the month", async 
   };
   // Saved, but no rate yet: waiting on the administrator, no button.
   let text = await show({ ...value, rate: null });
-  expect(currentStep(text)).toBe("Rate set");
+  expect(currentStep(text)).toBe("Request invoice");
   expect(card(text)).toContain('<li class="done">Save hours</li>');
   expect(card(text)).toContain(
     "Your 1 hour 30 minutes are saved. Your hourly rate isn't set yet, so the invoice can't be requested. Ask your coach or administrator to set it, then come back here to request the invoice.",
@@ -1933,7 +1947,7 @@ it("NEXTSTEP-02 names one plain next action for each state of the month", async 
       snapshot,
     },
   });
-  expect(currentStep(text)).toBe("Administrator review");
+  expect(currentStep(text)).toBe("Review");
   expect(card(text)).toContain(
     "Your invoice request is with your administrator for review. The invoice appears here once it is issued; nothing is charged on this site.",
   );
@@ -1946,7 +1960,7 @@ it("NEXTSTEP-02 names one plain next action for each state of the month", async 
   });
   expect(currentStep(text)).toBe("Invoice issued");
   expect(card(text)).toContain(
-    `<a class="button" href="/account/purchases/invoices/${id}">View the invoice</a>`,
+    `<a class="button" href="/account/purchases/invoices/${id}">View invoice</a>`,
   );
   expect(text).toContain("Status: Invoice issued");
 });
@@ -2030,9 +2044,9 @@ it("NEXTSTEP-04 shows the student a plain status and moves reference material be
   expect(text.indexOf('<section class="portal-card next-step"')).toBeLessThan(
     text.indexOf('id="hours-form"'),
   );
-  // The administrator's review page is unchanged.
+  // The administrator's review page has no Next step card.
   const staff = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
-  expect(staff).toContain("Status: draft · revision 1");
+  expect(staff).toContain("<p>Status: Draft</p><p>Saved hours: 1h 30m</p>");
   expect(staff).not.toContain("next-step");
 });
 it("NEXTSTEP-02 covers the amount limit, a zero total, an invoice still being linked and a period still running", async () => {
@@ -2108,10 +2122,10 @@ it("ONEPAGE-01 puts the hours, recipient and invoice request in one form with Sa
     '<p class="invoice-to">Invoice to: <strong>Invented &lt;member&gt;</strong> · recipient@example.invalid. <a href="/account/billing">Change</a></p>',
   );
   expect(form).toContain(
-    "<h3>Request the invoice</h3><p>Rate: CAD 120.00 per hour, set by your administrator. The subtotal is your hours × this rate, before separately supplied tax.</p>",
+    "<h3>Request the invoice</h3><p>The subtotal is your hours × your hourly rate, before tax.</p>",
   );
   expect(form).toContain(
-    '<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm these hours, recipient and the rate CAD 120.00 per hour (version 1) for October 2026. This is a sample, not payable.</span></label>',
+    '<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm these hours, recipient and the rate CAD 120.00 per hour for October 2026. This is a sample, not payable.</span></label>',
   );
   expect(form).toContain(
     `<input type="hidden" name="rateId" value="${id}"><input type="hidden" name="sample" value="true">`,
@@ -2418,7 +2432,7 @@ it("SIMPLE-02 moves the package, its invoice and agreed changes off the student 
   expect(tab).not.toContain("Invoice these coaching terms");
   expect(tab).not.toContain("Record agreed change");
   expect(tab).toContain(
-    `<a href="/operator/coaching/${id}/package">Coaching package and agreed changes (optional)</a>`,
+    `<a href="/operator/coaching/${id}/package">Coaching package and agreed changes</a>`,
   );
   const pkg = mainHtml((await f.get(`/operator/coaching/${id}/package`)).text);
   expect(pkg).toContain("<h1>Coaching package</h1>");
@@ -2478,13 +2492,11 @@ it("SIMPLE-02 the package page refuses extra queries, a missing student and stor
   );
 });
 it("SIMPLE-04 the student keeps their terms card and folded agreed changes beside the hours", async () => {
-  const f = simpleFixture();
+  const f = simpleFixture(packageTerms, [agreedRow]);
   const html = mainHtml((await f.get("/account/coaching")).text);
   expect(html).toContain('<div class="coaching-layout">');
   const side = html.slice(html.indexOf('<aside class="coaching-side">'));
-  expect(side).toContain(
-    "Your administrator hasn't set your coaching terms yet.",
-  );
+  expect(side).toContain("Your administrator set these terms.");
   expect(side).toContain(
     '<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>',
   );
@@ -2516,4 +2528,302 @@ it("SIMPLE-01/02/04 covers no period yet, the student's refused reads and a pack
   expect((await f.get("/account/coaching")).status).toBe(403);
   const off = fixture(true);
   expect((await off.get(`/operator/coaching/${id}/package`)).status).toBe(503);
+});
+// #844 UI review 1: plain labels and simpler coaching pages.
+const submitted844 = {
+  ...entry,
+  minutes: 270,
+  state: "submitted",
+  revision: 2,
+  submittedRevision: 2,
+  snapshot: { ...snapshot, minutes: 270, subtotalCents: 54000 },
+};
+const visible = (html: string) =>
+  mainHtml(html)
+    .replace(/<input type="hidden"[^>]*>/g, "")
+    .replace(/<[^>]+>/g, " ");
+it("#844 PLAIN-01 coaching pages show no revision, version, snapshot, UTC or account reference", async () => {
+  const f = simpleFixture(packageTerms, [agreedRow]);
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, displayName: "Mei Invented", entry: submitted844 }),
+  );
+  const admin = (await f.get(`/operator/coaching/${id}`)).text;
+  const student = (await f.get("/account/coaching")).text;
+  const board = (await f.get("/operator/coaching")).text;
+  for (const text of [admin, student, board].map(visible)) {
+    expect(text).not.toMatch(/revision|version|snapshot|UTC|not_sent/i);
+    expect(text).not.toMatch(/account reference/i);
+    expect(text).not.toContain(id);
+    expect(text).not.toContain(id.slice(0, 8));
+  }
+  // The administrator keeps one plain line of what was submitted.
+  expect(mainHtml(admin)).toContain(
+    "<p>Submitted: 4h 30m at CAD 120.00 per hour = CAD 540.00</p>",
+  );
+  expect(mainHtml(admin)).toContain("<p>Status: Awaiting review</p>");
+  expect(visible(student)).not.toContain("Submitted:");
+  // The posted contract is unchanged.
+  expect(admin).toContain('<input type="hidden" name="revision" value="2">');
+  // A draft with a period still to start asks for a plain date.
+  f.service.coachingOverview.mockResolvedValue(ready(value));
+  const draft = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  expect(draft).toContain("<label>First period starts on<input");
+  expect(draft).toContain("<p>Status: Draft</p>");
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: null }),
+  );
+  expect(mainHtml((await f.get(`/operator/coaching/${id}`)).text)).toContain(
+    "<p>Status: No hours saved</p>",
+  );
+});
+it("#844 NAMES-01 coaching pages say student, and the dashboard keeps one table and a short awaiting-review list", async () => {
+  const f = fixture();
+  const other = "66666666-6666-4666-8666-666666666666";
+  f.service.adminOverview.mockResolvedValue(
+    ready({
+      members: [
+        {
+          id: "33333333-3333-4333-8333-333333333333",
+          displayName: "Ada Invented",
+        },
+        { id: other, displayName: "Zed <New>" },
+      ],
+      coachingPending: [{ ownerId: id, month, displayName: "Ada Invented" }],
+    }),
+  );
+  const html = mainHtml((await f.get("/operator/coaching")).text);
+  expect(visible(html)).not.toMatch(/contractor|member|learner/i);
+  expect(html).toContain("Choose a student");
+  expect(html).toContain(
+    '<caption id="students-caption">Students · September 2026</caption>',
+  );
+  expect(html).not.toContain("<h2>Members</h2>");
+  expect(html).not.toContain("<h2>Pending periods</h2>");
+  // A student with no rate or hours yet is still a row, opened on their current month.
+  expect(html).toContain(
+    `<th scope="row" role="rowheader"><a href="/operator/coaching/${other}">Zed &lt;New&gt;</a></th><td role="cell" data-label="Rate">No rate</td>`,
+  );
+  expect(html.match(/Ada Invented<\/a><\/th>/g)).toHaveLength(1);
+  expect(html).toContain(
+    `<h2 id="awaiting-review">Awaiting review</h2><ul class="portal-list"><li><a href="/operator/coaching/${id}?month=${month}">Ada Invented · October 2026</a></li></ul>`,
+  );
+  expectPortalActions(html, [["/operator/invoices", "Courses and invoices"]]);
+  f.service.coachingOverview.mockResolvedValueOnce(
+    ready({ ...value, entry: { ...entry, name: "Ada Invented" } }),
+  );
+  const student = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  expect(student).toContain("<p>Student: <strong>Name needed</strong></p>");
+  expect(visible(student)).not.toMatch(/member|learner/i);
+  expectPortalActions(student, [
+    ["/operator/coaching", "Choose another student"],
+  ]);
+  f.service.adminOverview.mockResolvedValue(
+    ready({ members: [], coachingPending: [] }),
+  );
+  f.service.coachingDashboard.mockResolvedValue(
+    ready({ ...dashboard, contractors: [] }),
+  );
+  const empty = mainHtml((await f.get("/operator/coaching")).text);
+  expect(empty).toContain(
+    "No student has a rate or submitted hours for this month.",
+  );
+  expect(empty).toContain("<li>No submitted hours await review.</li>");
+});
+it("#844 MONTHNAV-02 the dashboard moves between months with links that keep the sort", async () => {
+  const f = fixture();
+  const html = mainHtml((await f.get("/operator/coaching?sort=hours")).text);
+  expect(html).toContain(
+    '<nav class="month-nav" aria-label="Months"><a href="/operator/coaching?month=2026-08&amp;sort=hours">‹ August 2026</a><a href="/operator/coaching?month=2026-10&amp;sort=hours">October 2026 ›</a></nav>',
+  );
+  expect(html).not.toContain('type="month"');
+  expect(html).not.toContain("Show month");
+  f.service.coachingDashboard.mockResolvedValue(
+    ready({ ...dashboard, month, today: month }),
+  );
+  const now = mainHtml((await f.get("/operator/coaching")).text);
+  expect(now).toContain(
+    'href="/operator/coaching?month=2026-09&amp;sort=name"',
+  );
+  expect(now).not.toContain("month=2026-11");
+});
+it("#844 STUDENT-01 the student page states status, rate and the invoice link once each", async () => {
+  const f = simpleFixture();
+  const html = mainHtml((await f.get("/account/coaching")).text);
+  expect(html.match(/Status:/g)).toHaveLength(1);
+  expect(html).toContain(
+    '<p class="small">Status: Draft, not sent yet · Rate: CAD 120.00 per hour</p>',
+  );
+  expect(html).not.toContain("Applicable rate");
+  expect(html).not.toContain("Rate set");
+  expect(html).toContain(
+    '<ol class="coaching-steps"><li class="done">Save hours</li><li aria-current="step">Request invoice</li><li>Review</li><li>Invoice issued</li></ol>',
+  );
+  // One intro sentence.
+  expect(html).toContain(
+    "<p>Enter your hours for the month, then request the invoice; your administrator reviews it before it is issued and nothing is charged on this site.</p>",
+  );
+  expect(html).not.toContain("Coaching is optional");
+  // No terms and no agreed changes: no card, no disclosure, one contact line.
+  expect(html).not.toContain("Your coaching terms");
+  expect(html).not.toContain("Agreed changes");
+  expect(html).not.toContain('<aside class="coaching-side">');
+  expect(
+    html.match(
+      /There are no cancellation or refund rules\. To ask about changes, contact/g,
+    ),
+  ).toHaveLength(1);
+  expect(html).toContain(
+    '<a href="mailto:info@deepnative.io">info@deepnative.io</a>',
+  );
+  // With terms and an agreed change both show, and the contact line is still once.
+  const full = simpleFixture(packageTerms, [agreedRow]);
+  const withTerms = mainHtml((await full.get("/account/coaching")).text);
+  expect(withTerms).toContain("Your coaching terms");
+  expect(withTerms).toContain(
+    '<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>',
+  );
+  expect(
+    withTerms.match(/There are no cancellation or refund rules/g),
+  ).toHaveLength(1);
+  // An invoiced month: one invoice link in Next step and one in its saved row.
+  const invoiceId = "77777777-7777-4777-8777-777777777777";
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      entry: { ...submitted844, state: "invoiced", invoiceId },
+      months: [{ month, minutes: 270, state: "invoiced", invoiceId }],
+    }),
+  );
+  const invoiced = mainHtml((await f.get("/account/coaching")).text);
+  expect(invoiced.match(new RegExp(invoiceId, "g"))).toHaveLength(2);
+  expect(invoiced).toContain(
+    `<a class="button" href="/account/purchases/invoices/${invoiceId}">View invoice</a>`,
+  );
+  expect(invoiced).not.toContain("Saved duration");
+  expect(invoiced).not.toContain("Invoice recipient");
+  expect(invoiced).toContain(
+    '<p class="small">Status: Invoice issued · Rate: CAD 120.00 per hour</p>',
+  );
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, rate: null, rates: [] }),
+  );
+  expect(mainHtml((await f.get("/account/coaching")).text)).toContain(
+    '<p class="small">Status: Draft, not sent yet · Rate: not set yet</p>',
+  );
+});
+it("#844 INPUT-01 hours and minutes share one row in the student and administrator forms", async () => {
+  const f = fixture();
+  const student = mainHtml((await f.get("/account/coaching")).text);
+  expect(student).toMatch(
+    /<div class="duration-fields"><label>Hours<input name="hours" type="number"[^>]*><\/label><label>Minutes<input name="minutes" type="number"[^>]*><\/label><\/div>/,
+  );
+  const admin = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  expect(admin).toMatch(
+    /<div class="duration-fields"><label>Hours<input name="hours" type="number"[^>]*><\/label><label>Minutes<input name="minutes" type="number"[^>]*><\/label><\/div>/,
+  );
+});
+it("#844 ADMINFORMS-01 the administrator's student page keeps issuing and the rate open and folds the rest", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: submitted844 }),
+  );
+  const html = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  const closed = [
+    ...html.matchAll(
+      /<details class="coaching-details"[^>]*><summary>([^<]+)<\/summary>/g,
+    ),
+  ].map((m) => m[1]);
+  expect(closed).toEqual([
+    "Return for correction",
+    "Change this student’s hours",
+    "Billing period: calendar month",
+  ]);
+  expect(html).not.toContain("<details open");
+  const outside = html.replace(/<details[\s\S]*?<\/details>/g, "");
+  expect(outside).toContain("<h2>Issue the reviewed invoice</h2>");
+  expect(outside).toContain("<button>Issue coaching invoice</button>");
+  expect(outside).toContain('<h2 id="hourly-rate">Hourly rate</h2>');
+  expect(outside).toContain("<button>Save hourly rate</button>");
+  expect(outside).not.toContain("Change hours</button>");
+  expect(outside).not.toContain("Save billing period");
+  expect(outside).not.toContain("Correction reason");
+  // The folded forms post exactly what they did.
+  expect(html).toContain(
+    `<form method="post" action="/operator/coaching/${id}/return">`,
+  );
+  expect(html).toContain(
+    `<form method="post" action="/operator/coaching/${id}/override">`,
+  );
+  expect(html).toContain(
+    `<form method="post" action="/operator/coaching/${id}/billing-period">`,
+  );
+});
+it("#844 PACKAGE-01 the package link and renewals card show only once a package exists", async () => {
+  const none = simpleFixture();
+  const renewalsDue = vi.fn().mockResolvedValue(ready([]));
+  Object.assign(none.coachingTerms, { renewalsDue });
+  const plain = mainHtml((await none.get(`/operator/coaching/${id}`)).text);
+  expect(plain).not.toContain("/package");
+  expect(mainHtml((await none.get("/operator/coaching")).text)).not.toContain(
+    "Renewals due",
+  );
+  // The package page itself still opens.
+  expect((await none.get(`/operator/coaching/${id}/package`)).status).toBe(200);
+  const terms = simpleFixture(packageTerms);
+  Object.assign(terms.coachingTerms, {
+    renewalsDue: vi
+      .fn()
+      .mockResolvedValue(
+        ready([
+          { ownerId: id, displayName: "Ada", renewsOn: "2026-11-01", days: -3 },
+        ]),
+      ),
+  });
+  expect(
+    mainHtml((await terms.get(`/operator/coaching/${id}`)).text),
+  ).toContain(
+    `<a href="/operator/coaching/${id}/package">Coaching package and agreed changes</a>`,
+  );
+  expect(mainHtml((await terms.get("/operator/coaching")).text)).toContain(
+    "Renewals due",
+  );
+  const agreed = simpleFixture(null, [agreedRow]);
+  expect(
+    mainHtml((await agreed.get(`/operator/coaching/${id}`)).text),
+  ).toContain(`href="/operator/coaching/${id}/package"`);
+  // A refused read of either is a refusal, not a guess.
+  agreed.coachingTerms.forStudent.mockResolvedValueOnce({ kind: "invalid" });
+  expect((await agreed.get(`/operator/coaching/${id}`)).status).toBe(403);
+  agreed.agreedChanges.forStudent.mockResolvedValueOnce({
+    kind: "unavailable",
+  });
+  expect((await agreed.get(`/operator/coaching/${id}`)).status).toBe(503);
+  // Without those stores there is no link.
+  expect(
+    mainHtml((await fixture().get(`/operator/coaching/${id}`)).text),
+  ).not.toContain("/package");
+});
+it("#844 TABLE-01 saved periods and the dashboard table carry a caption and a label on every cell", async () => {
+  const f = fixture();
+  const html = mainHtml((await f.get("/account/coaching")).text);
+  expect(html).toContain(
+    '<table class="coaching-months stack-table" role="table" aria-labelledby="saved-months"><caption class="visually-hidden">Saved periods</caption>',
+  );
+  expect(html).toMatch(
+    /<td role="cell" data-label="Hours">[^<]*<\/td><td role="cell" data-label="Amount">[^<]*<\/td><td role="cell" data-label="Status">Draft<\/td><td role="cell" data-label="Invoice">—<\/td>/,
+  );
+  const board = mainHtml((await f.get("/operator/coaching")).text);
+  expect(board).toContain(
+    '<table class="contractor-hours stack-table" role="table" aria-labelledby="students-caption">',
+  );
+  for (const label of [
+    "Rate",
+    "Hours",
+    "Previous month",
+    "Year to date",
+    "Status",
+    "Invoice email",
+    "Balance",
+  ])
+    expect(board).toContain(`<td role="cell" data-label="${label}">`);
 });

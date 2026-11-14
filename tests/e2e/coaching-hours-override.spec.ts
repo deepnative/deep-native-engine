@@ -35,14 +35,12 @@ test("[L338] OVR832-01/03/06/07/08 an administrator changes a student's submitte
     );
     await a.getByLabel("Hourly rate (CAD)").fill("120.00");
     await a.getByRole("button", { name: "Save hourly rate" }).click();
-    await expect(
-      a.getByText("Applicable rate: CAD 120.00 per hour"),
-    ).toBeVisible();
+    await expect(a.locator(".rate-now")).toContainText("CAD 120.00 per hour");
 
     // 3. The student saves 10 hours and requests the invoice.
     await s.goto(f.origin + "/account/coaching");
-    await s.getByLabel("Whole hours").fill("10");
-    await s.getByLabel("Additional minutes").fill("0");
+    await s.getByLabel("Hours", { exact: true }).fill("10");
+    await s.getByLabel("Minutes", { exact: true }).fill("0");
     await s.getByRole("button", { name: "Save draft" }).click();
     await s.getByRole("checkbox", { name: /I confirm these hours/ }).check();
     await s.getByRole("button", { name: "Save and request invoice" }).click();
@@ -50,15 +48,16 @@ test("[L338] OVR832-01/03/06/07/08 an administrator changes a student's submitte
 
     // 4. The administrator must give a reason, then changes 10 hours to 8.
     await a.reload();
-    await expect(
-      a.getByRole("heading", { name: "Change this student’s hours" }),
-    ).toBeVisible();
-    await expect(a.getByLabel("Whole hours")).toHaveValue("10");
-    await a.getByLabel("Whole hours").fill("8");
+    // #844 ADMINFORMS-01: the change form sits in a closed disclosure.
+    await a.getByText("Change this student’s hours", { exact: true }).click();
+    await expect(a.getByLabel("Hours", { exact: true })).toHaveValue("10");
+    await a.getByLabel("Hours", { exact: true }).fill("8");
     await a.getByRole("button", { name: "Change hours" }).click();
     // The browser holds the form until a reason is typed.
     await expect(a.getByLabel("Reason for the change")).toBeFocused();
-    await expect(a.getByText("Status: submitted · revision 2")).toBeVisible();
+    await expect(
+      a.getByText("Status: Awaiting review", { exact: true }),
+    ).toBeVisible();
     await a
       .getByLabel("Reason for the change")
       .fill("Invented: two sessions were cancelled");
@@ -72,11 +71,13 @@ test("[L338] OVR832-01/03/06/07/08 an administrator changes a student's submitte
     await expect(a.locator("ul.hours-changes li")).toContainText(
       "Reason: Invented: two sessions were cancelled",
     );
-    await expect(a.getByText("Status: submitted · revision 3")).toBeVisible();
     await expect(
-      a.getByText(
-        /8 hours 0 minutes · CAD 120\.00 per hour · rate version 1 · subtotal CAD 960\.00/,
-      ),
+      a.getByText("Status: Awaiting review", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      a.getByText("Submitted: 8h at CAD 120.00 per hour = CAD 960.00", {
+        exact: true,
+      }),
     ).toBeVisible();
     expect(await noSidewaysScroll(a)).toBe(true);
     await a.screenshot({
@@ -125,7 +126,7 @@ test("[L338] OVR832-01/03/06/07/08 an administrator changes a student's submitte
     // 6. The invoice is issued on the changed figure.
     await a
       .getByRole("checkbox", {
-        name: /I reviewed this exact submitted revision/,
+        name: /I reviewed these submitted hours/,
       })
       .check();
     await a.getByRole("button", { name: "Issue coaching invoice" }).click();
@@ -136,7 +137,9 @@ test("[L338] OVR832-01/03/06/07/08 an administrator changes a student's submitte
 
     // 7. An issued month offers no change; Change history names the change.
     await a.goto(`${f.origin}/operator/coaching/${id}`);
-    await expect(a.getByText(/Status: invoiced/)).toBeVisible();
+    await expect(
+      a.getByText("Status: Invoiced", { exact: true }),
+    ).toBeVisible();
     await expect(a.getByRole("button", { name: "Change hours" })).toHaveCount(
       0,
     );

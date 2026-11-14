@@ -184,9 +184,10 @@ it("AGREED94-03 the student sees their own records read-only with the contact li
   expect(page.text).not.toContain(admin.id);
   expect(ready(await changes.own(m.token))).toMatchObject([refund]);
   expect(ready(await changes.own(other.token))).toEqual([]);
-  expect(text((await get("/account/coaching", other.token)).text)).toContain(
-    "No agreed changes are recorded.",
-  );
+  // #844 STUDENT-01: with no agreed change there is nothing to show.
+  const none = text((await get("/account/coaching", other.token)).text);
+  expect(none).not.toContain("Changes agreed with you");
+  expect(none).not.toContain(refund.agreed);
 });
 
 it("AGREED94-04 an unconfirmed, empty, over-long or unknown-kind change is refused and nothing is recorded", async () => {

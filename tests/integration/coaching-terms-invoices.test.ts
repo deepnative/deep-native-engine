@@ -187,7 +187,7 @@ it("TERMSINV318-01 an administrator issues the current terms as a Deep Native In
   const shown = text((await get(`/operator/invoices/${row!.id}`, admin)).text);
   for (const sentence of [
     "Coaching terms",
-    "Terms version 1 · coaching period 2026-12-01 to 2027-05-31",
+    "Coaching period 2026-12-01 to 2027-05-31",
     "HST registration number 713254472RT0001",
     "Total CAD 1356.00",
   ])
@@ -195,9 +195,7 @@ it("TERMSINV318-01 an administrator issues the current terms as a Deep Native In
   const own = text(
     (await get(`/account/purchases/invoices/${row!.id}`, m.token)).text,
   );
-  expect(own).toContain(
-    "Terms version 1 · coaching period 2026-12-01 to 2027-05-31",
-  );
+  expect(own).toContain("Coaching period 2026-12-01 to 2027-05-31");
 });
 
 it("TERMSINV318-02 one live invoice per terms version: replay returns it, a second is refused, a new version or a void allows another", async () => {

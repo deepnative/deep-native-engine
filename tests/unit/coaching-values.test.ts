@@ -10,6 +10,7 @@ import {
   coachingDate,
   coachingPeriodKey,
   effectiveSchedules,
+  monthNav,
   monthPeriod,
   periodContaining,
   periodLabel,
@@ -254,4 +255,13 @@ it("PERIOD832-07 period keys, setting names and period names read plainly", () =
     periodLabel({ key: "2026-11-16", start: "2026-11-16", end: "2026-11-16" }),
   ).toBe("16 Nov 2026");
   expect(periodLabel({ key: "2026-11-16" })).toBe("Period from 16 Nov 2026");
+});
+
+it("#844 MONTHNAV-02 month links stop at the current month and keep an extra query", () => {
+  expect(monthNav("/coach", "2026-01", "2026-03")).toBe(
+    '<nav class="month-nav" aria-label="Months"><a href="/coach?month=2025-12">‹ December 2025</a><a href="/coach?month=2026-02">February 2026 ›</a></nav>',
+  );
+  expect(monthNav("/x", "2026-03", "2026-03", "&amp;sort=hours")).toBe(
+    '<nav class="month-nav" aria-label="Months"><a href="/x?month=2026-02&amp;sort=hours">‹ February 2026</a></nav>',
+  );
 });

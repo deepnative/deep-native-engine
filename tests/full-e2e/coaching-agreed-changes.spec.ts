@@ -28,7 +28,6 @@ import {
   storedGrants,
   storedInvoices,
   storedTerms,
-  termsSection,
   torontoDay,
   type AgreedForm,
   type TermsForm,
@@ -113,13 +112,20 @@ async function state(j: Journey) {
 /** The student reads the contact rule and has nothing to cancel or refund with. */
 async function studentIsToldToContact(j: Journey) {
   await j.student.goto(j.f.origin + "/account/coaching");
-  await expect(termsSection(j.student)).toContainText(CONTACT_RULE);
+  // #844 STUDENT-01: the contact rule is on the page exactly once, in the
+  // terms card when terms exist and at the foot of the page otherwise.
+  const rule = j.student.locator("main p", {
+    hasText: "There are no cancellation or refund rules.",
+  });
+  await expect(rule).toHaveCount(1);
+  await expect(rule).toContainText(CONTACT_RULE);
   await expect(
-    termsSection(j.student)
-      .locator("p", { hasText: "There are no cancellation or refund rules." })
-      .locator('a[href="mailto:info@deepnative.io"]'),
+    rule.locator('a[href="mailto:info@deepnative.io"]'),
   ).toBeVisible();
-  await expect(agreedSection(j.student)).toContainText(NOT_AUTOMATIC);
+  // Agreed changes appear only once one is recorded; then they say nothing
+  // is automatic. Either way the student has no form.
+  if (await agreedSection(j.student).count())
+    await expect(agreedSection(j.student)).toContainText(NOT_AUTOMATIC);
   await expect(agreedSection(j.student).locator("form")).toHaveCount(0);
   await expect(
     j.student

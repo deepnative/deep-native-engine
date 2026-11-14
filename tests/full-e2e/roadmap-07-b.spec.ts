@@ -200,7 +200,7 @@ test("[F-ROADMAP-07-B] attending one available group practice event creates no p
       ).toContainText("60 minutes");
       await member.goto(f.origin + "/account/coaching");
       await expect(member.locator("body")).not.toContainText(
-        /Submitted snapshot|Invoiced/,
+        /Awaiting review|Invoiced/,
       );
     });
   } finally {

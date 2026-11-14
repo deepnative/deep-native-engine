@@ -182,7 +182,7 @@ test("[L331] TERMSINV318-01/03/05 an administrator invoices a student's coaching
       a.getByText("Deep Native Inc. · Ontario, Canada"),
     ).toBeVisible();
     await expect(
-      a.getByText("Terms version 1 · coaching period 2026-12-01 to 2027-05-31"),
+      a.getByText("Coaching period 2026-12-01 to 2027-05-31"),
     ).toBeVisible();
 
     // 5. The student sees it due, with the offline payment instructions.

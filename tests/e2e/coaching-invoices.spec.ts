@@ -212,8 +212,8 @@ async function setRate(f: Fixture, admin: Page, id: string, rate: string) {
 }
 async function save(f: Fixture, p: Page, hours = "1", minutes = "30") {
   await p.goto(f.origin + "/account/coaching");
-  await p.getByLabel("Whole hours").fill(hours);
-  await p.getByLabel("Additional minutes").fill(minutes);
+  await p.getByLabel("Hours", { exact: true }).fill(hours);
+  await p.getByLabel("Minutes", { exact: true }).fill(minutes);
   // Confirm the redirected document before callers reload or submit it.
   await Promise.all([
     p.waitForURL(`${f.origin}/account/coaching?month=${f.month}&done=saved`, {
@@ -225,6 +225,10 @@ async function save(f: Fixture, p: Page, hours = "1", minutes = "30") {
     p.getByRole("heading", { name: "Coaching hours", exact: true }),
   ).toBeVisible();
 }
+/** #844 ADMINFORMS-01: the return form sits in a closed disclosure. */
+async function returnForm(p: Page) {
+  await p.getByText("Return for correction", { exact: true }).click();
+}
 async function submit(p: Page) {
   await p.getByRole("checkbox", { name: /I confirm these hours/ }).check();
   await p.getByRole("button", { name: "Save and request invoice" }).click();
@@ -232,7 +236,9 @@ async function submit(p: Page) {
 async function issue(f: Fixture, p: Page, id: string) {
   await p.goto(`${f.origin}/operator/coaching/${id}`);
   await p.getByLabel("Invented sample tax (CAD)").fill("0.00");
-  await p.getByRole("checkbox", { name: /I reviewed this exact/ }).check();
+  await p
+    .getByRole("checkbox", { name: /I reviewed these submitted hours/ })
+    .check();
   await p.screenshot({
     path: test.info().outputPath(`coaching-review-${id}.png`),
     fullPage: true,
@@ -294,9 +300,7 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
         fullPage: true,
       });
       await submit(p);
-      await expect(
-        p.getByRole("heading", { name: "Submitted snapshot" }),
-      ).toBeVisible();
+      await expect(p.getByText("Status: Awaiting review")).toBeVisible();
       const invoiceId = await issue(f, admin, id);
       await p.goto(f.origin + "/account/purchases");
       await p
@@ -339,8 +343,8 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
         exact: true,
       }),
     ).toBeVisible();
-    await recovered.getByLabel("Whole hours").fill("2");
-    await recovered.getByLabel("Additional minutes").fill("0");
+    await recovered.getByLabel("Hours", { exact: true }).fill("2");
+    await recovered.getByLabel("Minutes", { exact: true }).fill("0");
     await recovered.getByRole("button", { name: "Save draft" }).click();
     await expect(
       recovered.locator(
@@ -355,9 +359,9 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
       fullPage: true,
     });
     await admin.goto(`${f.origin}/operator/coaching`);
-    // The dashboard row links to the same month; check the Pending periods list.
+    // The dashboard row links to the same month; check the Awaiting review list.
     const pending = admin.locator(
-      `h2:text-is("Pending periods") + ul a[href="/operator/coaching/${a.id}?month=${pastMonth}"]`,
+      `h2:text-is("Awaiting review") + ul a[href="/operator/coaching/${a.id}?month=${pastMonth}"]`,
     );
     await expect(pending).toBeVisible();
     await expect(pending).toHaveText(
@@ -483,8 +487,8 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       "Invoice to: Coaching member · coaching-student@example.invalid.",
     );
     await expect(s.getByLabel("Invoice email")).toHaveCount(0);
-    await s.getByLabel("Whole hours").fill("2");
-    await s.getByLabel("Additional minutes").fill("15");
+    await s.getByLabel("Hours", { exact: true }).fill("2");
+    await s.getByLabel("Minutes", { exact: true }).fill("15");
     await friendly(s, "student-hours-form");
     await Promise.all([
       s.waitForURL(`${f.origin}/account/coaching?month=${month}&done=saved`, {
@@ -497,9 +501,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     ).toBeVisible();
     await expect(s.locator(".coaching-months")).toContainText("CAD 213.75");
     await submit(s);
-    await expect(
-      s.getByRole("heading", { name: "Submitted snapshot" }),
-    ).toBeVisible();
+    await expect(s.getByText("Status: Awaiting review")).toBeVisible();
     await friendly(s, "student-submitted");
 
     // 5. The owner finds the pending month, reviews it and issues the invoice.
@@ -510,13 +512,17 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       .getByRole("link", { name: "Coaching administration", exact: true })
       .click();
     await expect(
-      o.getByRole("heading", { name: "Pending periods" }),
+      o.getByRole("heading", { name: "Awaiting review" }),
     ).toBeVisible();
     // DASH-04: the manager dashboard opens on last month by default.
     const figure = (label: string) =>
       o.locator(".hours-summary div").filter({ hasText: label }).locator("dd");
     const row = () => o.getByRole("row").filter({ hasText: "Coaching member" });
-    await expect(o.getByLabel("Month", { exact: true })).toHaveValue(month);
+    // #844 MONTHNAV-02: the month is named in the heading, with links beside it.
+    await expect(
+      o.getByRole("heading", { name: `Hours for ${monthLabel(month)}` }),
+    ).toBeVisible();
+    await expect(o.getByLabel("Month", { exact: true })).toHaveCount(0);
     await expect(figure("Hours submitted")).toHaveText("2h 15m");
     await expect(figure("Awaiting review")).toHaveText("1");
     await expect(row()).toContainText("Awaiting review");
@@ -529,7 +535,9 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       .click();
     await expect(o.getByText("CAD 213.75").first()).toBeVisible();
     await o.getByLabel("Invented sample tax (CAD)").fill("0.00");
-    await o.getByRole("checkbox", { name: /I reviewed this exact/ }).check();
+    await o
+      .getByRole("checkbox", { name: /I reviewed these submitted hours/ })
+      .check();
     await friendly(o, "owner-review");
     await o.getByRole("button", { name: "Issue coaching invoice" }).click();
     await expect(
@@ -624,9 +632,10 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
     await submit(m.page);
     await expect(m.page.getByRole("alert")).toContainText("out of date");
     await m.page.goto(f.origin + "/account/coaching");
-    await expect(m.page.getByText(/Applicable rate: CAD 80.00/)).toBeVisible();
+    await expect(m.page.getByText(/Rate: CAD 80\.00 per hour/)).toBeVisible();
     await submit(m.page);
     await admin.goto(`${f.origin}/operator/coaching/${m.id}`);
+    await returnForm(admin);
     await admin
       .getByLabel("Correction reason")
       .fill("Correct the reported hours");
@@ -652,6 +661,7 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
       .check();
     await admin.getByRole("button", { name: "Void unpaid invoice" }).click();
     await admin.goto(`${f.origin}/operator/coaching/${m.id}`);
+    await returnForm(admin);
     await admin
       .getByLabel("Correction reason")
       .fill("Please confirm corrected hours");
@@ -685,6 +695,7 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
         /Paid or partially paid invoices cannot be corrected here/,
       ),
     ).toBeVisible();
+    await returnForm(admin);
     await admin
       .getByLabel("Correction reason")
       .fill("Cannot change paid record");
@@ -709,7 +720,9 @@ test("[L275] HOUR03/06/09 committed submission recovery preserves zero totals wi
       .locator("#main")
       .getByRole("link", { name: "Coaching hours", exact: true })
       .click();
-    await expect(m.page.getByText(/No rate is set/)).toBeVisible();
+    await expect(
+      m.page.getByText(/Your hourly rate isn't set yet/).first(),
+    ).toBeVisible();
     await setRate(f, admin, m.id, "0.01");
     await save(f, m.page, "0", "1");
     await expect(
@@ -728,9 +741,7 @@ test("[L275] HOUR03/06/09 committed submission recovery preserves zero totals wi
     ).toBeVisible();
     await expect(m.page.locator("pre")).toContainText('"revision": 2');
     await m.page.goto(f.origin + "/account/coaching");
-    await expect(
-      m.page.getByRole("heading", { name: "Submitted snapshot" }),
-    ).toBeVisible();
+    await expect(m.page.getByText("Status: Awaiting review")).toBeVisible();
     expect(f.state.commits).toBe(1);
     expect(
       (
