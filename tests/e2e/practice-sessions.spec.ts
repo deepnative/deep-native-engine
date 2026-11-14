@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
@@ -5,6 +6,10 @@ import { randomBytes } from "node:crypto";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 const pool = testPool(),
   origin = browserOrigin;
 const audiences = [
@@ -103,8 +108,9 @@ async function respond(page: Page, response: string) {
 }
 async function changeGoal(page: Page, goal: (typeof audiences)[number][1]) {
   await page.goto("/learn");
+  await openLearningProfile(page);
   await chooseLearningGoal(page, goal);
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
 }
 async function exported(page: Page) {
   const response = await page.request.get("/api/member/export");
@@ -232,7 +238,7 @@ test("[L103] all three audiences explicitly opt into ordered private pairs, relo
     ).toHaveCount(0);
     // Every form on the page carries the same token, including #200's
     // per-pair suggestion forms.
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     const overCap = await page.request.post(`${path}/responses`, {
       headers: { Origin: origin },
       form: {
@@ -263,15 +269,12 @@ test("[L104] all three audiences retain owner-only exact sessions through goal a
     const path = await start(page, id);
     const words = `Private invented ${background} session words`;
     await respond(page, words);
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     const other = await browser.newContext({ baseURL: origin });
     try {
       const otherPage = await other.newPage();
       await onboard(otherPage, background, goal);
-      const otherCsrf = await otherPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const otherCsrf = await formToken(otherPage);
       await otherPage
         .getByRole("link", { name: "Saved practice sessions", exact: true })
         .click();
@@ -403,7 +406,7 @@ test("[L105] all three audiences export ordered session pairs and withdraw all t
       second = `Withdraw invented ${background} second response`;
     await respond(page, first);
     await respond(page, second);
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     const before = await exported(page);
     expect(before.version).toBe("local-member-records-v52");
     expect(before.records.practiceSessions).toEqual([

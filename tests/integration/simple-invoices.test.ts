@@ -807,8 +807,9 @@ it("BILLPROFILE02/04 profile remains available with billing disabled and denied 
       .set("Host", "127.0.0.1:3000")
       .set("Cookie", `${COOKIE}=${m.token}`),
   );
-  expect(r.status).toBe(200);
-  expect(r.text).toContain("does not change your sign-in email");
+  // #846 FOLD-02: the old page address leads to the form on My account.
+  expect(r.status).toBe(303);
+  expect(r.headers.location).toBe("/account#billing");
   await pool.query(
     "UPDATE workspaces SET deleting_at=clock_timestamp() WHERE id=$1",
     [m.id],
@@ -826,6 +827,79 @@ it("BILLPROFILE02/04 profile remains available with billing disabled and denied 
     [n.id],
   );
   expect(await profiles.read(n.token)).toEqual({ kind: "denied" });
+});
+it("FOLD-02 billing details are saved from My account, with or without an invoice email", async () => {
+  const m = await member();
+  const account = (query = "") =>
+    withLoopback(application, (s) =>
+      request(s)
+        .get(`/account${query}`)
+        .set("Host", "127.0.0.1:3000")
+        .set("Cookie", `${COOKIE}=${m.token}`),
+    );
+  const first = await account();
+  expect(first.status).toBe(200);
+  expect(first.text).toContain(
+    '<section class="account-billing" id="billing"><h2>Billing details</h2><p>Shown on your invoices.</p><form method="post" action="/account/billing">',
+  );
+  // This member has no email anywhere, so a blank one cannot be saved.
+  const blank = await post("/account/billing", m.token, {
+    name: "Invented Payer",
+    email: "",
+    company: "",
+    revision: "0",
+  });
+  expect(blank.status).toBe(303);
+  expect(blank.headers.location).toBe("/account?billing=email#billing");
+  expect(await profiles.read(m.token)).toEqual({ kind: "ready", value: null });
+  expect((await account("?billing=email")).text).toContain(
+    '<p class="notice" role="alert">Add an email to save billing details.</p>',
+  );
+  const saved = await post("/account/billing", m.token, {
+    name: "Invented Payer",
+    email: "Payer@Example.invalid",
+    company: "Invented Co",
+    revision: "0",
+  });
+  expect(saved.headers.location).toBe("/account?billing=saved#billing");
+  // A later blank email keeps the address already saved.
+  const kept = await post("/account/billing", m.token, {
+    name: "Invented Payer II",
+    email: "",
+    company: "",
+    revision: "1",
+  });
+  expect(kept.headers.location).toBe("/account?billing=saved#billing");
+  expect(await profiles.read(m.token)).toEqual({
+    kind: "ready",
+    value: {
+      name: "Invented Payer II",
+      email: "payer@example.invalid",
+      company: null,
+      revision: 2,
+    },
+  });
+  const shown = (await account("?billing=saved")).text;
+  expect(shown).toContain(
+    '<p class="notice" role="status">Billing details saved.</p>',
+  );
+  expect(shown).toContain('name="revision" value="2"');
+  expect(shown).toContain('value="Invented Payer II"');
+  expect(shown).toContain('value="payer@example.invalid"');
+  // A stale form and an unusable address are refused beside the form.
+  const stale = await post("/account/billing", m.token, {
+    name: "Stale",
+    email: "payer@example.invalid",
+    revision: "1",
+  });
+  expect(stale.headers.location).toBe("/account?billing=conflict#billing");
+  const invalid = await post("/account/billing", m.token, {
+    name: "Invented Payer II",
+    email: "not-an-address",
+    revision: "2",
+  });
+  expect(invalid.headers.location).toBe("/account?billing=invalid#billing");
+  expect(ready(await profiles.read(m.token))?.revision).toBe(2);
 });
 it("BILLPROFILE02/04 an acknowledged profile commit with a lost response stays inspectable without another edit or charge", async () => {
   const m = await member();

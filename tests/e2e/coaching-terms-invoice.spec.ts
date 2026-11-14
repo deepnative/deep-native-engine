@@ -152,14 +152,12 @@ test("[L331] TERMSINV318-01/03/05 an administrator invoices a student's coaching
     ).toHaveCount(0);
 
     // 3. The student saves a billing recipient from My account.
-    await s
-      .getByRole("link", { name: "Billing recipient", exact: true })
-      .click();
+    await s.goto(`${f.origin}/account#billing`);
     await s.getByLabel("Invoice recipient name").fill("Invented Student");
     await s
       .getByLabel("Invoice email")
       .fill("invented.student@example.invalid");
-    await s.getByRole("button", { name: "Save billing recipient" }).click();
+    await s.getByRole("button", { name: "Save billing details" }).click();
 
     // 4. The administrator reviews the amount and recipient, and issues it.
     await a.reload();
@@ -187,7 +185,7 @@ test("[L331] TERMSINV318-01/03/05 an administrator invoices a student's coaching
 
     // 5. The student sees it due, with the offline payment instructions.
     await s.goto(`${f.origin}/account/purchases`);
-    await s.getByRole("link", { name: `DN-${invoiceId}` }).click();
+    await s.locator(`a[href$="/invoices/${invoiceId}"]`).click();
     await expect(
       s.locator("dt").filter({ hasText: "Balance" }).locator("+ dd"),
     ).toHaveText("CAD 1356.00");
@@ -222,7 +220,7 @@ test("[L331] TERMSINV318-01/03/05 an administrator invoices a student's coaching
     await s
       .getByRole("link", { name: "Courses and invoices", exact: true })
       .click();
-    await expect(s.getByText(/CAD 1356\.00 · Paid/)).toBeVisible();
+    await expect(s.getByText(/CAD 1356\.00 — Paid/)).toBeVisible();
 
     // 7. Back on the coaching page the version shows as invoiced, with no form.
     await a.goto(`${f.origin}/operator/coaching/${id}/package`);

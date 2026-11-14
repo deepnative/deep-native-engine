@@ -211,7 +211,8 @@ it("WHOSEES-06 coach and administrator access is stated without naming anyone", 
     background: "explorer",
     goal: "everyday",
   } as Learner;
-  expect(dashboard(learner, undefined, "c")).toContain(
+  // #846 PROFILE-01: the display name is edited on My account only.
+  expect(dashboard(learner, undefined, "c")).not.toContain(
     "Visible to you, your coaches and account administrators",
   );
   expect(

@@ -6,6 +6,10 @@ import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
 import { requiredCheck } from "../support/required-check.ts";
 import { browserOrigin as origin } from "../support/browser-origin.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 const pool = testPool();
 test.afterAll(async () => pool.end());
@@ -118,8 +122,9 @@ async function saveDraft(page: Page, response: string) {
 
 async function changeGoal(page: Page, goal: "everyday" | "work" | "build") {
   await page.goto("/learn");
+  await openLearningProfile(page);
   await chooseLearningGoal(page, goal);
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   await expect(page).toHaveURL(/\/learn$/);
 }
 

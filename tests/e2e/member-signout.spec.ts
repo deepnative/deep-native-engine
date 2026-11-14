@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { Pool } from "pg";
@@ -156,9 +157,17 @@ test("[L239] MOUT-01/02 a linked member signs out and deliberately returns by em
       .addCookies([
         { name: "dne_staff", value: "c".repeat(64), url: f.origin },
       ]);
+    // #846 ACCOUNT-01: My account has no second sign-out; the header's does it.
     await page.goto(`${f.origin}/account`);
     await expect(
-      page.getByText("Any copy of this sign-in saved elsewhere stops working", {
+      page.locator("#main").getByText("Sign out", { exact: false }),
+    ).toHaveCount(0);
+    await page
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "Sign out", exact: true })
+      .click();
+    await expect(
+      page.getByText("Other browsers where you signed in stay signed in.", {
         exact: false,
       }),
     ).toBeVisible();
@@ -195,7 +204,8 @@ test("[L239] MOUT-01/02 a linked member signs out and deliberately returns by em
       await expect(
         header.getByRole("link", { name: "Sign in", exact: true }),
       ).toBeVisible();
-      for (const label of ["Account", "Coaching hours", "Sign out"])
+      // #846 HEADER-01: Learning is a member page too, so it goes as well.
+      for (const label of ["Learning", "Account", "Coaching", "Sign out"])
         await expect(
           header.getByRole("link", { name: label, exact: true }),
         ).toHaveCount(0);
@@ -242,10 +252,7 @@ test("[L240] MOUT-03 browser-only, pending and unavailable recovery retain acces
       await expect(
         page.getByRole("button", { name: "Sign out", exact: true }),
       ).toHaveCount(0);
-      const csrf = await page
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const csrf = await formToken(page);
       const denied = await page.request.post(`${f.origin}/account/sign-out`, {
         headers: { Origin: f.origin },
         form: { csrf },
@@ -259,7 +266,7 @@ test("[L240] MOUT-03 browser-only, pending and unavailable recovery retain acces
   }
   const stale = await fixture(page);
   try {
-    await page.goto(`${stale.origin}/account`);
+    await page.goto(`${stale.origin}/account/sign-out`);
     await expect(
       page.getByRole("button", { name: "Sign out", exact: true }),
     ).toBeVisible();
@@ -289,7 +296,7 @@ test("[L240] MOUT-03 browser-only, pending and unavailable recovery retain acces
     await expect(
       page.getByRole("button", { name: "Sign out", exact: true }),
     ).toHaveCount(0);
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     expect(
       (
         await page.request.post(`${disabled.origin}/account/sign-out`, {
@@ -313,7 +320,7 @@ test("[L241] MOUT-06 failed and lost-commit signout shows uncertainty without re
   for (const failure of ["before-commit", "lost-commit"] as const) {
     const f = await fixture(page, failure);
     try {
-      await page.goto(`${f.origin}/account`);
+      await page.goto(`${f.origin}/account/sign-out`);
       await page.getByRole("button", { name: "Sign out", exact: true }).click();
       await expect(
         page.getByRole("heading", { name: "Sign-out could not be confirmed" }),
@@ -355,15 +362,15 @@ test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without
     const navigation = page.getByRole("navigation", {
       name: "Main navigation",
     });
-    for (const label of ["Learning", "Account", "Coaching hours", "Sign out"])
+    for (const label of ["Learning", "Coaching", "Account", "Sign out"])
       await expect(
         navigation.getByRole("link", { name: label, exact: true }),
       ).toBeVisible();
     // ADMINLINK-01: an ordinary member is not offered Administration.
     await expect(
-      navigation.getByRole("link", { name: "Administration", exact: true }),
+      navigation.getByRole("link", { name: "Admin", exact: true }),
     ).toHaveCount(0);
-    for (let index = 0; index < 4; index++) await page.keyboard.press("Tab");
+    for (let index = 0; index < 5; index++) await page.keyboard.press("Tab");
     await expect(
       navigation.getByRole("link", { name: "Account", exact: true }),
     ).toBeFocused();
@@ -381,7 +388,7 @@ test("[L281] NAV-01/03/04 finds account tools and deliberately signs out without
       fullPage: true,
     });
     await navigation
-      .getByRole("link", { name: "Coaching hours", exact: true })
+      .getByRole("link", { name: "Coaching", exact: true })
       .click();
     await expect(
       page.getByRole("heading", { name: "How to enter coaching hours" }),

@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page, type Locator } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -431,10 +432,7 @@ test("[L109] all three audiences privately withdraw open or resolved requests an
       await resolve(page);
       const other = await onboard(page, background, goal);
       expect(other).not.toBe(owner);
-      const otherCsrf = await page
-        .locator('[name="csrf"]')
-        .first()
-        .inputValue();
+      const otherCsrf = await formToken(page);
       expect((await page.request.get(`/support/${item.id}`)).status()).toBe(
         403,
       );

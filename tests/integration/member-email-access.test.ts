@@ -457,8 +457,8 @@ it.each(["rotation", "deletion", "email-unavailable"] as const)(
     if (change === "email-unavailable") {
       expect(result.text).toContain('value="America/Regina"');
       expect(result.text).toContain("Email recovery is unavailable");
-      expect(result.text).toContain("Signed in");
-    } else expect(result.text).not.toContain("Signed in");
+      expect(result.text).toContain("<h1>My account</h1>");
+    } else expect(result.text).not.toContain("My account");
     expect(delivered).toHaveLength(0);
   },
 );

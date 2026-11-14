@@ -119,7 +119,7 @@ for (const journey of journeys)
       const accountActions = page.getByRole("navigation", {
         name: "Learning account",
       });
-      for (const label of ["My account", "Sign out", "Coaching hours"])
+      for (const label of ["My account", "Sign out", "Coaching"])
         await expect(
           accountActions.getByRole("link", { name: label, exact: true }),
         ).toBeVisible();
@@ -236,11 +236,13 @@ for (const journey of journeys)
       await page.goto(`${f.origin}/lesson/guide/practise`);
       const profile = await page.context().newPage();
       try {
-        await profile.goto(`${f.origin}/learn`);
+        // #846 PROFILE-01: the profile form is on My account only.
+        await profile.goto(`${f.origin}/account`);
         await chooseLearningGoal(profile, journey.nextGoal);
         await profile
-          .getByRole("button", { name: "Save my direction", exact: true })
+          .getByRole("button", { name: "Save my profile", exact: true })
           .click();
+        await expect(profile).toHaveURL(`${f.origin}/account#profile`);
         await expect(
           profile.locator('select[name="goal"], input[name="goal"]:checked'),
         ).toHaveValue(journey.nextGoal);

@@ -173,11 +173,7 @@ test("[F-ROADMAP-01-A] an administrator's saved terms are the student's only cur
       expect(await storedInvoices(j.f.pool, j.reference)).toEqual([]);
       expect(await payments(j)).toBe(0);
       await j.student.goto(j.f.origin + "/account/purchases");
-      await expect(
-        j.student
-          .locator("h2", { hasText: "Your invoices" })
-          .locator("+ ul li"),
-      ).toHaveCount(0);
+      await expect(j.student.locator(".invoice-list li")).toHaveCount(0);
     });
 
     await requiredCheck(2, async () => {
@@ -649,10 +645,10 @@ test("[F-BUILD-04-A] next terms saved on time start on the administrator's date 
       ]);
       await j.student.goto(j.f.origin + "/account/purchases");
       await expect(
-        j.student.getByRole("link", { name: `DN-${saved.invoice.invoiceId}` }),
+        j.student.locator(`a[href$="/invoices/${saved.invoice.invoiceId}"]`),
       ).toBeVisible();
       await expect(
-        j.student.getByRole("link", { name: `DN-${second}` }),
+        j.student.locator(`a[href$="/invoices/${second}"]`),
       ).toBeVisible();
     });
   } finally {
@@ -697,11 +693,7 @@ test("[F-BUILD-04-B] after the coaching period and renewal date pass with no new
       expect(await payments(j)).toBe(0);
       expect(await storedTerms(j.f.pool, j.reference)).toHaveLength(1);
       await j.student.goto(j.f.origin + "/account/purchases");
-      await expect(
-        j.student
-          .locator("h2", { hasText: "Your invoices" })
-          .locator("+ ul li"),
-      ).toHaveCount(1);
+      await expect(j.student.locator(".invoice-list li")).toHaveCount(1);
     });
 
     await requiredCheck(2, async () => {

@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { createHash } from "node:crypto";
@@ -88,7 +89,7 @@ test("[L45] the last seat has one winner and joining grants no cohort content", 
       (entry) => entry.name === "dne_preview",
     )!.value;
     sessionHashes.push(createHash("sha256").update(cookie).digest("hex"));
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     if (n < 3) {
       await page
         .getByRole("button", { name: "Join Everyday AI practice" })
@@ -207,7 +208,7 @@ test("[L46] deletion withholds own membership listing; leaving, forged, expired 
   await expect(
     page.getByRole("button", { name: "Join Clearer professional work" }),
   ).toBeVisible();
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const blocked = await page.request.post("/circles/professional-work/join", {
     headers: { Origin: "https://wrong.example" },
     form: { csrf },

@@ -5,6 +5,10 @@ import { test, expect, type Page } from "@playwright/test";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 const pool = testPool();
 const origin = browserOrigin;
@@ -163,8 +167,9 @@ test("[L91] retained assignment submissions stay separate, exact and private on 
         learner.getByRole("heading", { name: "Attempt unavailable" }),
       ).toBeVisible();
       await learner.goto("/learn");
+      await openLearningProfile(learner);
       await chooseLearningGoal(learner, goal === "work" ? "everyday" : "work");
-      await learner.getByRole("button", { name: "Save my direction" }).click();
+      await saveLearningProfile(learner);
       await publish(actors, sample(id, 2, `${title} replacement`));
       await learner.goto("/progress");
       await expect(rows).toHaveCount(3);

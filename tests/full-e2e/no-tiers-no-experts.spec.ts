@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { expect, test, type Page } from "@playwright/test";
 import { COACHING_OFFERS } from "../../src/offers.ts";
 import { reviewedContentFixture } from "../support/reviewed-content-browser.ts";
@@ -20,6 +21,10 @@ import {
   type TermsForm,
 } from "../support/coaching-terms-journey.ts";
 import { staffTrace } from "../support/staff-trace.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 // What can and can't be obtained under the owner's 9 and 10 November 2026
 // decisions: there are no tiers and nothing can be bought; qualified tailored
@@ -106,7 +111,7 @@ test("[F-BUILD-09-C] no tier can be bought, and capacity and scope are stated as
       // purchase route at all.
       const csrf = await member
         .goto(f.origin + "/account/billing")
-        .then(() => member.locator('input[name="csrf"]').first().inputValue());
+        .then(() => formToken(member));
       for (const offer of COACHING_OFFERS) {
         const sent = await postForm(member, f.origin, "/readiness/offers", {
           csrf,
@@ -141,7 +146,7 @@ test("[F-BUILD-09-C] no tier can be bought, and capacity and scope are stated as
       // The student can't set terms for themselves.
       const csrf = await member
         .goto(f.origin + "/account/billing")
-        .then(() => member.locator('input[name="csrf"]').first().inputValue());
+        .then(() => formToken(member));
       const own = await member.request.post(
         `${f.origin}/operator/coaching/${reference}/terms`,
         {
@@ -304,10 +309,7 @@ test("[F-ECO-07-B] an administrator sets the member's terms version; the member 
           .getByRole("button", { name: /accept|agree|confirm/i }),
       ).toHaveCount(0);
       // The member can't save or replace a version themselves.
-      const csrf = await member
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const csrf = await formToken(member);
       expect(
         (
           await postForm(
@@ -353,8 +355,9 @@ test("[F-ECO-07-B] an administrator sets the member's terms version; the member 
       // direction leaves the terms and the units exactly as they were.
       expect(await background()).toBe("professional");
       await member.goto(f.origin + "/learn");
+      await openLearningProfile(member);
       await member.getByLabel("Your starting point").selectOption("technical");
-      await member.getByRole("button", { name: "Save my direction" }).click();
+      await saveLearningProfile(member);
       // The change of background really was saved before anything is compared.
       await expect.poll(background).toBe("technical");
       await member.goto(f.origin + "/readiness/offers");

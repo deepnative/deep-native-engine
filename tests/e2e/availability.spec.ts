@@ -134,7 +134,8 @@ test("[L64] private sample availability respects verified coverage, time zone an
         })
       ).status(),
     ).toBe(403);
-    const dashboard = await page.request.get("/learn");
+    // #846: the learning page holds no form of its own; My account does.
+    const dashboard = await page.request.get("/account");
     const csrf = (await dashboard.text()).match(
       /name="csrf" value="([a-f0-9]+)"/,
     )![1]!;

@@ -53,7 +53,14 @@ it.each([
   [
     "profile",
     "/profile",
-    { background: "professional", goal: "work", timezone: "UTC" },
+    // #846: a complete profile, so the save itself is what waits; a refused
+    // one now shows My account without touching the profile.
+    {
+      display_name: "Sample learner",
+      background: "professional",
+      goal: "work",
+      timezone: "UTC",
+    },
   ],
   ["starter", "/exercise", answer],
   ["career", "/career/enable", { confirm: "yes" }],

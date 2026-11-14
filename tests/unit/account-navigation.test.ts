@@ -20,7 +20,7 @@ it("NAV-01 exposes account, logout, coaching and administration in shared naviga
     )?.[1];
   const navigation = nav("student");
   expect(navigation).toBeDefined();
-  expect(navigation).toContain('href="/account/coaching">Coaching hours</a>');
+  expect(navigation).toContain('href="/account/coaching">Coaching</a>');
   for (const path of [
     "/learn",
     "/account",
@@ -29,7 +29,7 @@ it("NAV-01 exposes account, logout, coaching and administration in shared naviga
   ])
     expect(navigation).toContain(`href="${path}"`);
   // ROLES-02: Administration belongs to the admin view's header.
-  expect(nav("admin")).toContain('href="/admin">Administration</a>');
+  expect(nav("admin")).toContain('href="/admin">Admin</a>');
   const guidance = (view: AccountRole) =>
     withAdministration(true, () =>
       withAccountView(views(view), () => starterGuidanceExample("everyday")),
@@ -67,8 +67,9 @@ it.each(["linked", "unlinked", "unavailable"] as const)(
     expect(main).toMatch(
       /<section class="account-recovery"[^>]*><h2>(Verified email linked|This browser only|Email recovery is unavailable)<\/h2>/,
     );
-    const links = html.match(/<p class="account-links">([\s\S]*?)<\/p>/)?.[1];
-    expect(links?.match(/<a class="button secondary" href=/g)).toHaveLength(5);
+    // #846 ACCOUNT-01: the header carries the destinations; no button row.
+    expect(main).not.toContain('class="account-links"');
+    expect(main.match(/<a class="button secondary" href=/g)).toHaveLength(1);
   },
 );
 it.each(["linked", "unlinked", "unavailable"] as const)(
@@ -82,7 +83,7 @@ it.each(["linked", "unlinked", "unavailable"] as const)(
       );
     expect(withAdministration(false, render)).not.toContain('href="/admin"');
     expect(withAdministration(false, render)).toContain(
-      'href="/account/coaching">Coaching hours</a>',
+      'href="/account/coaching">Coaching</a>',
     );
     expect(withAdministration(true, render)).toContain('href="/admin"');
   },
@@ -92,17 +93,16 @@ it.each([
   ["/learn/notebooks", "Learning"],
   ["/account", "Account"],
   ["/account/purchases", "Account"],
-  ["/account/coaching", "Coaching hours"],
-  ["/account/coaching/save", "Coaching hours"],
-  ["/admin", "Administration"],
-  ["/operator/coaching", "Administration"],
+  ["/account/coaching", "Coaching"],
+  ["/account/coaching/save", "Coaching"],
+  ["/admin", "Admin"],
+  ["/operator/coaching", "Admin"],
   ["/account/sign-out", "Sign out"],
   ["/readiness", null],
 ])("NAV-07 marks only the header destination that owns %s", (path, label) => {
   const html = withAdministration(true, () =>
-    withAccountView(
-      views(label === "Administration" ? "admin" : "student"),
-      () => withCurrentPath(path, () => page("Page", "<h1>Page</h1>")),
+    withAccountView(views(label === "Admin" ? "admin" : "student"), () =>
+      withCurrentPath(path, () => page("Page", "<h1>Page</h1>")),
     ),
   );
   const current = [...html.matchAll(/aria-current="page">([^<]+)</g)].map(
@@ -143,19 +143,19 @@ it.each(statuses)(
     expect(local).toContain("This preview does not schedule appointments.");
   },
 );
-it.each([
-  ["linked", false, "To come back, sign in with your verified email."],
-  ["unlinked", true, "To come back, sign in with your email and password."],
-] as const)(
-  "ACCT-PLAIN-03 %s sign-out text keeps its promises in plain language",
-  (status, passwordSet, returning) => {
-    const text = accountText(status, passwordSet);
-    expect(text).toContain(
-      "This signs you out of this browser. Any copy of this sign-in saved elsewhere stops working too.",
+it.each(statuses)(
+  "ACCT-PLAIN-03/#846 ACCOUNT-01 the %s account page (password %s) leaves signing out to the header",
+  (status, passwordSet) => {
+    const html = accountPage(
+      member as never,
+      "a".repeat(64),
+      status,
+      passwordSet,
     );
-    expect(text).toContain("Your saved work stays in this account.");
-    expect(text).toContain(returning);
-    expect(text).toContain("We won’t email you unless you ask us to.");
+    const main = html.match(/<main id="main">([\s\S]*)<\/main>/)![1]!;
+    expect(main).not.toContain("Sign out");
+    expect(main).not.toContain("/account/sign-out");
+    expect(html).toContain('<a href="/account/sign-out">Sign out</a>');
   },
 );
 it.each(statuses)(
@@ -217,13 +217,11 @@ it.each([true, false])(
     if (hosted) expect(section).not.toMatch(/preview/i);
   },
 );
-it("ERASE-06 the learning path's delete form links to what stays", () => {
+it("ERASE-06/#846 PROFILE-01 the learning path has no delete form of its own", () => {
   const html = withHosting(true, () =>
     dashboard(member as never, undefined, "a".repeat(64)),
   );
-  const form = html.slice(html.lastIndexOf('<p class="small deletion-note">'));
-  expect(form.replace(/<[^>]+>/g, "")).toMatch(
-    /^Some records stay after you delete your account\. See what stays\.Delete my account and all its saved work\./,
-  );
-  expect(form).toContain('<a href="/account#deletion-kept">See what stays</a>');
+  expect(html).not.toContain('action="/delete"');
+  expect(html).not.toContain("deletion-note");
+  expect(html).not.toContain("Delete my account");
 });

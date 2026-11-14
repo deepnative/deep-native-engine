@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { rmSync, writeFileSync } from "node:fs";
@@ -38,7 +39,7 @@ async function memberId(context: BrowserContext) {
 async function submittedEvidence(page: Page, context: BrowserContext) {
   await onboard(page);
   const ownerId = await memberId(context);
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const bytes = Buffer.from(
     `Invented private BUILD-02 submission ${randomBytes(8).toString("hex")}.`,
   );
@@ -141,10 +142,7 @@ test("[F-BUILD-02-A] member keeps original and revised evidence separately priva
       await expect(
         page.getByText("Submitted locally", { exact: false }),
       ).toBeVisible();
-      const outsiderCsrf = await outsiderPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const outsiderCsrf = await formToken(outsiderPage);
       const denied = await outsiderPage.request.post(
         `/api/evidence/${originalId}/download-link`,
         { headers: { Origin: origin, "X-CSRF-Token": outsiderCsrf } },
@@ -281,10 +279,7 @@ test("[F-BUILD-02-A] member keeps original and revised evidence separately priva
       ]);
       const reviewerPage = await reviewer.newPage();
       await reviewerPage.goto("/");
-      const reviewerCsrf = await reviewerPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const reviewerCsrf = await formToken(reviewerPage);
       const linkFor = (id: string) =>
         reviewerPage.request.post(`/api/evidence/${id}/download-link`, {
           headers: { Origin: origin, "X-CSRF-Token": reviewerCsrf },
@@ -334,10 +329,7 @@ test("[F-BUILD-02-A] member keeps original and revised evidence separately priva
       const noRevisionLink = await linkFor(revisedId);
       expect(noRevisionLink.status()).toBe(403);
       expect((await noRevisionLink.text()).includes(revisedBytes)).toBe(false);
-      const outsiderCsrf = await outsiderPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const outsiderCsrf = await formToken(outsiderPage);
       const outsiderRevision = await outsiderPage.request.post(
         `/api/evidence/${revisedId}/download-link`,
         { headers: { Origin: origin, "X-CSRF-Token": outsiderCsrf } },
@@ -436,10 +428,7 @@ test("[F-BUILD-02-C] another member and an unassigned coach cannot read submitte
     await onboard(outsiderPage);
     expect(await memberId(outsider)).not.toBe(ownerId);
     await requiredCheck(1, async () => {
-      const outsiderCsrf = await outsiderPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const outsiderCsrf = await formToken(outsiderPage);
       const noLink = await outsiderPage.request.post(
         `/api/evidence/${evidenceId}/download-link`,
         { headers: { Origin: origin, "X-CSRF-Token": outsiderCsrf } },
@@ -474,10 +463,7 @@ test("[F-BUILD-02-C] another member and an unassigned coach cannot read submitte
         [coachId, ownerId],
       );
       expect(grants.rowCount).toBe(0);
-      const coachCsrf = await coachPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const coachCsrf = await formToken(coachPage);
       const noLink = await coachPage.request.post(
         `/api/evidence/${evidenceId}/download-link`,
         { headers: { Origin: origin, "X-CSRF-Token": coachCsrf } },
@@ -549,10 +535,7 @@ test("[F-BUILD-02-D] reviewer assignment revocation and capability expiry deny s
     ]);
     const reviewerPage = await reviewer.newPage();
     await reviewerPage.goto("/");
-    const reviewerCsrf = await reviewerPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const reviewerCsrf = await formToken(reviewerPage);
     const linkFor = () =>
       reviewerPage.request.post(`/api/evidence/${evidenceId}/download-link`, {
         headers: { Origin: origin, "X-CSRF-Token": reviewerCsrf },

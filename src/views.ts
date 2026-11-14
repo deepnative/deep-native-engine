@@ -26,10 +26,13 @@ import {
 import type { LandingNotice } from "./landing-notice.ts";
 import {
   BACKUP_RETENTION,
+  BACKUP_RETENTION_DAYS,
   BILLING_RETAINED_FIELDS,
   BILLING_RETENTION,
+  BILLING_RETENTION_YEARS,
   billingRetainedUntil,
 } from "./retention.ts";
+import type { BillingProfile } from "./billing-profile.ts";
 import { administrationLink } from "./administration-presentation.ts";
 import { accountView, viewSwitch } from "./account-view.ts";
 import { navigationLink } from "./navigation-presentation.ts";
@@ -132,6 +135,11 @@ export function escape(value: string) {
 export function deletionKept() {
   return `<div id="deletion-kept"><p>Deleting removes your profile, learning records, saved work, files and sharing choices, and signs you out on every browser.</p><p>Some records stay after deletion:</p><ul><li>${BILLING_RETENTION} ${BILLING_RETAINED_FIELDS}</li><li>Change history entries for staff changes to your coaches or billing, with your student reference and any amount, but no name or email.</li><li>A note that an administrator looked up your email address, which keeps a fingerprint of the address, not the address.</li><li>Counts that limit repeated sign-in and email attempts, tied to a fingerprint of your email address. Later sign-in activity on the site clears them once they are a day or 30 days old.</li><li>A coach or administrator role you were given stays with your email address until an administrator removes it.</li></ul><p>${BACKUP_RETENTION}</p></div>`;
 }
+// ACCOUNT-01 (#846): two periods beside the control; the full list is one
+// click away, still ahead of the confirmation.
+function deletionSummary() {
+  return `<p>This cannot be undone. Issued invoices stay for ${BILLING_RETENTION_YEARS} years for tax records, and backup copies for up to ${BACKUP_RETENTION_DAYS} days.</p><details class="deletion-details"><summary>What stays after deletion</summary>${deletionKept()}</details>`;
+}
 function deleteAccountForm(csrf: string) {
   return `<form class="delete-form" method="post" action="/delete">${hidden(csrf)}<label class="check"><input type="checkbox" name="confirm" value="yes" required><span>${hostingText("Delete my local preview and all its saved work.", "Delete my account and all its saved work.")}</span></label><button class="secondary" type="submit">${hostingText("Delete this preview", "Delete my account")}</button></form>`;
 }
@@ -144,21 +152,31 @@ function landingNotice(notice?: LandingNotice) {
     return `<p class="notice" role="status">Sign in or create an account to open that page.${signInAvailable() ? ' <a href="/email/sign-in">Sign in</a>' : ""}</p>`;
   return "";
 }
+// HEADER-01 (#846): every role reads the same labels in the same order. The
+// coaching link follows the view: a coach's students, else the member's hours.
+const VIEW_NAMES = { student: "Student", coach: "Coach", admin: "Admin" };
+function memberLinks(account: string) {
+  const current = accountView();
+  const view = current?.view ?? "student";
+  const coaching =
+    view === "coach" || (view === "admin" && current!.roles.includes("coach"))
+      ? navigationLink("/coach", "Coaching")
+      : navigationLink("/account/coaching", "Coaching");
+  // One closed control holds the unchanged switch form, so the header keeps
+  // its height however many views the account has.
+  const forms = viewSwitch();
+  const menu = forms
+    ? `<details class="view-menu"><summary>View: ${VIEW_NAMES[view]}</summary>${forms}</details>`
+    : "";
+  return `${coaching}${account}${view === "admin" ? navigationLink("/admin", "Admin") : ""}${menu}${navigationLink("/account/sign-out", "Sign out")}`;
+}
 export function accountActionLinks() {
   if (!signedIn())
     // CREATEACCT-01: newcomers find account creation beside sign-in.
     return signInAvailable()
       ? `${navigationLink("/email/sign-in", "Sign in")}<a class="nav-create" href="/#your-path">Create account</a>`
       : "";
-  // ROLES-01..03: each view has its own link; the switch offers the others.
-  const view = accountView()?.view ?? "student";
-  const own =
-    view === "coach"
-      ? navigationLink("/coach", "Coaching")
-      : view === "admin"
-        ? navigationLink("/admin", "Administration")
-        : navigationLink("/account/coaching", "Coaching hours");
-  return `${own}${viewSwitch()}${navigationLink("/account/sign-out", "Sign out")}`;
+  return memberLinks("");
 }
 
 // REALINPUT-01: what replaces the invented-information checkbox when hosted.
@@ -169,7 +187,7 @@ function inputConfirmation(local: string) {
 }
 
 export function page(title: string, body: string) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a>${demoBanner()}<header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><nav class="main-navigation" aria-label="Main navigation">${navigationLink("/learn", "Learning")}${signedIn() ? navigationLink("/account", "Account") : ""}${accountActionLinks()}</nav></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><nav class="footer-links" aria-label="Site links"><a href="/programs">Explore programs</a><a href="/my-courses">My courses</a><a href="/circles">${hostingText("Local circles", "Learning circles")}</a><a href="/workflows">Workflow demonstrations</a><a href="/readiness">Service status</a><a href="/terms">Terms and privacy</a></nav></footer></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)} · Deep Native Engine</title><link rel="stylesheet" href="/assets/style.css"></head><body><a class="skip" href="#main">Skip to content</a>${demoBanner()}<header class="site-header"><a class="brand" href="/"><span class="brand-mark" aria-hidden="true">d/n</span> deep native<span class="brand-light">engine</span></a><nav class="main-navigation" aria-label="Main navigation">${signedIn() ? `${navigationLink("/learn", "Learning")}${memberLinks(navigationLink("/account", "Account"))}` : accountActionLinks()}</nav></header><main id="main">${body}</main><footer><strong>Learn something. Make something. Share what works.</strong><nav class="footer-links" aria-label="Site links"><a href="/programs">Explore programs</a>${signedIn() ? '<a href="/my-courses">My courses</a>' : ""}<a href="/circles">${hostingText("Local circles", "Learning circles")}</a><a href="/workflows">Workflow demonstrations</a><a href="/readiness">Service status</a><a href="/terms">Terms and privacy</a></nav></footer></body></html>`;
 }
 export function memberExportPage(
   payload: MemberExportPayload,
@@ -411,7 +429,7 @@ export function availabilityPage(
   };
   return page(
     "Optional service availability",
-    `<nav class="breadcrumb"><a href="/learn">← Your learning path</a></nav><section class="error-page"><p class="eyebrow">${hostingText("PRIVATE LOCAL PREVIEW", "PRIVATE LEARNING")} · NO BOOKINGS</p><h1>Optional service availability</h1><p><a href="/member/test-units">${hostingText("View your local test units", "View your test units")}</a> before making a sample request.</p><p>This page shows sample appointment windows only. Real expert capacity, paid access, provider notification, calendar/email delivery, cancellation and service fulfillment are unavailable.</p><p>A sample hold reserves ${minutes} explicitly seeded test minutes for at most 10 minutes and always ends at least one second before the window starts. This test-only deadline creates no commercial cancellation or no-show term.</p>${error ? `<div class="notice" role="alert"><p>${escape(error)}</p></div>` : ""}${display ? `<p>Times shown for ${escape(zone)}. Each window also shows its exact UTC time.</p>` : '<p>Choose a valid time zone in your <a href="/learn">profile form</a> to see local appointment times.</p>'}${slots.length && display ? `<ul>${slots.map((slot) => `<li><strong>${escape(DOMAINS[slot.domain as Domain] ?? slot.domain)} · ${escape(slot.serviceType)}</strong><br><time datetime="${slot.startsAt.toISOString()}">${escape(localSlotTime(slot.startsAt, zone) ?? readableTime(slot.startsAt))}</time> to <time datetime="${slot.endsAt.toISOString()}">${escape(localSlotTime(slot.endsAt, zone) ?? readableTime(slot.endsAt))}</time> · ${readableRange(slot.startsAt, slot.endsAt)} · sample window, not bookable${slotForm(slot)}</li>`).join("")}</ul>` : '<p role="status">No sample windows can be shown right now. Your shared learning path remains available.</p>'}<h2>Your private sample receipts</h2>${holds?.snapshot.receipts.length ? `<ul>${holds.snapshot.receipts.map((item) => `<li><a href="/availability/holds/${escape(item.id)}">Sample hold receipt · ${escape(item.state)} · ${timeTag(item.startsAt)}</a></li>`).join("")}</ul>` : "<p>No sample hold receipts are currently visible for your session.</p>"}<p>Availability may change. A listed window is never a reservation. Background, interests and shared learning membership grant no service minutes.</p><a href="/learn">Continue shared learning</a></section>`,
+    `<nav class="breadcrumb"><a href="/learn">← Your learning path</a></nav><section class="error-page"><p class="eyebrow">${hostingText("PRIVATE LOCAL PREVIEW", "PRIVATE LEARNING")} · NO BOOKINGS</p><h1>Optional service availability</h1><p><a href="/member/test-units">${hostingText("View your local test units", "View your test units")}</a> before making a sample request.</p><p>This page shows sample appointment windows only. Real expert capacity, paid access, provider notification, calendar/email delivery, cancellation and service fulfillment are unavailable.</p><p>A sample hold reserves ${minutes} explicitly seeded test minutes for at most 10 minutes and always ends at least one second before the window starts. This test-only deadline creates no commercial cancellation or no-show term.</p>${error ? `<div class="notice" role="alert"><p>${escape(error)}</p></div>` : ""}${display ? `<p>Times shown for ${escape(zone)}. Each window also shows its exact UTC time.</p>` : '<p>Choose a valid time zone in your <a href="/account#timezone">profile form</a> to see local appointment times.</p>'}${slots.length && display ? `<ul>${slots.map((slot) => `<li><strong>${escape(DOMAINS[slot.domain as Domain] ?? slot.domain)} · ${escape(slot.serviceType)}</strong><br><time datetime="${slot.startsAt.toISOString()}">${escape(localSlotTime(slot.startsAt, zone) ?? readableTime(slot.startsAt))}</time> to <time datetime="${slot.endsAt.toISOString()}">${escape(localSlotTime(slot.endsAt, zone) ?? readableTime(slot.endsAt))}</time> · ${readableRange(slot.startsAt, slot.endsAt)} · sample window, not bookable${slotForm(slot)}</li>`).join("")}</ul>` : '<p role="status">No sample windows can be shown right now. Your shared learning path remains available.</p>'}<h2>Your private sample receipts</h2>${holds?.snapshot.receipts.length ? `<ul>${holds.snapshot.receipts.map((item) => `<li><a href="/availability/holds/${escape(item.id)}">Sample hold receipt · ${escape(item.state)} · ${timeTag(item.startsAt)}</a></li>`).join("")}</ul>` : "<p>No sample hold receipts are currently visible for your session.</p>"}<p>Availability may change. A listed window is never a reservation. Background, interests and shared learning membership grant no service minutes.</p><a href="/learn">Continue shared learning</a></section>`,
   );
 }
 
@@ -915,7 +933,7 @@ export function milestonesPage(
 ) {
   return page(
     "Your goals and milestones",
-    `<section class="error-page milestone-page"><p class="eyebrow">${hostingText("PRIVATE LOCAL PREVIEW", "PRIVATE LEARNING")} · NO OUTBOUND REMINDERS</p><h1>Your goals and milestones</h1><p class="lead">Record one practical step at a time. Evidence and completion here are your own notes, not a verified credential or commercial result.</p><p>Local reminder time zone: <strong>${escape(member.timezone ?? "Not set")}</strong>. A date and time only appear here; no email, device notification or appointment is sent. Saving an edited reminder uses your current profile time zone. <a href="/learn">Change your time zone in your learning direction</a>.</p>${notice(errors)}<h2>Saved milestones</h2>${
+    `<section class="error-page milestone-page"><p class="eyebrow">${hostingText("PRIVATE LOCAL PREVIEW", "PRIVATE LEARNING")} · NO OUTBOUND REMINDERS</p><h1>Your goals and milestones</h1><p class="lead">Record one practical step at a time. Evidence and completion here are your own notes, not a verified credential or commercial result.</p><p>Local reminder time zone: <strong>${escape(member.timezone ?? "Not set")}</strong>. A date and time only appear here; no email, device notification or appointment is sent. Saving an edited reminder uses your current profile time zone. <a href="/account#timezone">Change your time zone in your learning profile</a>.</p>${notice(errors)}<h2>Saved milestones</h2>${
       items.length
         ? `<ul class="milestone-list">${items
             .map((item) => {
@@ -1082,28 +1100,54 @@ function profileErrorSummary(
 ) {
   return `<div class="notice" role="alert"><h3>${escape(heading)}</h3><p>Your changes were not saved. Correct the marked fields, then save again.</p><ul>${edit.errors.map((error) => `<li><a href="#${error.field}">${escape(error.message)}</a></li>`).join("")}</ul></div>`;
 }
+/** FOLD-02 (#846): what the billing form on My account starts from. */
+export interface AccountBilling {
+  profile: BillingProfile;
+  outcome?: keyof typeof BILLING_OUTCOMES;
+}
+const BILLING_OUTCOMES = {
+  saved: "Billing details saved.",
+  invalid:
+    "Billing details not saved. Enter a name and a valid email address. A company name is one line of up to 200 characters.",
+  conflict:
+    "Billing details not saved because they changed in another window. Check the details below, then save again.",
+  email: "Add an email to save billing details.",
+};
+export function billingOutcome(
+  value: unknown,
+): keyof typeof BILLING_OUTCOMES | undefined {
+  return typeof value === "string" && Object.hasOwn(BILLING_OUTCOMES, value)
+    ? (value as keyof typeof BILLING_OUTCOMES)
+    : undefined;
+}
+function billingSection(billing: AccountBilling, csrf: string) {
+  const { profile, outcome } = billing;
+  const message = outcome
+    ? `<p class="notice" role="${outcome === "saved" ? "status" : "alert"}">${BILLING_OUTCOMES[outcome]}</p>`
+    : "";
+  return `<section class="account-billing" id="billing"><h2>Billing details</h2>${message}<p>Shown on your invoices.</p><form method="post" action="/account/billing">${hidden(csrf)}<input type="hidden" name="revision" value="${profile.revision}"><label for="billing_name">Invoice recipient name</label><input type="text" id="billing_name" name="name" autocomplete="name" maxlength="200" value="${escape(profile.name)}" required><label for="billing_company">Company name (optional)</label><input type="text" id="billing_company" name="company" autocomplete="organization" maxlength="200" value="${escape(profile.company ?? "")}"><label for="billing_email">Invoice email (optional)</label><input type="email" id="billing_email" name="email" autocomplete="email" maxlength="254" value="${escape(profile.email)}" aria-describedby="billing-email-help"><p id="billing-email-help" class="small">If blank, we use the email already saved here or your verified sign-in email. Never enter card or bank details.</p><button type="submit">Save billing details</button></form><p><a href="/account/purchases">Invoices</a></p></section>`;
+}
 export function accountPage(
   learner: Learner,
   csrf: string,
   emailStatus: "linked" | "unlinked" | "unavailable",
   passwordSet = false,
   sharingPage = false,
+  extra: { billing?: AccountBilling; profileState?: ProfileEditResult } = {},
 ) {
+  // ACCOUNT-01: one sentence and plain links for how this person signs in.
   const recovery =
     emailStatus === "unlinked" && passwordSet
-      ? '<section class="account-recovery"><h2>Email not yet verified</h2><p>You can sign in on any device with your email and password. Open the link we emailed you to verify the address; until then, administrator features that need a verified email stay unavailable.</p><p class="account-links"><a class="button secondary" href="/email/attach">Send a new verification link</a> <a class="button secondary" href="/account/password">Password sign-in</a></p></section>'
+      ? '<section class="account-recovery"><h2>Email not yet verified</h2><p>You sign in with your email and password. Open the link we emailed you to verify the address.</p><p class="account-inline-links"><a href="/email/attach">Send a new verification link</a> <a href="/account/password">Password sign-in</a></p></section>'
       : emailStatus === "linked"
-        ? '<section class="account-recovery"><h2>Verified email linked</h2><p>You can return to this same saved work on another device using the email you verified, with an email link or a password.</p><p class="account-links"><a class="button secondary" href="/account/password">Password sign-in</a> <a class="button secondary" href="/email/sign-in">Email sign-in</a></p></section>'
+        ? '<section class="account-recovery"><h2>Verified email linked</h2><p>You sign in with the email you verified, by email link or password.</p><p class="account-inline-links"><a href="/account/password">Password sign-in</a> <a href="/email/sign-in">Email sign-in</a></p></section>'
         : emailStatus === "unlinked"
-          ? '<section class="account-recovery"><h2>This browser only</h2><p>Link and verify an email before you clear your browser data or change devices, so you can keep this same saved work.</p><p><a class="button secondary" href="/email/attach">Link an email</a></p></section>'
-          : '<section class="account-recovery"><h2>Email recovery is unavailable</h2><p>Stay signed in on this browser to keep access to your saved learning. We can’t check email recovery right now.</p></section>';
-  const signOut =
-    emailStatus === "linked" || passwordSet
-      ? `<section><h2>Sign out of your account</h2><p>This signs you out of this browser. Any copy of this sign-in saved elsewhere stops working too. Other browsers where you signed in stay signed in. Your saved work stays in this account. To come back, sign in with ${emailStatus === "linked" ? "your verified email" : "your email and password"}. We won’t email you unless you ask us to.</p><form method="post" action="/account/sign-out">${hidden(csrf)}<button type="submit">Sign out</button></form></section>`
-      : '<section><h2>Sign out of your account</h2><p>Signing out does not delete your saved work. Check how you can get back in before you sign out.</p><p><a class="button secondary" href="/account/sign-out">Sign out</a></p></section>';
+          ? '<section class="account-recovery"><h2>This browser only</h2><p>Link an email before you clear your browser data or change devices, so you keep this saved work.</p><p class="account-inline-links"><a href="/email/attach">Link an email</a></p></section>'
+          : '<section class="account-recovery"><h2>Email recovery is unavailable</h2><p>Stay signed in on this browser to keep your saved learning. We can’t check email recovery right now.</p></section>';
+  const { billing, profileState } = extra;
   return page(
-    "My account",
-    `<div class="account-page"><div class="account-intro"><p class="eyebrow">Signed in</p><h1>My account</h1>${learner.displayName ? `<p class="member-display-name">${escape(learner.displayName)}</p>` : '<p role="status"><a href="#display_name">Add your display name</a> so administrators can recognize your account. Your saved work and access stay available.</p>'}<p>Student reference: <code>${escape(learner.id)}</code>. Share this reference with course support when arranging your courses.</p><p>Your profile and saved work belong to this account. Changing your preferences does not create another account or give you staff or paid access.</p><p class="account-links"><a class="button secondary" href="/learn">Return to learning</a> <a class="button secondary" href="/account/purchases">Courses and invoices</a> <a class="button secondary" href="/account/billing">Billing recipient</a> <a class="button secondary" href="/account/coaching">Coaching hours</a>${sharingPage ? ' <a class="button secondary" href="/account/sharing">Who can see my work</a>' : ""}${administrationLink(' <a class="button secondary" href="/admin">Administration</a>')}</p></div>${recovery}${signOut}<section class="account-export"><h2>Your records</h2><p>Download a copy of your profile, learning and other saved records.</p><p><a class="button secondary" href="/member/export">${privateRecordsLabel()}</a></p></section><section class="account-delete"><h2>Delete your account</h2>${deletionKept()}${deleteAccountForm(csrf)}</section><section class="profile-form"><h2>Your learning profile</h2><p>Update your goals and preferences. You describe your own experience; no job title or payment is required.</p><form method="post" action="/profile">${hidden(csrf)}${profileFields(learner)}<button type="submit">Save my profile</button></form></section></div>`,
+    profileState ? "Error in your profile" : "My account",
+    `<div class="account-page"><div class="account-intro"><h1>My account</h1>${learner.displayName ? `<p class="member-display-name">${escape(learner.displayName)}</p>` : '<p role="status"><a href="#display_name">Add your display name</a> so administrators can recognize your account.</p>'}<p class="small">Student reference: <code>${escape(learner.id)}</code>. Give this to course support when arranging courses.</p>${administrationLink('<p class="account-inline-links"><a href="/admin">Administration</a></p>')}</div>${recovery}<section class="profile-form" id="profile"><h2>Your learning profile</h2><form method="post" action="/profile">${hidden(csrf)}${profileState ? profileErrorSummary(profileState) : ""}${profileFields(learner, profileState?.attempted, profileState?.errors)}<button type="submit">Save my profile</button></form></section>${billing ? billingSection(billing, csrf) : ""}${sharingPage ? '<section class="account-sharing"><p><a href="/account/sharing">Who can see my work</a></p></section>' : ""}<section class="account-data" id="your-data"><h2>Your data</h2><p><a class="button secondary" href="/member/export">${privateRecordsLabel()}</a></p><div class="account-delete"><h3>Delete your account</h3>${deletionSummary()}${deleteAccountForm(csrf)}</div></section></div>`,
   );
 }
 export function dashboard(
@@ -1114,7 +1158,6 @@ export function dashboard(
   assignments: ContentVersion[] = [],
   choice: AssignmentChoice | null = null,
   recommendedLesson: ContentVersion | null = null,
-  profileState?: ProfileEditResult,
   readiness: AssignmentReadiness[] = [],
 ) {
   if (
@@ -1138,10 +1181,8 @@ export function dashboard(
       : `<p><strong>Optional published sample lesson:</strong> ${escape(recommendedLesson.title)} · version ${recommendedLesson.version}. <a href="/library/${encodeURIComponent(recommendedLesson.id)}">Open current sample lesson</a>.</p><p class="small">This catalog sample has no scheduled duration or qualified curriculum sign-off. Opening it records activity; it does not assess your skill.</p>`
     : '<p role="status">No additional published sample lesson currently fits your direction and completed prerequisites. Your starter lesson remains available.</p>';
   return page(
-    profileState?.errors.length
-      ? "Error in your profile"
-      : "Your learning path",
-    `<section class="dashboard-head"><div><p class="small">Signed in · <a href="/account">My account</a></p><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><p class="small">No-charge foundation access. <a href="/readiness/offers">Your access details</a>.</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>starter exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment. Sample lessons are saved in your <a href="/progress">private learning activity</a>.</span></aside></section><section class="learning-plan" aria-labelledby="learning-plan-title"><p class="eyebrow">${hostingText("PRIVATE FOUNDATION PREVIEW", "YOUR PRIVATE PLAN")}</p><h2 id="learning-plan-title">Your starter plan</h2><p>Focus: ${escape(plan.focus)}. ${escape(plan.guidance)}</p><p>Weekly time: ${escape(time ?? "Not specified")} · Time zone: ${escape(learner.timezone ?? "Not specified")} · AI experience: self-reported ${escape(learner.experience ? EXPERIENCE[learner.experience] : "Not specified")}</p>${plan.status ? `<p role="status">${escape(plan.status)}</p>` : ""}${plan.steps.length ? `<ol>${plan.steps.map((step) => `<li>${step.minutes} minutes · ${escape(step.action)}</li>`).join("")}</ol>` : ""}${plan.nextSession ? `<p>${escape(plan.nextSession)}${plan.nextHref ? ` <a href="${plan.nextHref}">${escape(plan.nextLinkLabel!)}</a>` : ""}</p>` : ""}${plan.exploratory ? `<p>${escape(plan.exploratory)}</p>` : ""}<p>${plan.status ? "Your completed starter exercise remains private and self-assessed." : hostingText("The timed steps use only the local starter lesson.", "The timed steps use only the starter lesson.") + " Revisit or skip steps you already completed."} These suggestions do not book coaching or certify a skill.</p><section aria-label="Suggested next sample lesson"><h3>Explore another sample lesson</h3>${nextLesson}</section></section><section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? (progress?.withdrawn_at ? "View completion" : "Review your work") : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card" aria-label="${hostingText("Private local participation", "Private participation")}"><p class="eyebrow">${hostingText("PRIVATE LOCAL PARTICIPATION", "PRIVATE PARTICIPATION")}</p><h2>Explore. Practise.<br>Contribute.</h2><p>${memberContributionsOn() ? `Try ${hostingText("local ", "")}learning circles, read manual workflow examples or draft a private contribution. Contributions stay private until editorial acceptance and your separate choice to share them with signed-in members.` : `Try ${hostingText("local ", "")}learning circles, read manual workflow examples or draft a private sample contribution. Use invented information.`}</p><ul><li><a href="/circles">${hostingText("Explore local circles", "Explore learning circles")}</a></li><li><a href="/workflows">Read workflow demonstrations</a></li><li><a href="/contribute">Draft a private contribution</a></li>${memberContributionsOn() ? '<li><a href="/contributions">Read member contributions</a></li>' : ""}</ul><p>Joining does not share your private evidence or grant staff access. Circle discussion requires a separate sharing choice.</p><p>Optional courses and monthly coaching are arranged separately through My account. ${memberContributionsOn() ? "Live community services remain pending." : "Live community services and reviewed publication remain pending."}</p></aside></section>${privatePracticeReturn()}${assignmentSection(assignments, choice, csrf)}${assignmentPreparationSection(readiness)}<section class="learning-links" aria-label="More on your learning path"><div><h2>Learn and plan</h2><ul><li><a href="/library">Browse published learning library</a></li><li><a href="/milestones">Plan goals and milestones</a></li><li><a href="/career">Explore optional career planning</a></li></ul></div><div><h2>Your work</h2><ul><li><a href="/contribute">${memberContributionsOn() ? "Draft a private contribution" : "Draft a private sample contribution"}</a></li><li><a href="/evidence">Manage private evidence</a></li><li><a href="/evidence">Find feedback on your work</a></li><li><a href="/progress">View private learning activity</a></li></ul></div><div><h2>Support and events</h2><ul><li><a href="/tailored-review">Check tailored-review availability</a></li><li><a href="/availability">View sample appointment windows</a></li><li><a href="/events">${hostingText("Explore local events", "Explore sample events")}</a></li><li><a href="/support">Private support</a></li></ul></div></section><p><a href="/member/export">${hostingText("Download my structured preview records", "Download my structured records")}</a>. You get JSON files with your current profile, learning, plans and saved proposal records. Evidence samples download separately. Each file holds up to 100 records and 256 KiB, and shows your records as they are when you download it. It includes when staff opened your work. It leaves out other audit records, billing records, files made from your evidence, copies held by service providers and backups.</p><section class="profile-form"><h2>Adjust your direction</h2><p>Change goals and interests whenever you want. Your saved exercise stays ${hostingText("with this preview", "with your account")}.</p><form method="post" action="/profile">${hidden(csrf)}${profileState ? profileErrorSummary(profileState) : notice(errors)}${profileFields(learner, profileState?.attempted, profileState?.errors)}<button type="submit">Save my direction</button></form></section><p class="small deletion-note">Some records stay after you delete your account. <a href="/account#deletion-kept">See what stays</a>.</p>${deleteAccountForm(csrf)}`,
+    "Your learning path",
+    `<section class="dashboard-head"><div><p class="small">Signed in · <a href="/account">My account</a></p><p class="eyebrow">YOUR LEARNING SPACE</p><h1>Small steps.<br><em>Useful skills.</em></h1><p class="lead">${GOALS[learner.goal]}</p><p class="small">No-charge foundation access. <a href="/readiness/offers">Your access details</a>.</p><span class="subtle-tag">${BACKGROUNDS[learner.background]}</span></div><aside class="progress-card"><p class="eyebrow">YOUR PROGRESS</p><strong>${done ? "1" : "0"}<small> / 1</small></strong><p>starter exercise completed</p><progress aria-label="Exercises completed" value="${done ? 1 : 0}" max="1"></progress><span class="small">Completion records your own practice, not a formal assessment. Sample lessons are saved in your <a href="/progress">private learning activity</a>.</span></aside></section><section class="learning-plan" aria-labelledby="learning-plan-title"><p class="eyebrow">${hostingText("PRIVATE FOUNDATION PREVIEW", "YOUR PRIVATE PLAN")}</p><h2 id="learning-plan-title">Your starter plan</h2><p>Focus: ${escape(plan.focus)}. ${escape(plan.guidance)}</p><p>Weekly time: ${escape(time ?? "Not specified")} · Time zone: ${escape(learner.timezone ?? "Not specified")} · AI experience: self-reported ${escape(learner.experience ? EXPERIENCE[learner.experience] : "Not specified")}</p>${plan.status ? `<p role="status">${escape(plan.status)}</p>` : ""}${plan.steps.length ? `<ol>${plan.steps.map((step) => `<li>${step.minutes} minutes · ${escape(step.action)}</li>`).join("")}</ol>` : ""}${plan.nextSession ? `<p>${escape(plan.nextSession)}${plan.nextHref ? ` <a href="${plan.nextHref}">${escape(plan.nextLinkLabel!)}</a>` : ""}</p>` : ""}${plan.exploratory ? `<p>${escape(plan.exploratory)}</p>` : ""}<p>${plan.status ? "Your completed starter exercise remains private and self-assessed." : hostingText("The timed steps use only the local starter lesson.", "The timed steps use only the starter lesson.") + " Revisit or skip steps you already completed."} These suggestions do not book coaching or certify a skill.</p><section aria-label="Suggested next sample lesson"><h3>Explore another sample lesson</h3>${nextLesson}</section></section><section class="learning-grid"><article class="lesson-card"><p class="eyebrow">FOUNDATION · LESSON 01</p><span class="status">${status}</span><h2>${LESSON.title}</h2><p>Context. A clear task. A way to check the answer. Three things that make a better starting point.</p><p class="small">${LESSON.minutes} minutes · No coding · Version ${LESSON.version}</p><a class="button" href="/lesson">${done ? (progress?.withdrawn_at ? "View completion" : "Review your work") : progress ? "Continue exercise" : "Open lesson"} <span aria-hidden="true">↗</span></a></article><aside class="next-card" aria-label="${hostingText("Private local participation", "Private participation")}"><p class="eyebrow">${hostingText("PRIVATE LOCAL PARTICIPATION", "PRIVATE PARTICIPATION")}</p><h2>Explore. Practise.<br>Contribute.</h2><p>${memberContributionsOn() ? `Try ${hostingText("local ", "")}learning circles, read manual workflow examples or draft a private contribution. Contributions stay private until editorial acceptance and your separate choice to share them with signed-in members.` : `Try ${hostingText("local ", "")}learning circles, read manual workflow examples or draft a private sample contribution. Use invented information.`}</p><ul><li><a href="/circles">${hostingText("Explore local circles", "Explore learning circles")}</a></li><li><a href="/workflows">Read workflow demonstrations</a></li><li><a href="/contribute">Draft a private contribution</a></li>${memberContributionsOn() ? '<li><a href="/contributions">Read member contributions</a></li>' : ""}</ul><p>Joining does not share your private evidence or grant staff access. Circle discussion requires a separate sharing choice.</p><p>Optional courses and monthly coaching are arranged separately through My account. ${memberContributionsOn() ? "Live community services remain pending." : "Live community services and reviewed publication remain pending."}</p></aside></section>${privatePracticeReturn()}${assignmentSection(assignments, choice, csrf)}${assignmentPreparationSection(readiness)}<section class="learning-links" aria-label="More on your learning path"><div><h2>Learn and plan</h2><ul><li><a href="/library">Browse published learning library</a></li><li><a href="/milestones">Plan goals and milestones</a></li><li><a href="/career">Explore optional career planning</a></li></ul></div><div><h2>Your work</h2><ul><li><a href="/contribute">${memberContributionsOn() ? "Draft a private contribution" : "Draft a private sample contribution"}</a></li><li><a href="/evidence">Manage private evidence</a></li><li><a href="/evidence">Find feedback on your work</a></li><li><a href="/progress">View private learning activity</a></li></ul></div><div><h2>Support and events</h2><ul><li><a href="/tailored-review">Check tailored-review availability</a></li><li><a href="/availability">View sample appointment windows</a></li><li><a href="/events">${hostingText("Explore local events", "Explore sample events")}</a></li><li><a href="/support">Private support</a></li></ul></div></section><p><a href="/member/export">${hostingText("Download my structured preview records", "Download my structured records")}</a>. You get JSON files with your current profile, learning, plans and saved proposal records. Evidence samples download separately. Each file holds up to 100 records and 256 KiB, and shows your records as they are when you download it. It includes when staff opened your work. It leaves out other audit records, billing records, files made from your evidence, copies held by service providers and backups.</p>${notice(errors)}<p class="profile-link"><a href="/account#profile">Change your learning profile</a></p>`,
   );
 }
 function evidenceLineage(item: OwnedEvidence) {
@@ -1477,7 +1518,7 @@ function previewEventTime(event: EventPreview, timezone?: string | null) {
   const localEnd = timezone
     ? localSlotTime(new Date(event.endsAt), timezone)
     : null;
-  return `<p>Sample schedule: <time datetime="${escape(event.startsAt)}">${escape(utc)}</time>.</p>${localStart && localEnd ? `<p>In your saved time zone, ${escape(timezone!)}: ${escape(localStart)} to ${escape(localEnd)}.</p>` : '<p>Your local time is unavailable. <a href="/learn#timezone">Set your time zone</a> in your profile to see it.</p>'}`;
+  return `<p>Sample schedule: <time datetime="${escape(event.startsAt)}">${escape(utc)}</time>.</p>${localStart && localEnd ? `<p>In your saved time zone, ${escape(timezone!)}: ${escape(localStart)} to ${escape(localEnd)}.</p>` : '<p>Your local time is unavailable. <a href="/account#timezone">Set your time zone</a> in your profile to see it.</p>'}`;
 }
 
 export function eventDiscoveryPage(

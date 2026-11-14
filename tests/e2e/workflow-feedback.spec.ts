@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { createHash, randomBytes } from "node:crypto";
@@ -55,7 +56,7 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
   const session = await store(pool).session(cookie!.value);
   expect(session.kind).toBe("active");
   const ownerId = session.kind === "active" ? session.learner.id : "";
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const note = "Invented private feedback about clearer setup steps.";
   await page.getByLabel("Your private feedback on version 3").fill(note);
   await page.getByLabel("I choose to save this note privately.").check();
@@ -174,7 +175,7 @@ test("[L71] member keeps exact-version workflow feedback private and can correct
     "UPDATE workspaces SET deleting_at=NULL WHERE owner_principal_id=$1",
     [ownerId],
   );
-  await page.goto("/learn");
+  await page.goto("/account");
   await page.getByLabel("Delete my local preview").check();
   await page.getByRole("button", { name: "Delete this preview" }).click();
   expect(

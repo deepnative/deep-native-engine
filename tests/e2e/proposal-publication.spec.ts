@@ -369,7 +369,7 @@ test("[L228] quarantine, account erasure and current staff authority prevent fut
         await a.moderator.goto(running.origin + "/moderate/proposals")
       )?.status(),
     ).toBe(403);
-    await a.owner.goto(running.origin + "/learn");
+    await a.owner.goto(running.origin + "/account");
     await a.owner
       .getByLabel("Delete my local preview and all its saved work.")
       .check();

@@ -100,9 +100,7 @@ test("[F-BUILD-09-B] an unpublished offer cannot be bought: higher tiers have no
       await expect(
         article.getByRole("button", { name: /Accept courses/ }),
       ).toHaveCount(0);
-      await expect(member.locator("body")).toContainText(
-        "No invoices have been issued to this account yet.",
-      );
+      await expect(member.locator("body")).toContainText("No invoices yet.");
     });
   } finally {
     await f.close();

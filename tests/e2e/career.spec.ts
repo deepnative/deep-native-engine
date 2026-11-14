@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
@@ -185,10 +186,7 @@ test("[L40] IT member's optional contract notes and renewal draft stay private",
     await enable(outsider);
     await expect(outsider.getByText("Invented support renewal")).toHaveCount(0);
     await expect(outsider.getByText("Sample renewal note")).toHaveCount(0);
-    const csrf = await outsider
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const csrf = await formToken(outsider);
     const denied = await outsider.request.post(action!, {
       headers: { origin },
       form: { csrf, version: "1", confirm: "yes" },

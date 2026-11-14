@@ -5,6 +5,10 @@ import { expect, test, type Page } from "@playwright/test";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 const pool = testPool();
 const origin = browserOrigin;
@@ -268,8 +272,9 @@ test("[L62] member sees only their exact-version activity with truthful progress
   await expect(page.locator("main ol > li")).toHaveCount(4);
 
   await page.goto("/learn");
+  await openLearningProfile(page);
   await chooseLearningGoal(page, "work");
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   expect(await actors.catalog.retire(actors.editor, lessonId)).toBe(true);
   await page.goto("/progress");
   await page.reload();

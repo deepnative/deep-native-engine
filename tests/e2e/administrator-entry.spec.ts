@@ -234,7 +234,7 @@ test("[L269] both verified owner identities explicitly enter finite billing admi
       await page.goto(f.origin + "/account");
       await page
         .getByRole("navigation", { name: "Main navigation" })
-        .getByRole("link", { name: "Administration", exact: true })
+        .getByRole("link", { name: "Admin", exact: true })
         .click();
       await expect(
         page.getByRole("button", { name: "Enter administration" }),
@@ -402,7 +402,7 @@ test("[L271] deliberate end and member signout revoke admin access while retaini
     await expect(
       page.getByRole("heading", { name: "Students", level: 1 }),
     ).toBeVisible();
-    await page.goto(f.origin + "/account");
+    await page.goto(f.origin + "/account/sign-out");
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     expect((await page.goto(f.origin + "/operator/invoices"))?.status()).toBe(
       403,
@@ -558,10 +558,8 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
     await expect(page.getByLabel("Invoice recipient name")).toHaveCount(0);
     await expect(page.getByLabel("Invoice email")).toHaveCount(0);
     await expect(page.getByLabel("Company name (optional)")).toHaveCount(0);
+    // #846 FOLD-02: billing details are a form on My account.
     await page.goto(f.origin + "/account");
-    await page
-      .getByRole("link", { name: "Billing recipient", exact: true })
-      .click();
     await expect(page.getByLabel("Invoice recipient name")).toHaveValue(
       "陳 Registered learner",
     );
@@ -569,17 +567,17 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
       .getByLabel("Invoice recipient name")
       .fill("Invented original recipient");
     await page
-      .getByLabel("Invoice email", { exact: true })
+      .getByLabel("Invoice email (optional)", { exact: true })
       .fill("billing@example.invalid");
     // RECIPIENT-04: the optional company is saved with the recipient.
     await page.getByLabel("Company name (optional)").fill("Invented Co Ltd");
-    await page.getByRole("button", { name: "Save billing recipient" }).click();
+    await page.getByRole("button", { name: "Save billing details" }).click();
     await expect(page.locator('input[name="revision"]')).toHaveValue("1");
     await page.waitForLoadState("load");
     await page.reload();
-    await expect(page.getByLabel("Invoice email", { exact: true })).toHaveValue(
-      "billing@example.invalid",
-    );
+    await expect(
+      page.getByLabel("Invoice email (optional)", { exact: true }),
+    ).toHaveValue("billing@example.invalid");
     await expect(page.getByLabel("Company name (optional)")).toHaveValue(
       "Invented Co Ltd",
     );
@@ -591,14 +589,14 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
     // RECIPIENT-03: the Change link edits the reusable recipient, which the
     // coaching month then uses.
     await invoiceTo.getByRole("link", { name: "Change", exact: true }).click();
-    await expect(page).toHaveURL(f.origin + "/account/billing");
+    await expect(page).toHaveURL(f.origin + "/account#billing");
     await page
       .getByLabel("Invoice recipient name")
       .fill("Invented coaching recipient");
     await page
       .getByLabel("Company name (optional)")
       .fill("Invented Coaching Co");
-    await page.getByRole("button", { name: "Save billing recipient" }).click();
+    await page.getByRole("button", { name: "Save billing details" }).click();
     await expect(page.locator('input[name="revision"]')).toHaveValue("2");
     await page.waitForLoadState("load");
     await page.goto(f.origin + "/account/coaching");
@@ -645,7 +643,7 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
       taxCents: 0,
     });
     if (p.kind !== "ready") throw Error("Missing proposal");
-    await page.goto(f.origin + "/account");
+    await page.goto(f.origin + "/account/sign-out");
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await page.goto(f.origin + "/courses/proposals/" + p.value.planId);
     await expect(
@@ -683,7 +681,7 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
     await page
       .getByLabel("Invoice recipient name")
       .fill("Invented changed recipient");
-    await page.getByRole("button", { name: "Save billing recipient" }).click();
+    await page.getByRole("button", { name: "Save billing details" }).click();
     await page.goto(invoiceUrl);
     // RECIPIENT-05: the invoice bills the accepted recipient and company.
     await expect(
@@ -1007,15 +1005,34 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
     await signInAgain(owner, "shi@deepnative.io");
     await expect(page).toHaveURL(owner.origin + "/admin");
     await expect(
-      header().getByRole("link", { name: "Administration", exact: true }),
+      header().getByRole("link", { name: "Admin", exact: true }),
     ).toBeVisible();
+    // #846 HEADER-01: one closed control names the view and holds the switch.
+    const viewMenu = header().locator(".view-menu > summary");
+    await expect(viewMenu).toHaveText("View: Admin");
+    for (const view of ["student", "coach"])
+      await expect(
+        header().getByRole("button", { name: `Switch to ${view} view` }),
+      ).toBeHidden();
+    const closed = (await page.locator("header.site-header").boundingBox())!
+      .height;
+    await viewMenu.click();
     for (const view of ["student", "coach"])
       await expect(
         header().getByRole("button", { name: `Switch to ${view} view` }),
       ).toBeVisible();
+    // The open menu floats over the page; the header keeps its height.
+    expect(
+      (await page.locator("header.site-header").boundingBox())!.height,
+    ).toBe(closed);
     await fits();
+    await page.screenshot({
+      path: test.info().outputPath("view-menu-open.png"),
+    });
+    await viewMenu.click();
 
     // ROLES-03: the coach view lists saved hours, never billing.
+    await header().locator(".view-menu > summary").click();
     await header()
       .getByRole("button", { name: "Switch to coach view" })
       .click();
@@ -1031,7 +1048,7 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
       header().getByRole("link", { name: "Coaching", exact: true }),
     ).toBeVisible();
     await expect(
-      header().getByRole("link", { name: "Administration", exact: true }),
+      header().getByRole("link", { name: "Admin", exact: true }),
     ).toHaveCount(0);
     await fits();
     await page.screenshot({
@@ -1040,6 +1057,8 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
     });
 
     // ROLES-05: the admin view grants nothing until Enter administration.
+    await expect(viewMenu).toHaveText("View: Coach");
+    await header().locator(".view-menu > summary").click();
     await header()
       .getByRole("button", { name: "Switch to admin view" })
       .click();
@@ -1052,16 +1071,15 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
       page.getByRole("heading", { name: "Students", level: 1 }),
     ).toBeVisible();
     // Switching to the student view keeps the administrator session.
+    await header().locator(".view-menu > summary").click();
     await header()
       .getByRole("button", { name: "Switch to student view" })
       .click();
     await expect(page).toHaveURL(owner.origin + "/learn");
+    await expect(viewMenu).toHaveText("View: Student");
     await expect(
-      header().getByRole("link", {
-        name: "Coaching hours",
-        exact: true,
-      }),
-    ).toBeVisible();
+      header().getByRole("link", { name: "Coaching", exact: true }),
+    ).toHaveAttribute("href", "/account/coaching");
     expect((await page.request.get(owner.origin + "/operator")).status()).toBe(
       200,
     );
@@ -1080,13 +1098,14 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
     await expect(page).toHaveURL(student.origin + "/learn");
     await page.goto(student.origin + "/account");
     await expect(
-      header().getByRole("link", { name: "Coaching hours" }),
-    ).toBeVisible();
+      header().getByRole("link", { name: "Coaching", exact: true }),
+    ).toHaveAttribute("href", "/account/coaching");
+    await expect(header().locator(".view-menu")).toHaveCount(0);
     await expect(
       header().getByRole("button", { name: /^Switch to/ }),
     ).toHaveCount(0);
     await expect(
-      header().getByRole("link", { name: "Administration" }),
+      header().getByRole("link", { name: "Admin", exact: true }),
     ).toHaveCount(0);
     const coach = await page.goto(student.origin + "/coach");
     expect(coach?.status()).toBe(403);
@@ -1363,7 +1382,7 @@ test("[L282] required names identify learners while legacy work and administrato
     await page
       .getByRole("button", { name: "Save my profile", exact: true })
       .click();
-    await expect(page).toHaveURL(/\/learn$/);
+    await expect(page).toHaveURL(/\/account#profile$/);
     await page.goto(f.origin + "/account");
     await expect(page.getByLabel("Display name", { exact: true })).toHaveValue(
       "李明 <Sam>",

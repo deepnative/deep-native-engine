@@ -9,6 +9,10 @@ import {
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { proposalStore } from "../../src/proposals.ts";
 import { testPool } from "../support/database.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 const pool = testPool();
 const origin = browserOrigin;
@@ -901,12 +905,11 @@ test("[L75] staff audience tags follow synthetic versions into learner choices",
     await expect(editorPage.locator("dl")).toContainText("explorer");
     await expect(editorPage.locator("dl")).toContainText("education");
     await technicalPage.goto("/learn");
+    await openLearningProfile(technicalPage);
     await technicalPage
       .locator('input[name="domain_tags"][value="operations"]')
       .check();
-    await technicalPage
-      .getByRole("button", { name: "Save my direction" })
-      .click();
+    await saveLearningProfile(technicalPage);
     await expect(
       technicalPage.getByText(
         `Optional published sample lesson: ${lessonTitle}`,

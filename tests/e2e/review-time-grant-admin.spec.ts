@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
@@ -575,10 +576,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
         "Original revocation outcome: revoked",
       );
       await pausedRevoke.close();
-      const pausedCsrf = await admin
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const pausedCsrf = await formToken(admin);
       const pausedCreate = await adminContext.request.post(
         rollback.origin + base + "/grant",
         {
@@ -659,12 +657,12 @@ for (const [index, [background, goal]] of audiences.entries()) {
         (await admin.goto(disabled.origin + base + "/" + firstId))!.status(),
       ).toBe(404);
       observed("disabled-denial-complete");
-      // Erasure is deliberately offered on the member learning dashboard, not
-      // on an accounting receipt. Keep the normal member browser flow.
-      await page.goto("/learn");
+      // Erasure is deliberately offered on My account, not on an accounting
+      // receipt. Keep the normal member browser flow.
+      await page.goto("/account");
       await expect(
         page.getByRole("heading", {
-          name: "Adjust your direction",
+          name: "Delete your account",
           exact: true,
         }),
       ).toBeVisible();
@@ -688,10 +686,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
       observed("member-erasure-complete");
       await signIn(admin, adminToken, recovery.origin);
       await admin.goto(recovery.origin + base);
-      const csrf = await admin
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const csrf = await formToken(admin);
       const erased = await adminContext.request.post(
         recovery.origin + base + "/recover",
         {

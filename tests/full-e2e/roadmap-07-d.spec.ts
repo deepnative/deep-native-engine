@@ -85,7 +85,9 @@ test("[F-ROADMAP-07-D] after training a goal change updates next actions, only a
       await member
         .getByRole("button", { name: "Save my profile", exact: true })
         .click();
-      await expect(member).toHaveURL(f.origin + "/learn");
+      // #846 PROFILE-01: the save stays on My account.
+      await expect(member).toHaveURL(f.origin + "/account#profile");
+      await member.goto(f.origin + "/learn");
       await expect(member.locator(".dashboard-head .lead")).toHaveText(
         GOALS.work,
       );

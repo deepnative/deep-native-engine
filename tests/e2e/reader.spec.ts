@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { COOKIE } from "../../src/session.ts";
@@ -7,6 +8,10 @@ import { randomBytes } from "node:crypto";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 const pool = testPool();
 const origin = browserOrigin;
@@ -112,8 +117,9 @@ test("[L42] exploratory reader distinguishes opening, start and self-report afte
       .getByText("Self-assessed complete", { exact: false }),
   ).toBeVisible();
   await page.goto("/learn");
+  await openLearningProfile(page);
   await chooseLearningGoal(page, "work");
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   await page.goto("/library");
   await expect(
     page.getByRole("heading", { name: "Your private lesson history" }),
@@ -136,12 +142,9 @@ test("[L43] professional and IT sessions keep versioned activity private through
     await onboard(page, "professional", "work");
     const otherPage = await other.newPage();
     await onboard(otherPage, "technical", "build");
-    const otherCsrf = await otherPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const otherCsrf = await formToken(otherPage);
     await page.goto(`/library/${id}`);
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     await otherPage.goto("/library");
     await expect(
       otherPage.getByText("No lesson has been opened for this account yet."),
@@ -273,10 +276,11 @@ test("[L55] all learner backgrounds can compare a synthetic reflection with its 
     ["technical", "build"],
   ] as const) {
     await page.goto("/learn");
+    await openLearningProfile(page);
     await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption(background);
     await chooseLearningGoal(page, goal);
-    await page.getByRole("button", { name: "Save my direction" }).click();
+    await saveLearningProfile(page);
     await page.goto(`/library/${id}`);
     await page
       .getByRole("link", { name: "Try a locally simulated study reflection" })
@@ -376,10 +380,11 @@ test("[L58] cross-audience private practice persists one exact sample version an
     ["technical", "build", "small build"],
   ] as const) {
     await page.goto("/learn");
+    await openLearningProfile(page);
     await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption(background);
     await chooseLearningGoal(page, goal);
-    await page.getByRole("button", { name: "Save my direction" }).click();
+    await saveLearningProfile(page);
     await page.goto(`/library/${id}/practice`);
     await expect(
       page.getByRole("heading", { name: "Private sample practice" }),

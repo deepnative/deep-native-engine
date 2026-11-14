@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
@@ -414,10 +415,7 @@ test("[L94] owner withdraws and reloads a sample hold, safely recovers uncertain
     await expect(withdrawal).toBeVisible();
     expect((await post({ category: "review_minutes" })).status()).toBe(422);
     expect((await post({ csrf: "forged" })).status()).toBe(403);
-    const otherCsrf = await otherPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const otherCsrf = await formToken(otherPage);
     expect(
       (
         await outsider.request.post(`${receiptPath}/withdraw`, {
@@ -440,10 +438,7 @@ test("[L94] owner withdraws and reloads a sample hold, safely recovers uncertain
     for (const denied of [staff, anonymous]) {
       const deniedPage = await denied.newPage();
       await deniedPage.goto("/");
-      const deniedCsrf = await deniedPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const deniedCsrf = await formToken(deniedPage);
       expect(
         (
           await denied.request.post(`${receiptPath}/withdraw`, {

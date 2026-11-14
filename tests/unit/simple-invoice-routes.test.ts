@@ -140,7 +140,11 @@ it("OFFPUR-05 refuses extra fields belonging to a different billing action", asy
 });
 it("OFFPUR-07 exposes an honest unconfigured account entry without issuing anything", async () => {
   const f = fixture(true);
-  expect((await f.get(base)).text).toContain("No payable offer is configured");
+  const unconfigured = await f.get(base);
+  expect(unconfigured.status).toBe(200);
+  expect(mainHtml(unconfigured.text)).toBe(
+    '<main id="main"><section class="invoice-workspace"><h1>Invoices</h1><p>Invoices are not set up here.</p><p><a href="/account">My account</a></p></section>',
+  );
   for (const path of [
     admin,
     `${base}/operations/${id}`,
@@ -196,10 +200,11 @@ it("OFFPUR-08/10 shows exact courses, explicit cadence and cancelled agreements 
     "cancelled",
     "Partially paid",
     "Paid",
-    "Awaiting offline payment",
+    "Unpaid",
     "Void",
   ])
     expect(r.text).toContain(text);
+  expect(r.text).not.toContain("Awaiting offline payment");
   expect(r.headers["cache-control"]).toBe("no-store");
   expect((await f.get(admin)).text).toContain(
     "Prepare course billing proposal",
@@ -508,9 +513,10 @@ it("OFFPUR-05 applies the same no-query and original-form boundary to every invo
   ])
     expect((await f.post(path + "?unexpected=1")).status).toBe(403);
   expect((await f.get(`${base}/invoices/invalid`)).status).toBe(422);
-  expect((await f.get(base)).text).toContain(
-    "No course bundle has been prepared",
-  );
+  // #846 FOLD-01: nothing about course bundles until one is proposed.
+  const none = (await f.get(base)).text;
+  expect(none).not.toContain("Course proposals");
+  expect(none).not.toContain("course bundle");
 });
 
 it("OFFPUR-02 offers no email action when invoice email is not configured", async () => {
@@ -617,12 +623,45 @@ it("ADMINCON02 preserves exact learner selection and rejects forged selection qu
   );
   expect((await f.get("/operator/invoices?unexpected=x")).status).toBe(403);
 });
-it("BILLPROFILE02 offers a separate private billing profile even when invoices are disabled", async () => {
-  const f = fixture(true);
-  const response = await f.get("/account/billing");
-  expect(response.status).toBe(200);
-  expect(response.text).toContain("Billing recipient");
-  expect(response.text).toContain("does not change your sign-in email");
+it("BILLPROFILE02/#846 FOLD-02 the billing page address leads to the form on My account, invoices configured or not", async () => {
+  for (const f of [fixture(true), fixture()]) {
+    const response = await f.get("/account/billing");
+    expect(response.status).toBe(303);
+    expect(response.headers.location).toBe("/account#billing");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(f.profiles.suggest).not.toHaveBeenCalled();
+  }
+});
+it("FOLD-02 a blank invoice email falls back to the saved or verified sign-in address, or asks for one", async () => {
+  const f = fixture();
+  f.profiles.suggest.mockResolvedValueOnce(
+    ready({ name: "Mei", email: "mei@example.invalid", revision: 0 }),
+  );
+  let r = await f.post("/account/billing", {
+    name: "Mei Tanaka",
+    email: "  ",
+    company: "",
+    revision: "0",
+  });
+  expect(r.status).toBe(303);
+  expect(r.headers.location).toBe("/account?billing=saved#billing");
+  expect(f.profiles.save).toHaveBeenLastCalledWith(token, {
+    name: "Mei Tanaka",
+    email: "mei@example.invalid",
+    company: "",
+    revision: 0,
+  });
+  // No field at all is treated like a blank one.
+  f.profiles.save.mockClear();
+  r = await f.post("/account/billing", { name: "Mei Tanaka" });
+  expect(r.headers.location).toBe("/account?billing=email#billing");
+  expect(f.profiles.save).not.toHaveBeenCalled();
+  for (const kind of ["denied", "unavailable"]) {
+    f.profiles.suggest.mockResolvedValueOnce({ kind });
+    r = await f.post("/account/billing", { name: "Mei Tanaka", email: "" });
+    expect(r.status).toBe({ denied: 403, unavailable: 503 }[kind]);
+    expect(f.profiles.save).not.toHaveBeenCalled();
+  }
 });
 it("BILLPROFILE02/04 isolates profile validation, stale forms, unavailable outcomes and escaped prefills", async () => {
   const f = fixture();
@@ -633,38 +672,34 @@ it("BILLPROFILE02/04 isolates profile validation, stale forms, unavailable outco
       revision: 2,
     }),
   );
-  let r = await f.get("/account/billing");
-  expect(r.text).toContain("Invented &lt;recipient&gt;");
-  expect(r.headers["cache-control"]).toBe("no-store");
-  expect(
-    (
-      await f.post("/account/billing", {
-        name: "Invented",
-        email: "billing@example.invalid",
-        revision: "2",
-      })
-    ).headers.location,
-  ).toBe("/account/billing");
+  const saved = await f.post("/account/billing", {
+    name: "Invented",
+    email: "billing@example.invalid",
+    revision: "2",
+  });
+  expect(saved.status).toBe(303);
+  expect(saved.headers.location).toBe("/account?billing=saved#billing");
+  expect(saved.headers["cache-control"]).toBe("no-store");
   expect(f.profiles.save).toHaveBeenCalledWith(token, {
     name: "Invented",
     email: "billing@example.invalid",
     revision: 2,
   });
   for (const kind of ["denied", "invalid", "conflict", "unavailable"]) {
-    f.profiles.suggest.mockResolvedValueOnce({ kind });
-    expect((await f.get("/account/billing")).status).toBe(
-      { denied: 403, invalid: 422, conflict: 409, unavailable: 503 }[kind],
-    );
     f.profiles.save.mockResolvedValueOnce({ kind });
-    expect(
-      (
-        await f.post("/account/billing", {
-          name: "Invented",
-          email: "billing@example.invalid",
-        })
-      ).status,
-    ).toBe(
-      { denied: 403, invalid: 422, conflict: 409, unavailable: 503 }[kind],
+    const refused = await f.post("/account/billing", {
+      name: "Invented",
+      email: "billing@example.invalid",
+    });
+    // #846 FOLD-02: what the member can fix is said beside the form.
+    expect(refused.status).toBe(
+      { denied: 403, invalid: 303, conflict: 303, unavailable: 503 }[kind],
+    );
+    expect(refused.headers.location).toBe(
+      {
+        invalid: "/account?billing=invalid#billing",
+        conflict: "/account?billing=conflict#billing",
+      }[kind],
     );
   }
   expect((await f.get("/account/billing?ownerId=" + id)).status).toBe(403);
@@ -694,7 +729,7 @@ it("BILLPROFILE02/04 isolates profile validation, stale forms, unavailable outco
       unavailable: {},
     }),
   );
-  r = await f.get(base);
+  const r = await f.get(base);
   expect(r.text).toContain("Invented &lt;recipient&gt;");
   f.profiles.suggest.mockResolvedValueOnce({ kind: "unavailable" });
   expect((await f.get(base)).status).toBe(503);
@@ -707,8 +742,8 @@ it("BILLPROFILE02/04 isolates profile validation, stale forms, unavailable outco
   mountSimpleInvoiceRoutes(bare, undefined, { origin, secret });
   expect(
     (await withLoopback(bare, (s) => request(s).get("/account/billing")))
-      .status,
-  ).toBe(503);
+      .headers.location,
+  ).toBe("/account#billing");
   expect(
     (
       await withLoopback(bare, (s) =>
@@ -738,13 +773,12 @@ it("BILLPROFILE02/04 isolates profile validation, stale forms, unavailable outco
   );
 });
 
-it("BILLPROFILE02 preserves empty invalid attempted recipient fields with a safe recovery message", async () => {
+it("BILLPROFILE02 an empty billing form is refused without saving", async () => {
   const f = fixture();
-  f.profiles.save.mockResolvedValue({ kind: "invalid" });
   const r = await f.post("/account/billing");
-  expect(r.status).toBe(422);
-  expect(r.text).toContain("Recipient not saved");
-  expect(r.text).toContain('value=""');
+  expect(r.status).toBe(303);
+  expect(r.headers.location).toBe("/account?billing=email#billing");
+  expect(f.profiles.save).not.toHaveBeenCalled();
 });
 it("INVOICELIST-01/ADMINNAV-01 the Invoices page leads with a table in words and keeps course billing closed below", async () => {
   const f = fixture();
@@ -912,10 +946,14 @@ it("AUDIT-01/02/03 shows readable delivery states, month names and button naviga
   expect(document).toContain(
     '<a class="button secondary" href="/account/purchases">Courses and invoices</a>',
   );
-  const purchases = (await f.get("/account/purchases")).text;
-  expect(purchases).toContain(
-    '<a class="button secondary" href="/account/billing">Billing recipient</a>',
-  );
+  // #846 FOLD-01: the header and My account carry the other destinations.
+  const purchases = mainHtml((await f.get("/account/purchases")).text);
+  expect(purchases).not.toContain("account-links");
+  expect(purchases).not.toContain("/account/billing");
+  expect(purchases).not.toContain("/account/coaching");
+  expect(
+    [...purchases.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1]),
+  ).toEqual(["/account"]);
 });
 
 it("GAPS-01 an administrator's invoice links stay in administration; a member's keep theirs", async () => {
@@ -1102,23 +1140,97 @@ it("WALK-04 offers only the invoice actions the record can still accept", async 
   expect(voided).not.toContain(">Void unpaid invoice</button>");
 });
 
-it("WALK-02 tells a member with no invoices that none have been issued, and lists them once they exist", async () => {
+it("WALK-02/#846 FOLD-01 tells a member with no invoices so, and names each invoice by what it bills", async () => {
   const f = fixture();
-  const empty = (await f.get(base)).text;
-  expect(empty).toContain("<h2>Your invoices</h2>");
-  expect(empty).toContain("No invoices have been issued to this account yet.");
-  expect(empty).not.toContain("<ul></ul>");
+  const empty = mainHtml((await f.get(base)).text);
+  expect(empty).toBe(
+    '<main id="main"><section class="invoice-workspace"><h1>Invoices</h1><p>No invoices yet.</p><p><a href="/account">My account</a></p></section>',
+  );
+  const coaching = {
+    month: "2026-09",
+    minutes: 360,
+    rateCents: 3000,
+    rateVersion: 1,
+    rateId: id,
+    submissionRevision: 1,
+    replacesInvoiceId: null,
+  };
   f.service.overview.mockResolvedValueOnce(
     ready({
       plans: [],
-      invoices: [{ ...invoice, document: { ...doc, sample: true } }],
+      invoices: [
+        {
+          ...invoice,
+          totalCents: 20340,
+          document: { ...doc, sample: false, coaching },
+        },
+        {
+          ...invoice,
+          totalCents: 20340,
+          paidCents: 20340,
+          document: {
+            ...doc,
+            sample: false,
+            coaching: {
+              ...coaching,
+              month: "2026-09-01",
+              periodStart: "2026-09-01",
+              periodEnd: "2026-09-14",
+            },
+          },
+        },
+        { ...invoice, document: { ...doc, sample: true } },
+        {
+          ...invoice,
+          voidReason: "wrong period",
+          document: {
+            ...doc,
+            sample: false,
+            coachingTerms: {
+              version: 1,
+              startsOn: "2026-12-01",
+              endsOn: "2027-05-31",
+            },
+          },
+        },
+      ],
       today: "2026-10-31",
       unavailable: {},
     }),
   );
-  const listed = (await f.get(base)).text;
-  expect(listed).toMatch(/<h2>Your invoices<\/h2><ul><li>/);
-  expect(listed).not.toContain("No invoices have been issued");
+  const listed = mainHtml((await f.get(base)).text);
+  expect(listed).toContain(
+    `<h1>Invoices</h1><p class="small">Sample invoices are not payable.</p><ul class="invoice-list"><li><a href="${base}/invoices/${id}">Coaching · September 2026</a> — CAD 203.40 — Unpaid</li><li><a href="${base}/invoices/${id}">Coaching · 1 Sept 2026 to 14 Sept 2026</a> — CAD 203.40 — Paid</li><li><a href="${base}/invoices/${id}">Courses · October 2026</a> — CAD 11.00 — Unpaid</li><li><a href="${base}/invoices/${id}">Coaching · 1 Dec 2026 to 31 May 2027</a> — CAD 11.00 — Void</li></ul>`,
+  );
+  expect(listed).not.toContain("No invoices yet");
+  // The reference is in the link, never the visible name.
+  expect(listed.replace(/<[^>]+>/g, " ")).not.toContain(id);
+  expect(listed).not.toContain("DN-invented");
+  expect(listed.match(/not payable/gi)).toHaveLength(1);
+});
+it("FOLD-01 course proposals appear only once one is prepared, under one short line", async () => {
+  const f = fixture();
+  f.service.overview.mockResolvedValueOnce(
+    ready({
+      plans: [
+        {
+          id,
+          terms: { ...terms, sample: false },
+          state: "offered",
+          revision: 1,
+        },
+      ],
+      invoices: [{ ...invoice, document: { ...doc, sample: false } }],
+      today: "2026-10-31",
+      unavailable: {},
+    }),
+  );
+  const html = mainHtml((await f.get(base)).text);
+  expect(html).not.toContain("Sample invoices are not payable");
+  expect(html).toContain(
+    `</ul><h2>Course proposals</h2><p>Accepting a proposal creates an invoice; nothing is charged automatically. Cancel a monthly agreement before accepting a replacement.</p><article id="plan-${id}"><h3>Course bundle</h3>`,
+  );
+  expect(html).toContain("Accept courses and create invoice");
 });
 it("ISSUER-02 prepares configured course billing with computed 13% HST and no tax field", async () => {
   const f = fixture();
@@ -1184,11 +1296,6 @@ it("RECIPIENT-01/04/05 the billing recipient and course forms suggest the member
   f.profiles.suggest.mockResolvedValue(
     ready({ name: "陳 Registered", email: "", revision: 0 }),
   );
-  let r = await f.get("/account/billing");
-  expect(r.text).toContain('value="陳 Registered"');
-  expect(r.text).toContain(
-    '<label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value=""></label>',
-  );
   f.profiles.suggest.mockResolvedValue(
     ready({
       name: "Saved",
@@ -1197,8 +1304,6 @@ it("RECIPIENT-01/04/05 the billing recipient and course forms suggest the member
       revision: 2,
     }),
   );
-  r = await f.get("/account/billing");
-  expect(r.text).toContain('value="&lt;b&gt;Invented&lt;/b&gt; Co"');
   await f.post("/account/billing", {
     name: "Saved",
     email: "saved@example.invalid",
@@ -1212,14 +1317,13 @@ it("RECIPIENT-01/04/05 the billing recipient and course forms suggest the member
     revision: 2,
   });
   f.profiles.save.mockResolvedValueOnce({ kind: "invalid" });
-  r = await f.post("/account/billing", {
+  const refused = await f.post("/account/billing", {
     name: "Saved",
     email: "saved@example.invalid",
     company: "Kept <attempt>",
   });
-  expect(r.status).toBe(422);
-  expect(r.text).toContain('value="Kept &lt;attempt&gt;"');
-  expect(r.text).toContain("Company name must be 200 characters or fewer");
+  expect(refused.headers.location).toBe("/account?billing=invalid#billing");
+  expect(refused.text).not.toContain("attempt");
   f.service.overview.mockResolvedValue(
     ready({
       plans: [{ id, terms, state: "offered", revision: 1 }],
@@ -1228,7 +1332,7 @@ it("RECIPIENT-01/04/05 the billing recipient and course forms suggest the member
       unavailable: {},
     }),
   );
-  r = await f.get(base);
+  const r = await f.get(base);
   expect(r.text).toContain(
     '<label>Company name (optional)<input name="company" maxlength="200" value="&lt;b&gt;Invented&lt;/b&gt; Co"></label>',
   );

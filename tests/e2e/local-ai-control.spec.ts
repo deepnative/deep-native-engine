@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
@@ -96,10 +97,7 @@ test("[L77] an administrator pauses local AI while member permission stays exact
     await expect(
       memberPage.getByRole("button", { name: "Run local simulation" }),
     ).toBeVisible();
-    const staleCsrf = await memberPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const staleCsrf = await formToken(memberPage);
     await adminPage.goto("/operator/local-ai");
     await expect(
       adminPage.getByText("Local simulation is available"),

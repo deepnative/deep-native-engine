@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { randomBytes, randomUUID } from "node:crypto";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { start } from "../../src/runtime.ts";
@@ -139,8 +140,7 @@ test("[F-ROADMAP-01-C] an assigned reviewer publishes criterion feedback on pinn
       expect((await member.goto(ownerPath))!.status()).toBe(200);
       await expect(member.locator("details pre")).toHaveText(sampleText);
       const linkPath = `/api/evidence/${sample.id}/download-link`;
-      const csrf = (page: Page) =>
-        page.locator('input[name="csrf"]').first().inputValue();
+      const csrf = (page: Page) => formToken(page);
       await member.goto("/evidence");
       const link = await member.request.post(linkPath, {
         headers: { Origin: running.origin, "X-CSRF-Token": await csrf(member) },
@@ -327,10 +327,7 @@ test("[F-ROADMAP-01-C] an assigned reviewer publishes criterion feedback on pinn
         [outsider, "/evidence"],
       ] as const) {
         await denied.goto(formPage);
-        const csrf = await denied
-          .locator('input[name="csrf"]')
-          .first()
-          .inputValue();
+        const csrf = await formToken(denied);
         const view = await denied.request.get(staffPath, { maxRedirects: 0 });
         expect(view.status()).toBe(403);
         const viewText = await view.text();

@@ -604,8 +604,9 @@ it("rolls back query failure, releases authorization locks and returns a generic
       app(db, { origin, secret: "synthetic-secret", usefulness: broken }),
       async (server) => {
         const agent = request.agent(server);
+        // #846: My account always holds a form; the learning page may not.
         const page = await agent
-          .get("/learn")
+          .get("/account")
           .set("Host", "127.0.0.1:3000")
           .set("Cookie", `${COOKIE}=${owner.token}`)
           .expect(200);

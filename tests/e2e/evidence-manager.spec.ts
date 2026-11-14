@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
@@ -43,7 +44,7 @@ test("[L59] a member manages invented private evidence with honest safety and co
     await page
       .getByLabel("Invented text sample")
       .fill("Invented private response");
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     const invalid = await page.request.post("/evidence", {
       headers: { Origin: origin },
       form: { csrf, name, sample: "Invented private response" },
@@ -94,10 +95,7 @@ test("[L59] a member manages invented private evidence with honest safety and co
     ).toMatchObject({
       items: [],
     });
-    const otherCsrf = await otherPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const otherCsrf = await formToken(otherPage);
     const outsiderDelete = await otherPage.request.post(
       `/evidence/${id}/delete`,
       {
@@ -199,7 +197,7 @@ test("[L60] only a clean consented owner sample enters the local review queue on
         [name],
       )
     ).rows[0]!.id;
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     await expect(
       page.getByRole("button", {
         name: "Queue for local review consideration",
@@ -223,10 +221,7 @@ test("[L60] only a clean consented owner sample enters the local review queue on
       page.getByText("No qualified reviewer is assigned", { exact: false }),
     ).toBeVisible();
     await otherPage.goto("/evidence");
-    const otherCsrf = await otherPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const otherCsrf = await formToken(otherPage);
     const otherAttempt = await otherPage.request.post(`/evidence/${id}/queue`, {
       headers: { Origin: origin },
       form: { csrf: otherCsrf, acknowledge: "yes" },
@@ -319,10 +314,7 @@ test("[L76] exact-source local AI permission is explicit, withdrawable and never
     await otherPage.goto("/evidence/local-ai");
     await expect(otherPage.getByRole("heading", { name })).toHaveCount(0);
     await otherPage.goto("/evidence");
-    const otherCsrf = await otherPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const otherCsrf = await formToken(otherPage);
     expect(
       (
         await otherPage.request.post(`/evidence/local-ai/${id}/grant`, {
@@ -371,7 +363,7 @@ test("[L76] exact-source local AI permission is explicit, withdrawable and never
         "Local simulation permission granted for this exact version.",
       ),
     ).toHaveCount(0);
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     expect(
       (
         await page.request.post(`/evidence/local-ai/${receipt}/queue`, {
@@ -443,10 +435,7 @@ test("[L76] exact-source local AI permission is explicit, withdrawable and never
         "Local AI permission withdrawn. Future simulations need a new grant.",
       ),
     ).toBeVisible();
-    const afterDeleteCsrf = await page
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const afterDeleteCsrf = await formToken(page);
     expect(
       (
         await page.request.post(`/evidence/local-ai/${replacement}/queue`, {

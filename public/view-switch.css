@@ -21,3 +21,63 @@
 .view-switch button:focus-visible {
   background: #eaf0ff;
 }
+
+/* #846 HEADER-01: one closed control holds the switch buttons, so the header
+   keeps its height however many views an account has. */
+.view-menu {
+  position: relative;
+}
+.view-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #9caecf;
+  border-radius: 8px;
+  color: #182c49;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+.view-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.view-menu > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-top: -4px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+.view-menu[open] > summary::after {
+  margin-top: 4px;
+  transform: rotate(225deg);
+}
+.view-menu > summary:hover,
+.view-menu[open] > summary {
+  border-color: #2454d6;
+  color: #2454d6;
+  background: #eaf0ff;
+}
+.view-menu > .view-switch {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  display: grid;
+  gap: 6px;
+  min-width: 100%;
+  padding: 8px;
+  border: 1px solid #d6ddeb;
+  border-radius: 10px;
+  background: #fff;
+}
+.view-menu > .view-switch button {
+  justify-content: flex-start;
+  border-color: transparent;
+  white-space: nowrap;
+}

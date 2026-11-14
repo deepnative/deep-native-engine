@@ -43,11 +43,18 @@ test("[L318] ERASE-06 a member reads what stays after deletion, then deletes the
     if (session.kind !== "active") throw Error("Invented member unavailable");
     owner = session.learner.id;
 
-    // The learning path's delete form points to the full list.
+    // #846 ACCOUNT-01: My account names the two periods beside the delete
+    // control and opens the full list in place.
     await page.goto(`${origin}/learn`);
-    await page.getByRole("link", { name: "See what stays" }).click();
-    await expect(page).toHaveURL(`${origin}/account#deletion-kept`);
+    await expect(page.locator(".delete-form")).toHaveCount(0);
+    await page.goto(`${origin}/account`);
+    await expect(page.locator(".account-delete > p")).toHaveText(
+      "This cannot be undone. Issued invoices stay for 6 years for tax records, and backup copies for up to 30 days.",
+    );
     const kept = page.locator("#deletion-kept");
+    await expect(kept).toBeHidden();
+    await page.getByText("What stays after deletion").click();
+    await expect(kept).toBeVisible();
     await expect(kept).toContainText(
       "Deleting removes your profile, learning records, saved work, files and sharing choices",
     );

@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import {
   devices,
@@ -187,8 +188,7 @@ async function audit(postId: string) {
   ).rows;
 }
 
-const csrfOf = (page: Page) =>
-  page.locator('input[name="csrf"]').first().inputValue();
+const csrfOf = (page: Page) => formToken(page);
 
 async function publishAssignment(id: string, assignmentTitle: string) {
   const expiry = new Date(Date.now() + 3_600_000);

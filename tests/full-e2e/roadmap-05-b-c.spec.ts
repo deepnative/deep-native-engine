@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import {
   expect,
   test,
@@ -250,7 +251,7 @@ test("[F-ROADMAP-05-B] the administrator-set AI allowance blocks at its end, a l
         page.request.post(`${j.f.origin}${path}/responses`, {
           headers: { Origin: j.f.origin },
           form: {
-            csrf: await page.locator('input[name="csrf"]').first().inputValue(),
+            csrf: await formToken(page),
             expected_sequence: String(sequence),
             response: `Invented response ${sequence}: check the source.`,
             synthetic: "yes",

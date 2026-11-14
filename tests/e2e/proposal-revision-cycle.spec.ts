@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import {
@@ -64,7 +65,7 @@ async function closeMember(actor: Awaited<ReturnType<typeof member>>) {
   await members.remove(actor.id);
 }
 async function csrf(page: Page) {
-  return page.locator('[name="csrf"]').first().inputValue();
+  return formToken(page);
 }
 async function post(
   context: BrowserContext,
@@ -739,7 +740,7 @@ test("[L115] all audiences retain feedback privately through quarantine, redact 
           await submit(page);
           await change(moderator.page, deleting, feedback);
           await returned(page, feedback);
-          await page.goto("/learn");
+          await page.goto("/account");
           await page
             .getByLabel("Delete my local preview and all its saved work")
             .check();

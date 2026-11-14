@@ -6,6 +6,11 @@ import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
 import { hash } from "../../src/store.ts";
+import { formToken } from "../support/form-token.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 const pool = testPool();
 test.afterAll(async () => pool.end());
@@ -260,8 +265,9 @@ test("[L33] professional sees a domain match only after observed foundation prac
   await expect(choices).toContainText(title);
   await choices.getByRole("button", { name: `Choose ${title}` }).click();
   await expect(choices).toContainText("Your chosen sample");
+  await openLearningProfile(page);
   await chooseLearningGoal(page, "everyday");
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   await expect(choices).toContainText("no longer available");
   await expect(choices).not.toContainText(title);
   await expect(
@@ -285,8 +291,9 @@ test("[L34] technical learner's self-report and retired content cannot bypass el
     name: "Choose a practice assignment",
   });
   await expect(choices).not.toContainText(title);
+  await openLearningProfile(page);
   await page.getByLabel("Experience with AI").selectOption("experienced");
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   await expect(choices).toContainText(title);
   await choices.getByRole("button", { name: `Choose ${title}` }).click();
   await expect(choices).toContainText("Your chosen sample");
@@ -294,7 +301,7 @@ test("[L34] technical learner's self-report and retired content cannot bypass el
   await page.reload();
   await expect(choices).toContainText("no longer available");
   await expect(choices).not.toContainText(title);
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const response = await page.request.post("/assignments/select", {
     headers: { origin: browserOrigin },
     form: { csrf, content_id: id, content_version: "1" },
@@ -327,7 +334,7 @@ test("[L63] a version-pinned lesson unlocks only its owner's synthetic assignmen
     name: "Choose a practice assignment",
   });
   await expect(choices).not.toContainText(title);
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const forged = await page.request.post("/assignments/select", {
     headers: { origin: browserOrigin },
     form: { csrf, content_id: assignmentId, content_version: "1" },
@@ -352,10 +359,7 @@ test("[L63] a version-pinned lesson unlocks only its owner's synthetic assignmen
     await expect(
       otherPage.getByRole("region", { name: "Choose a practice assignment" }),
     ).not.toContainText(title);
-    const otherCsrf = await otherPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const otherCsrf = await formToken(otherPage);
     const denied = await otherPage.request.post("/assignments/select", {
       headers: { origin: browserOrigin },
       form: { csrf: otherCsrf, content_id: assignmentId, content_version: "1" },

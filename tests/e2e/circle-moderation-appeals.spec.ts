@@ -422,7 +422,7 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
         path: info.outputPath("withdrawn-source-retained-appeal.png"),
         fullPage: true,
       });
-      await page.goto(origin + "/learn");
+      await page.goto(origin + "/account");
       await page.getByLabel("Delete my local preview").check();
       await page.getByRole("button", { name: "Delete this preview" }).click();
       await expect(

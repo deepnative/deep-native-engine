@@ -157,8 +157,12 @@ test("[L329] MULTISESSION-01/02 each browser keeps its own sign-in through passw
     expect(await signedIn(laptop, origin)).toBe(true);
     expect(await signedIn(tablet, origin)).toBe(true);
 
-    // Signing out from My account ends that browser too, and only that one.
+    // Signing out from the header's page ends that browser too, and only it.
     await laptop.goto(`${origin}/account`);
+    await laptop
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "Sign out", exact: true })
+      .click();
     await expect(
       laptop.getByText("Other browsers where you signed in stay signed in.", {
         exact: false,
