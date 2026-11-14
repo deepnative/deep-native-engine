@@ -31,7 +31,9 @@ async function signIn(page: Page, credential: string, at = origin) {
     .getByRole("button", { name: "Sign in to staff tools", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Your local staff tools", exact: true }),
+    page.getByRole("heading", {
+      name: /^(Your local staff tools|More tools)$/,
+    }),
   ).toBeVisible();
 }
 async function checkedPermission(

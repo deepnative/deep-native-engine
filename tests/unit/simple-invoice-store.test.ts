@@ -49,6 +49,22 @@ const plan: InvoicePlan = {
   revision: 1,
   nextCycle: 1,
 };
+// INVOICELIST-01: one row of the administrator's invoice list.
+const listed = {
+  id: invoiceId,
+  revision: 1,
+  delivery: "not_sent",
+  number: "SAMPLE-0001",
+  student: "Invented Learner",
+  totalCents: "1200",
+  paidCents: "0",
+  refundedCents: "0",
+  voided: false,
+  coaching: null,
+  terms: false,
+  firstLine: "Claim checking",
+  lineCount: 1,
+};
 const invoice: StoredInvoice = {
   id: invoiceId,
   document: {
@@ -215,8 +231,8 @@ function fixture(
       );
     if (sql.includes("FROM learners l JOIN workspaces"))
       return result([{ id: ownerId }]);
-    if (sql.includes("FROM simple_invoices ORDER"))
-      return result([{ id: invoiceId, revision: 1, delivery: "not_sent" }]);
+    if (sql.includes("FROM simple_invoices i LEFT JOIN learners l"))
+      return result([listed]);
     if (
       sql.includes(
         "FROM coaching_months JOIN learners l ON l.id=owner_id WHERE state",
@@ -714,6 +730,31 @@ it("OFFPUR-10 processes only active due agreements with unchanged eligible sourc
   ).toBe("unavailable");
 });
 
+it("INVOICELIST-01 reads each issued invoice with who it is for, its money and its states", async () => {
+  const f = fixture();
+  const r = await f.service.adminOverview(admin);
+  if (r.kind !== "ready") throw Error("Expected overview");
+  expect(r.value.invoices).toEqual([listed]);
+  const [sql, values] = f.query.mock.calls.find(([text]) =>
+    text.includes("FROM simple_invoices i LEFT JOIN learners l"),
+  )!;
+  // A read only: names come from the account, or the issued snapshot once
+  // the account is gone; newest first, bounded.
+  expect(sql.startsWith("SELECT i.id,i.revision,i.delivery")).toBe(true);
+  expect(sql).toContain(
+    "COALESCE(l.display_name,i.document->>'billedTo') AS student",
+  );
+  expect(sql).toContain("ORDER BY i.created_at DESC LIMIT 100");
+  expect(values).toEqual([null]);
+  await f.service.adminOverview(admin, ownerId);
+  expect(
+    f.query.mock.calls.some(
+      ([text, v]) =>
+        text.includes("($1::uuid IS NULL OR i.owner_id=$1)") &&
+        v?.[0] === ownerId,
+    ),
+  ).toBe(true);
+});
 it("ADMINCON02 restricts the proposal account picker to the exact valid learner", async () => {
   const f = fixture();
   expect((await f.service.adminOverview(admin, "wrong")).kind).toBe("invalid");

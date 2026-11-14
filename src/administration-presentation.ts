@@ -9,3 +9,61 @@ export function withAdministration<T>(available: boolean, render: () => T): T {
 export function administrationLink(html: string): string {
   return administration.getStore() === true ? html : "";
 }
+
+/** ADMINNAV-01: the one small menu every administrator page carries. */
+export type AdminMenuItem =
+  "students" | "invoices" | "roles" | "history" | "more";
+/** HIDE-01: areas that are switched off on this site get no menu link. */
+export interface AdminMenuAvailable {
+  invoices?: boolean;
+  roles?: boolean;
+}
+const ADMIN_MENU: ReadonlyArray<
+  readonly [item: AdminMenuItem, href: string, label: string]
+> = [
+  ["students", "/operator", "Students"],
+  ["invoices", "/operator/invoices", "Invoices"],
+  ["roles", "/operator/roles", "Roles"],
+  ["history", "/operator/changes", "History"],
+  ["more", "/staff", "More"],
+];
+export function adminMenu(
+  current?: AdminMenuItem,
+  available: AdminMenuAvailable = {},
+) {
+  const off = (item: AdminMenuItem) =>
+    (item === "invoices" && available.invoices === false) ||
+    ((item === "roles" || item === "history") && available.roles === false);
+  return `<nav class="admin-menu" aria-label="Administration">${ADMIN_MENU.filter(
+    ([item]) => !off(item),
+  )
+    .map(
+      ([item, href, label]) =>
+        `<a href="${href}"${item === current ? ' aria-current="page"' : ""}>${label}</a>`,
+    )
+    .join("")}</nav>`;
+}
+/**
+ * The menu for this site: administrator entry records which areas are on in
+ * `app.locals.adminMenu`; a page mounted without it shows every item.
+ */
+export function adminMenuFor(
+  res: { app: { locals: Record<string, unknown> } },
+  current?: AdminMenuItem,
+) {
+  return adminMenu(
+    current,
+    res.app.locals.adminMenu as AdminMenuAvailable | undefined,
+  );
+}
+
+/**
+ * INVOICELIST-01: an invoice number as people read it. A number that ends in
+ * a full account-style reference keeps only its first eight characters.
+ */
+export function shortInvoiceNumber(number: string) {
+  return number.replace(
+    /([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+    "$1",
+  );
+}

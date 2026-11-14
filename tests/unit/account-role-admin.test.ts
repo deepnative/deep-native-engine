@@ -337,6 +337,13 @@ it("ROLEADMIN-01 renders the Roles page without a remove button for the actor's 
   const res = await http.get("/operator/roles");
   expect(res.status).toBe(200);
   expect(res.headers["cache-control"]).toBe("no-store");
+  // ADMINNAV-01: the menu leads the page and replaces the old hub buttons.
+  expect(res.text).toContain(
+    '<section class="portal-workspace role-admin"><nav class="admin-menu" aria-label="Administration"><a href="/operator">Students</a><a href="/operator/invoices">Invoices</a><a href="/operator/roles" aria-current="page">Roles</a><a href="/operator/changes">History</a><a href="/staff">More</a></nav><h1>Roles</h1>',
+  );
+  expect(res.text).toContain("hours of students assigned to them");
+  for (const gone of ["portal-actions", "Administration console", "learner"])
+    expect(res.text).not.toContain(gone);
   expect(res.text).toContain("&lt;Ada&gt;");
   expect(res.text).toContain('Admin <span class="small">(you)</span>');
   expect(res.text).toContain('aria-label="Remove coach role from &lt;Ada&gt;"');
@@ -362,7 +369,11 @@ it("ROLEADMIN-01 renders the Roles page without a remove button for the actor's 
     "Nobody holds a coach or admin role.",
   );
   roles.mockResolvedValueOnce({ kind: "denied" });
-  expect((await http.get("/operator/roles")).status).toBe(403);
+  const denied = await http.get("/operator/roles");
+  expect(denied.status).toBe(403);
+  expect(denied.text).toContain(
+    '<a href="/operator" class="button secondary">Students</a>',
+  );
   roles.mockResolvedValueOnce({ kind: "unavailable" });
   expect((await http.get("/operator/roles")).status).toBe(503);
   const query = await http.get("/operator/roles?x=1");
@@ -549,6 +560,9 @@ it("DEFCOACH-04 renders the console coaches card", () => {
     anti,
   );
   expect(card).toContain('<h2 id="learner-coach">Coaches</h2>');
+  expect(card).toContain("<legend>Coaches for this student</legend>");
+  expect(card).not.toContain("learner<");
+  expect(card).not.toContain("this learner");
   expect(card).toContain(
     `<input type="checkbox" name="coach" value="${h("c")}"><span>&lt;Bo&gt;</span>`,
   );
@@ -652,6 +666,13 @@ it("CHANGELOG-01/11/12 serves the page and says when it can't be read", async ()
   expect(open.status).toBe(200);
   expect(open.headers["cache-control"]).toBe("no-store");
   expect(open.text).toContain("Ada &lt;b&gt; gave Bo the Coach role.");
+  // ADMINNAV-01: History is the current menu item; no hub buttons below.
+  expect(open.text).toContain(
+    '<div class="portal-page"><nav class="admin-menu" aria-label="Administration"><a href="/operator">Students</a><a href="/operator/invoices">Invoices</a><a href="/operator/roles">Roles</a><a href="/operator/changes" aria-current="page">History</a><a href="/staff">More</a></nav><div class="portal-intro"><h1>Change history</h1>',
+  );
+  expect(open.text).toContain("a student's coaches");
+  expect(open.text).not.toContain("portal-footer");
+  expect(open.text).not.toContain("Administration console");
   await request(await server).get("/operator/changes?before=abc");
   expect(seen).toEqual([undefined, "abc"]);
   for (const bad of ["other=1", "before=a&before=b"])
@@ -669,6 +690,9 @@ it("CHANGELOG-01/11/12 serves the page and says when it can't be read", async ()
     );
     expect(refused.status).toBe(status);
     expect(refused.text).toContain(text);
+    expect(refused.text).toContain(
+      '<a href="/operator" class="button secondary">Students</a>',
+    );
     expect(refused.text).not.toContain("No changes are recorded");
   }
 });

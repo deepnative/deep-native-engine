@@ -241,8 +241,8 @@ test("[L269] both verified owner identities explicitly enter finite billing admi
       ).toBeVisible();
       // ADMIN-LAYOUT-01: Enter and End share one row and line up (#639).
       const [enter, end] = await Promise.all(
-        ["Enter administration", "End administration for this sign-in"].map(
-          (name) => page.getByRole("button", { name }).boundingBox(),
+        ["Enter administration", "End an earlier session"].map((name) =>
+          page.getByRole("button", { name }).boundingBox(),
         ),
       );
       // Same row (desktop) or a clean stack (narrow), never half offset.
@@ -251,12 +251,18 @@ test("[L269] both verified owner identities explicitly enter finite billing admi
       ).toBe(true);
       await page.getByRole("button", { name: "Enter administration" }).click();
       await expect(
-        page.getByRole("heading", { name: "Administration console" }),
+        page.getByRole("heading", { name: "Students", level: 1 }),
       ).toBeVisible();
+      // ADMINNAV-01: the menu leads to Invoices; course billing opens below.
       await page
-        .getByRole("link", { name: "Courses and invoices", exact: true })
+        .getByRole("navigation", { name: "Administration", exact: true })
+        .getByRole("link", { name: "Invoices", exact: true })
         .click();
-      await page.getByLabel("Learner", { exact: true }).selectOption(f.id);
+      await expect(
+        page.getByRole("heading", { name: "Invoices", level: 1 }),
+      ).toBeVisible();
+      await page.getByText("Prepare course billing", { exact: true }).click();
+      await page.getByLabel("Student", { exact: true }).selectOption(f.id);
       await page
         .getByRole("checkbox", { name: /Invented owner-entry course/ })
         .check();
@@ -378,7 +384,7 @@ test("[L271] deliberate end and member signout revoke admin access while retaini
     await page.goto(f.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
     await expect(
-      page.getByRole("heading", { name: "Administration console" }),
+      page.getByRole("heading", { name: "Students", level: 1 }),
     ).toBeVisible();
     const outsider = await other.newPage();
     expect(
@@ -386,7 +392,7 @@ test("[L271] deliberate end and member signout revoke admin access while retaini
     ).toBe(403);
     await page.goto(f.origin + "/admin");
     await page
-      .getByRole("button", { name: "End administration for this sign-in" })
+      .getByRole("button", { name: "End administration", exact: true })
       .click();
     expect((await page.goto(f.origin + "/operator/invoices"))?.status()).toBe(
       403,
@@ -394,7 +400,7 @@ test("[L271] deliberate end and member signout revoke admin access while retaini
     await page.goto(f.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
     await expect(
-      page.getByRole("heading", { name: "Administration console" }),
+      page.getByRole("heading", { name: "Students", level: 1 }),
     ).toBeVisible();
     await page.goto(f.origin + "/account/sign-out");
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
@@ -435,20 +441,20 @@ test("[L272] lost entry acknowledgement returns no staff cookie and recovers onl
       }),
     ).toBeVisible();
     expect(f.commits).toBe(1);
+    // This browser holds no administration cookie, so the page offers to
+    // end the earlier session beside Enter administration.
     await page.goto(f.origin + "/admin");
-    await page
-      .getByRole("button", { name: "End administration for this sign-in" })
-      .click();
+    await page.getByRole("button", { name: "End an earlier session" }).click();
     await page.getByRole("button", { name: "Enter administration" }).click();
     await expect(
-      page.getByRole("heading", { name: "Administration console" }),
+      page.getByRole("heading", { name: "Students", level: 1 }),
     ).toBeVisible();
   } finally {
     await closeLoopback(f.server);
   }
 });
 
-test("[L277] ADMINCON01–04 selects an exact learner, composes existing terms and keeps private work isolated", async ({
+test("[L277] ADMINSTUDENT-01/ADMINCON01–04 opens an exact student, composes existing terms and keeps private work isolated", async ({
   page,
 }) => {
   const f = await fixture(page);
@@ -458,18 +464,24 @@ test("[L277] ADMINCON01–04 selects an exact learner, composes existing terms a
     await page.goto(f.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
     await expect(
-      page.getByRole("heading", { name: "Administration console" }),
+      page.getByRole("heading", { name: "Students", level: 1 }),
     ).toBeVisible();
-    await page.getByLabel("Search by name or account reference").fill(f.id);
+    await page.getByLabel("Search by name").fill(f.id);
     await page.getByRole("button", { name: "Search", exact: true }).click();
-    await page
-      .locator(".member-table tbody tr")
-      .getByRole("link")
-      .first()
-      .click();
+    const found = page.locator(".member-table tbody tr");
+    await expect(found).toHaveCount(1);
+    // ADMINSTUDENT-01: the name opens the one student page.
+    await expect(found.getByRole("link").first()).toHaveAttribute(
+      "href",
+      `/operator/coaching/${f.id}`,
+    );
+    // The coaches and course billing for this student are one small page.
+    await found.getByRole("link", { name: /^Coaches for / }).click();
+    await expect(page).toHaveURL(`${f.origin}/operator?ownerId=${f.id}`);
     await expect(
-      page.getByRole("heading", { name: "Selected learner", exact: true }),
-    ).toBeVisible();
+      page.getByRole("link", { name: "Hours, rate and invoices", exact: true }),
+    ).toHaveAttribute("href", `/operator/coaching/${f.id}`);
+    await expect(page.locator(".member-table")).toHaveCount(0);
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth > innerWidth,
@@ -483,9 +495,9 @@ test("[L277] ADMINCON01–04 selects an exact learner, composes existing terms a
       page.getByText("Invented retained learning draft", { exact: true }),
     ).toHaveCount(0);
     await page
-      .getByRole("link", { name: "Compose courses for this learner" })
+      .getByRole("link", { name: "Prepare course billing for this student" })
       .click();
-    await expect(page.getByLabel("Learner", { exact: true })).toHaveValue(f.id);
+    await expect(page.getByLabel("Student", { exact: true })).toHaveValue(f.id);
     await page
       .getByRole("checkbox", { name: /Invented owner-entry course/ })
       .check();
@@ -510,7 +522,7 @@ test("[L277] ADMINCON01–04 selects an exact learner, composes existing terms a
     ).toBe(0);
     await page.goto(f.origin + "/admin");
     await page
-      .getByRole("button", { name: "End administration for this sign-in" })
+      .getByRole("button", { name: "End administration", exact: true })
       .click();
     expect(
       (await page.goto(f.origin + "/operator?ownerId=" + f.id))?.status(),
@@ -705,7 +717,7 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
   }
 });
 
-test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners and keeps the selection", async ({
+test("[L287] ADMINHOME-01/ADMINTABLE-01..05 an administrator reads hours awaiting review, then pages and searches 60 students", async ({
   page,
 }) => {
   const f = await fixture(page);
@@ -760,34 +772,42 @@ test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners a
     await page.getByRole("button", { name: "Enter administration" }).click();
     const table = page.locator(".member-table");
     const rows = table.locator("tbody tr");
-    const pager = page.getByRole("navigation", { name: "Learner pages" });
+    const pager = page.getByRole("navigation", { name: "Student pages" });
     await expect(rows).toHaveCount(25);
     await expect(page.getByText("Showing 1–25 of 60")).toBeVisible();
     await expect(rows.first()).toContainText("Invented learner 01");
-    // CONSOLEMONTHS-01..03: this month, last month and earlier coaching,
-    // each with its hours and state and a link to that month.
-    await expect(table.locator("thead th")).toContainText([
+    // ADMINHOME-01: hours awaiting review come first and open that month.
+    const awaiting = page
+      .getByRole("region", { name: "Awaiting review" })
+      .getByRole("listitem");
+    await expect(awaiting).toHaveText([
+      /^Invented learner 01January 2020 · 172h$/,
+      new RegExp(`^Invented learner 01${label(previous)} · 10h$`),
+    ]);
+    await expect(awaiting.first().getByRole("link")).toHaveAttribute(
+      "href",
+      /\/operator\/coaching\/[0-9a-f-]+\?month=2020-01$/,
+    );
+    // ADMINHOME-01: name, hourly rate, this month, coaches and joined; no
+    // starting point, goal or account reference.
+    await expect(table.locator("thead th")).toHaveText([
+      "Name",
+      "Hourly rate",
       `This month${label(current)}`,
-      `Last month${label(previous)}`,
-      "Earlier coaching",
+      "Coaches",
+      "Joined",
     ]);
+    await expect(table.locator("code")).toHaveCount(0);
+    await expect(rows.first().locator("td").nth(1)).toHaveText("Not set");
+    // CONSOLEMONTHS-01: this month's hours and state, linked to that month.
     const months = rows.first().locator(".member-coaching");
-    await expect(months).toHaveText([
-      "12hDraft",
-      "10hAwaiting review",
-      "January 2020172h · Awaiting review",
-    ]);
-    for (const [index, month] of [current, previous, "2020-01"].entries())
-      await expect(months.nth(index).getByRole("link")).toHaveAttribute(
-        "href",
-        new RegExp(`/operator/coaching/[0-9a-f-]+\\?month=${month}$`),
-      );
-    // CONSOLEMONTHS-02: nothing saved reads as empty in every month column.
-    await expect(rows.nth(1).locator(".member-coaching")).toHaveText([
-      "—",
-      "—",
-      "—",
-    ]);
+    await expect(months).toHaveText(["12hDraft"]);
+    await expect(months.getByRole("link")).toHaveAttribute(
+      "href",
+      new RegExp(`/operator/coaching/[0-9a-f-]+\\?month=${current}$`),
+    );
+    // CONSOLEMONTHS-02: nothing saved reads as empty.
+    await expect(rows.nth(1).locator(".member-coaching")).toHaveText(["—"]);
     await expect(pager.getByRole("link", { name: "Next" })).toBeVisible();
     await expect(pager.getByRole("link", { name: "Previous" })).toHaveCount(0);
     const fits = async () => {
@@ -819,30 +839,29 @@ test("[L287] ADMINTABLE-01..05 an administrator pages and searches 60 learners a
 
     await pager.getByRole("link", { name: "Next" }).click();
     await expect(page.getByText("Showing 26–50 of 60")).toBeVisible();
-    await page.getByRole("link", { name: "Invented learner 30" }).click();
-    // CONSOLECOACH-02: choosing a learner brings their summary into view.
-    await expect(
-      page.getByRole("heading", { name: "Selected learner", exact: true }),
-    ).toBeInViewport();
-    await expect(page.locator(".portal-summary")).toContainText(
-      "Invented learner 30",
-    );
+    // ADMINSTUDENT-01: a name opens that student's one page; the list is
+    // not loaded again around a selection.
+    await page
+      .getByRole("link", { name: "Invented learner 30", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/operator\/coaching\/[0-9a-f-]+$/);
+    await page.goBack();
     await expect(page.getByText("Showing 26–50 of 60")).toBeVisible();
+    await page
+      .getByRole("link", { name: "Coaches for Invented learner 30" })
+      .click();
     await expect(
-      rows.filter({ hasText: "Invented learner 30" }),
-    ).toHaveAttribute("aria-current", "true");
+      page.getByRole("heading", { name: "Invented learner 30", level: 1 }),
+    ).toBeVisible();
+    await expect(page.locator(".member-table")).toHaveCount(0);
+    await page.goBack();
 
     await pager.getByRole("link", { name: "Next" }).click();
     await expect(page.getByText("Showing 51–60 of 60")).toBeVisible();
-    await expect(page.locator(".portal-summary")).toContainText(
-      "Invented learner 30",
-    );
     await expect(pager.getByRole("link", { name: "Next" })).toHaveCount(0);
     await expect(rows.last()).toContainText("Zed Owner");
 
-    await page
-      .getByLabel("Search by name or account reference")
-      .fill("LEARNER 1");
+    await page.getByLabel("Search by name").fill("LEARNER 1");
     await page.getByRole("button", { name: "Search", exact: true }).click();
     await expect(page.getByText("Showing 1–10 of 10")).toBeVisible();
     await expect(rows).toHaveCount(10);
@@ -867,7 +886,7 @@ test("[L288] DIAG-01..03 an administrator checks an email's account and link his
     if (page.viewportSize()!.width >= 1000)
       expect(
         await page
-          .locator(".portal-intro > p")
+          .locator(".admin-entry > p")
           .first()
           .evaluate(
             (paragraph) =>
@@ -879,9 +898,19 @@ test("[L288] DIAG-01..03 an administrator checks an email's account and link his
       path: `artifacts/administration-intro-${test.info().project.name}.png`,
     });
     await page.getByRole("button", { name: "Enter administration" }).click();
-    // FRICTION-11: staff tools link to the administration console.
-    await page.goto(f.origin + "/staff");
-    await page.getByRole("link", { name: "Administration console" }).click();
+    // ADMINNAV-01: More holds diagnostics, and the menu leads back to Students.
+    const menu = page.getByRole("navigation", {
+      name: "Administration",
+      exact: true,
+    });
+    await menu.getByRole("link", { name: "More", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "More tools", level: 1 }),
+    ).toBeVisible();
+    await expect(menu.getByRole("link", { name: "Students" })).toHaveAttribute(
+      "href",
+      "/operator",
+    );
     await page.getByRole("link", { name: "Diagnostics", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Diagnostics", level: 1 }),
@@ -1039,7 +1068,7 @@ test("[L290] ROLES-01..05 each account type lands on its own view and an owner s
     );
     await page.getByRole("button", { name: "Enter administration" }).click();
     await expect(
-      page.getByRole("heading", { name: "Administration console" }),
+      page.getByRole("heading", { name: "Students", level: 1 }),
     ).toBeVisible();
     // Switching to the student view keeps the administrator session.
     await header().locator(".view-menu > summary").click();
@@ -1171,7 +1200,7 @@ test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, 
     // DEFCOACH-03/04: Ada starts with the default coaches; move her to the new coach.
     await page.goto(`${owner.origin}/operator?ownerId=${adaId}`);
     const coaches = page.getByRole("group", {
-      name: "Coaches for this learner",
+      name: "Coaches for this student",
     });
     await expect(coaches.getByLabel("Invented Owner")).toBeChecked();
     await expect(coaches.getByLabel("Invented Coach")).not.toBeChecked();
@@ -1262,9 +1291,9 @@ test("[L301] CHANGELOG-01/02/03/04 an administrator reads who changed roles and 
     await page.goto(owner.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
 
-    // CHANGELOG-01: reached from the console, nothing recorded yet.
+    // CHANGELOG-01: reached from the menu, nothing recorded yet.
     await page.goto(owner.origin + "/operator");
-    await page.getByRole("link", { name: "Change history" }).click();
+    await page.getByRole("link", { name: "History", exact: true }).click();
     await expect(
       page.getByRole("heading", { name: "Change history", level: 1 }),
     ).toBeVisible();
@@ -1277,7 +1306,7 @@ test("[L301] CHANGELOG-01/02/03/04 an administrator reads who changed roles and 
     await page.getByRole("button", { name: "Give role" }).click();
     await page.goto(`${owner.origin}/operator?ownerId=${adaId}`);
     const coaches = page.getByRole("group", {
-      name: "Coaches for this learner",
+      name: "Coaches for this student",
     });
     await coaches.getByLabel("Invented Coach").check();
     await page.getByRole("button", { name: "Save coaches" }).click();
@@ -1397,9 +1426,8 @@ test("[L282] required names identify learners while legacy work and administrato
       "Invented retained learning draft",
     );
     await expect(directory).not.toContainText("shi@deepnative.io");
-    await expect(directory.locator("code").first()).toHaveText(
-      /^[a-f0-9-]{36}$/,
-    );
+    // ADMINHOME-01: no account reference is shown; each name is its link.
+    await expect(directory.locator("code")).toHaveCount(0);
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,

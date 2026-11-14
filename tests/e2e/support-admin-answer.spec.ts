@@ -127,7 +127,7 @@ test("[L310] ADMSUP-01..04 an administrator answers a member's support request t
     await page.goto(f.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
     await expect(
-      page.getByRole("heading", { name: "Administration console" }),
+      page.getByRole("heading", { name: "Students", level: 1 }),
     ).toBeVisible();
     await page.goto(f.origin + "/staff");
     await page

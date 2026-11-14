@@ -8,6 +8,7 @@ import type { WorkWaiting } from "../../src/administrator-work-waiting.ts";
 import {
   waitedFor,
   workQueueTools,
+  workWaitingCard,
 } from "../../src/administrator-work-waiting-views.ts";
 import { mountAdministratorEntry } from "../../src/administrator-entry-routes.ts";
 import type {
@@ -15,11 +16,7 @@ import type {
   AdministratorConsoleResult,
 } from "../../src/administrator-entry.ts";
 import { csrf, COOKIE } from "../../src/session.ts";
-import {
-  expectPortalActions,
-  mainHtml,
-  portalActionRows,
-} from "../support/portal-layout.ts";
+import { mainHtml, portalActionRows } from "../support/portal-layout.ts";
 const listeners = new WeakMap<express.Express, Promise<Server>>();
 const ownedServers: Promise<Server>[] = [];
 async function http(application: express.Express) {
@@ -47,6 +44,7 @@ const listing = {
   pageSize: 25,
   search: "",
   months: { current: "2026-11", previous: "2026-10" },
+  awaiting: [],
 };
 function fixture(
   options: {
@@ -245,20 +243,108 @@ it("ADMINONLY03/05 refuses disabled/live or missing stores and denies unknown re
   }
 });
 
-it("ADMINCON01 offers one administration workspace instead of a missing route", async () => {
+it("ADMINHOME-01/ADMINNAV-01 lands on one Students page with the menu and no hub buttons", async () => {
   const f = fixture();
   const response = await (
     await http(f.app)
   )
     .get("/operator")
-    .set("Cookie", `dne_staff=${credential}`);
+    .set("Cookie", `dne_staff=${credential}; ${COOKIE}=${token}`);
   expect(response.status).toBe(200);
-  expect(response.text).toContain('href="#learners"');
-  expect(response.text).toContain('href="#courses"');
-  expect(response.text).toContain('href="#invoices"');
+  const main = mainHtml(response.text);
+  expect(response.text).toContain("<title>Students ·");
+  expect(main).toContain("<h1>Students</h1>");
+  // HIDE-01: billing and roles are off in this fixture, so they get no link.
+  expect(main).toContain(
+    '<nav class="admin-menu" aria-label="Administration"><a href="/operator" aria-current="page">Students</a><a href="/staff">More</a></nav>',
+  );
+  expect(main.indexOf('id="awaiting-review"')).toBeLessThan(
+    main.indexOf('id="all-students"'),
+  );
+  expect(main).toContain("No hours are waiting for review.");
+  expect(main).toContain("No students yet.");
+  // The in-page anchor buttons, the hub footer and the empty cards are gone.
+  for (const gone of [
+    'href="#',
+    "portal-actions",
+    "portal-footer",
+    "portal-card",
+    "Courses",
+    "Invoices",
+    "Administration console",
+    "Learner",
+    'href="/admin"',
+    'href="/account"',
+  ])
+    expect(main).not.toContain(gone);
+  const on = fixture({ billing: true });
+  on.state.directory = {
+    kind: "ready",
+    value: {
+      ...listing,
+      members: [],
+      courses: [{ id: "FND-001", version: 2, title: "<Invented lesson>" }],
+    },
+  };
+  const listed = mainHtml(
+    (
+      await (
+        await http(on.app)
+      )
+        .get("/operator")
+        .set("Cookie", `dne_staff=${credential}`)
+    ).text,
+  );
+  expect(listed).toContain('<a href="/operator/invoices">Invoices</a>');
+  expect(listed).toContain(
+    '<h2 id="courses">Courses</h2><p>Published lessons that can be put on a course invoice.</p><ul class="admin-list"><li>&lt;Invented lesson&gt;<span>FND-001 version 2</span></li></ul>',
+  );
 });
-
-it("ADMINCON01/02 renders only bounded account and billing summaries with escaped content", async () => {
+it("ADMINHOME-01 lists submitted hours first, each opening that student's month", async () => {
+  const f = fixture();
+  const id = "11111111-1111-4111-8111-111111111111",
+    other = "22222222-2222-4222-8222-222222222222";
+  f.state.directory = {
+    kind: "ready",
+    value: {
+      ...listing,
+      members: [],
+      courses: [],
+      awaiting: [
+        {
+          id,
+          displayName: "Mei <Tanaka>",
+          month: "2026-10",
+          periodStart: "2026-10-01",
+          periodEnd: "2026-10-31",
+          minutes: 270,
+        },
+        {
+          id: other,
+          displayName: null,
+          month: "2026-10-16",
+          periodStart: "2026-10-16",
+          periodEnd: "2026-10-29",
+          minutes: 60,
+        },
+      ],
+    },
+  };
+  const main = mainHtml(
+    (
+      await (
+        await http(f.app)
+      )
+        .get("/operator")
+        .set("Cookie", `dne_staff=${credential}`)
+    ).text,
+  );
+  expect(main).toContain(
+    `<h2 id="awaiting-review">Awaiting review</h2><ul class="admin-list"><li><a href="/operator/coaching/${id}?month=2026-10">Mei &lt;Tanaka&gt;</a><span>October 2026 · 4h 30m</span></li><li><a href="/operator/coaching/${other}?month=2026-10-16">Name needed</a><span>16 Oct 2026 to 29 Oct 2026 · 1h</span></li></ul>`,
+  );
+  expect(main).not.toContain("No hours are waiting for review.");
+});
+it("ADMINSTUDENT-01/ADMINCON02 an old selected-student link is a small page for that student, escaped", async () => {
   const f = fixture({ billing: true }),
     id = "11111111-1111-4111-8111-111111111111";
   f.state.directory = {
@@ -292,6 +378,12 @@ it("ADMINCON01/02 renders only bounded account and billing summaries with escape
             totalCents: "1200",
             delivery: "not_sent",
           },
+          {
+            id,
+            number: `DN-${id}`,
+            totalCents: "5000",
+            delivery: "sent",
+          },
         ],
       },
     },
@@ -303,16 +395,36 @@ it("ADMINCON01/02 renders only bounded account and billing summaries with escape
     .set("Cookie", `dne_staff=${credential}`);
   expect(r.status).toBe(200);
   expect(r.headers["cache-control"]).toBe("no-store");
-  expect(r.text).toContain("&lt;Invented member&gt;");
-  expect(r.text).toContain("&lt;professional&gt;");
-  expect(r.text).toContain("&lt;work&gt;");
+  expect(r.text).toContain("<title>&lt;Invented member&gt; ·");
+  const main = mainHtml(r.text);
+  // The page is the student, not the whole console again.
+  expect(main).toContain(
+    `<a href="/operator">Students</a><a href="/operator/invoices">Invoices</a><a href="/staff">More</a></nav><h1>&lt;Invented member&gt;</h1><div class="portal-actions"><a href="/operator/coaching/${id}" class="button">Hours, rate and invoices</a></div>`,
+  );
+  for (const gone of [
+    "<table",
+    "portal-search",
+    "Awaiting review",
+    "Selected learner",
+    "Account reference",
+    "&lt;professional&gt;",
+    "&lt;Invented lesson&gt;",
+    `<code>${id}</code>`,
+  ])
+    expect(main).not.toContain(gone);
   expect(r.text).not.toContain("<Invented member>");
-  expect(r.text).toContain("&lt;Invented lesson&gt;");
-  expect(r.text).toContain("&lt;Foundations&gt;");
-  expect(r.text).toContain("&lt;Sample-1&gt;");
-  expect(r.text).toContain("CAD 12.00");
-  expect(r.text).toContain("/operator/invoices?ownerId=" + id);
-  expect(r.text).toContain("Private writing and files are not available");
+  expect(main).toContain("<li>&lt;Foundations&gt; · local-foundation-1</li>");
+  expect(main).toContain("<li>Course bundle · offered</li>");
+  expect(main).toContain(
+    `<a href="/operator/invoices/${id}">&lt;Sample-1&gt;</a> · CAD 12.00 · Not sent`,
+  );
+  // A number built on a long reference shows only its first eight characters.
+  expect(main).toContain(
+    `<a href="/operator/invoices/${id}">DN-11111111</a> · CAD 50.00 · Sent</li>`,
+  );
+  expect(main).toContain(
+    `<a href="/operator/invoices?ownerId=${id}">Prepare course billing for this student</a>`,
+  );
   f.state.directory.value.selected!.enrollments = [];
   f.state.directory.value.selected!.plans = [];
   f.state.directory.value.selected!.invoices = [];
@@ -322,21 +434,23 @@ it("ADMINCON01/02 renders only bounded account and billing summaries with escape
   )
     .get("/operator")
     .set("Cookie", `dne_staff=${credential}`);
-  expect(empty.text).toContain("Name needed");
-  expect(empty.text).toContain("No recorded enrollment");
-  expect(empty.text).toContain("No course bundles");
-  expect(empty.text).toContain("No issued invoices");
+  expect(empty.text).toContain("<title>Student ·");
+  expect(empty.text).toContain("<h1>Name needed</h1>");
+  expect(empty.text).toContain(
+    "No course enrollment, bundle or course invoice yet.",
+  );
+  expect(empty.text).not.toContain("portal-columns");
   const off = fixture();
   off.state.directory = f.state.directory;
-  expect(
-    (
-      await (
-        await http(off.app)
-      )
-        .get("/operator")
-        .set("Cookie", `dne_staff=${credential}`)
-    ).text,
-  ).toContain("Billing is disabled");
+  const disabled = (
+    await (
+      await http(off.app)
+    )
+      .get("/operator")
+      .set("Cookie", `dne_staff=${credential}`)
+  ).text;
+  expect(disabled).toContain("Billing is switched off on this site.");
+  expect(disabled).not.toContain("/operator/invoices");
 });
 it("ADMINCON04 denies direct malformed or expired console requests without authority renewal", async () => {
   const f = fixture();
@@ -404,7 +518,7 @@ it("ADMINCON04 denies direct malformed or expired console requests without autho
   ).toBe(503);
   expect(f.fn).not.toHaveBeenCalled();
 });
-it("ADMINTABLE-01/02/03/04 renders a paged table that keeps the search and selection", async () => {
+it("ADMINHOME-01/ADMINTABLE-01/02/03/04 renders a paged student table that keeps the search", async () => {
   const f = fixture();
   const calls: unknown[][] = [];
   const member = (index: number) => ({
@@ -413,6 +527,7 @@ it("ADMINTABLE-01/02/03/04 renders a paged table that keeps the search and selec
     background: "professional",
     goal: "work",
     joined: new Date("2026-11-02T12:00:00Z"),
+    rateCents: index === 1 ? 12000 : null,
   });
   const members = [member(1), member(2)];
   const app = express();
@@ -443,19 +558,27 @@ it("ADMINTABLE-01/02/03/04 renders a paged table that keeps the search and selec
   const first = await get();
   expect(first.status).toBe(200);
   expect(first.text).toContain("Showing 1–2 of 60");
-  expect(first.text).toContain('<table class="member-table">');
-  for (const heading of [
-    "Name",
+  expect(first.text).toContain(
+    '<table class="member-table stack-table"><thead><tr><th scope="col">Name</th><th scope="col">Hourly rate</th><th scope="col">This month<span>November 2026</span></th><th scope="col">Coaches</th><th scope="col">Joined</th></tr></thead>',
+  );
+  // ADMINHOME-01: no starting point, goal or account reference columns.
+  for (const gone of [
     "Starting point",
     "Goal",
-    "Joined",
     "Account reference",
+    "<code>",
+    "Last month",
+    "Earlier coaching",
   ])
-    expect(first.text).toContain(`<th scope="col">${heading}</th>`);
-  expect(first.text).toContain("Learner &lt;1&gt;");
-  expect(first.text).toContain("Name needed");
-  expect(first.text).toContain("2026-11-02");
-  expect(first.text).toContain(`<code>${members[0]!.id}</code>`);
+    expect(first.text).not.toContain(gone);
+  // ADMINSTUDENT-01: the name opens the one student page. Each cell carries
+  // its label for the stacked phone layout.
+  expect(first.text).toContain(
+    `<tr><td data-label="Name"><a href="/operator/coaching/${members[0]!.id}">Learner &lt;1&gt;</a></td><td data-label="Hourly rate">CAD 120.00</td><td data-label="This month" class="member-coaching">—</td><td data-label="Coaches"><a href="/operator?ownerId=${members[0]!.id}" aria-label="Coaches for Learner &lt;1&gt;">Coaches</a></td><td data-label="Joined">2026-11-02</td></tr>`,
+  );
+  expect(first.text).toContain(
+    `<a href="/operator/coaching/${members[1]!.id}">Name needed</a></td><td data-label="Hourly rate">Not set</td>`,
+  );
   expect(first.text).toContain('href="/operator?page=2">Next');
   expect(first.text).not.toContain(">Previous<");
   expect(first.text).not.toContain("Clear search");
@@ -496,36 +619,14 @@ it("ADMINTABLE-01/02/03/04 renders a paged table that keeps the search and selec
   expect(searched.text).toContain(
     'href="/operator?page=3&amp;q=a%26b+%3Cc%3E">Next',
   );
-  expect(searched.text).toContain(
-    `href="/operator?ownerId=${members[0]!.id}&amp;page=2&amp;q=a%26b+%3Cc%3E#selected-member"`,
-  );
   expect(searched.text).toContain('href="/operator">Clear search</a>');
+  expect(searched.text).toContain(
+    '<label for="console-search">Search by name</label>',
+  );
 
-  f.state.directory = {
-    kind: "ready",
-    value: {
-      ...listing,
-      members,
-      courses: [],
-      total: 60,
-      page: 2,
-      selected: {
-        member: members[0]!,
-        enrollments: [],
-        plans: [],
-        invoices: [],
-      },
-    },
-  };
-  const selected = await get(`?ownerId=${members[0]!.id}&page=2`);
-  expect(selected.text).toContain("Selected learner");
-  expect(selected.text).toContain(
-    `<input type="hidden" name="ownerId" value="${members[0]!.id}">`,
-  );
-  expect(selected.text).toContain(
-    `href="/operator?ownerId=${members[0]!.id}&amp;page=3">Next`,
-  );
-  expect(selected.text).toContain('aria-current="true"');
+  // One page of students needs no pager.
+  ready(1, 2);
+  expect((await get()).text).not.toContain("member-pager");
 
   f.state.directory = {
     kind: "ready",
@@ -538,19 +639,18 @@ it("ADMINTABLE-01/02/03/04 renders a paged table that keeps the search and selec
     },
   };
   const none = await get("?q=nobody");
-  expect(none.text).toContain("No learner accounts match this search.");
+  expect(none.text).toContain("No students match this search.");
   expect(none.text).not.toContain("<table");
   expect(none.text).not.toContain("Showing");
   f.state.directory = {
     kind: "ready",
     value: { members: [], courses: [], ...listing, total: 0 },
   };
-  expect((await get()).text).toContain("No learner accounts available.");
+  expect((await get()).text).toContain("No students yet.");
 
   for (const query of ["?q=a&q=b", "?page=1&page=2", "?q=" + "x".repeat(121)])
     expect((await get(query)).status).toBe(403);
 });
-
 it("NAME03/05 names are primary, escaped and distinguishable without exposing private data", async () => {
   const f = fixture();
   const first = {
@@ -584,44 +684,54 @@ it("NAME03/05 names are primary, escaped and distinguishable without exposing pr
     .set("Cookie", `dne_staff=${credential}`);
   expect(response.status).toBe(200);
   expect(response.text).toContain(">李明 &lt;Sam&gt;</a>");
-  expect(response.text).toContain("Exploring AI");
-  expect(response.text).toContain("Make everyday work clearer");
   expect(response.text).toContain("Name needed");
   for (const member of f.state.directory.value.members)
     expect(response.text).toContain(member.id);
   expect(response.text).not.toContain("<Sam>");
 });
-it("ADMIN-LAYOUT-01 groups session controls and tool links as spaced button rows", async () => {
-  const page = await (
-    await http(fixture().app)
-  )
+it("ADMINHOME-01/ADMIN-LAYOUT-01 the entry page is short: one sentence and the controls for the current state", async () => {
+  const f = fixture({ billing: true });
+  const client = await http(f.app);
+  const before = await client.get("/admin").set("Cookie", `${COOKIE}=${token}`);
+  expect(before.status).toBe(200);
+  const anti = `<input type="hidden" name="csrf" value="${csrf(token, secret)}">`;
+  // Not entered: the sentence and Enter administration. Ending stays on the
+  // page for a session this browser no longer holds.
+  expect(mainHtml(before.text)).toContain(
+    `<div class="portal-page admin-entry"><h1>Administration</h1><p>An administrator session lasts up to eight hours and stays separate from your learning account.</p><div class="portal-actions"><form method="post" action="/admin/enter">${anti}<button type="submit">Enter administration</button></form><form method="post" action="/admin/end">${anti}<button class="secondary" type="submit">End an earlier session</button></form></div></div>`,
+  );
+  for (const gone of ["admin-menu", "/operator", "portal-card"])
+    expect(mainHtml(before.text)).not.toContain(gone);
+  // Entered in this browser: the menu, one primary link and End administration.
+  const after = await client
     .get("/admin")
-    .set("Cookie", `${COOKIE}=${token}`);
-  expect(page.status).toBe(200);
-  const main = mainHtml(page.text);
-  expect(main).toContain('<div class="portal-page">');
-  expectPortalActions(page.text, [
-    ["/operator", "Administration console"],
-    ["/operator/invoices", "Courses and invoices"],
-    ["/operator/coaching", "Coaching administration"],
-    ["/staff", "Staff tools"],
-    ["/account", "My learning account"],
-  ]);
-  const session = portalActionRows(page.text).find((row) =>
-    row.includes('action="/admin/enter"'),
+    .set("Cookie", `${COOKIE}=${token}; dne_staff=${credential}`);
+  const main = mainHtml(after.text);
+  expect(main).toContain(
+    '<nav class="admin-menu" aria-label="Administration"><a href="/operator">Students</a><a href="/operator/invoices">Invoices</a><a href="/staff">More</a></nav><h1>Administration</h1>',
   );
-  expect(session).toContain('action="/admin/end"');
-  expect(session).toContain(
-    '<button class="secondary" type="submit">End administration for this sign-in</button>',
+  expect(main).toContain(
+    `<div class="portal-actions"><a href="/operator" class="button">Go to Students</a><form method="post" action="/admin/end">${anti}<button class="secondary" type="submit">End administration</button></form></div></div>`,
   );
-  expect(main.match(/<section class="portal-card"/g)).toHaveLength(3);
+  expect(main).not.toContain("/admin/enter");
+  expect(main).not.toContain("portal-card");
+  expect(main.match(/class="button/g)).toHaveLength(1);
+  // An ended or malformed administration cookie reads as not entered.
+  for (const staff of ["signed-out", "short"])
+    expect(
+      mainHtml(
+        (
+          await client
+            .get("/admin")
+            .set("Cookie", `${COOKIE}=${token}; dne_staff=${staff}`)
+        ).text,
+      ),
+    ).toContain('action="/admin/enter"');
   expect(
-    portalActionRows(
-      (await (await http(fixture().app)).get("/admin")).text,
-    ).join(""),
+    portalActionRows((await client.get("/admin")).text).join(""),
   ).toContain('href="/email/sign-in" class="button secondary">Email sign-in');
 });
-it("ADMIN-LAYOUT-02 separates console areas into cards with button actions and wrapping references", async () => {
+it("ADMINHOME-01/ADMIN-LAYOUT-02 the Students page is plain sections, with a search and no cards", async () => {
   const f = fixture({ billing: true }),
     id = "11111111-1111-4111-8111-111111111111",
     member = {
@@ -633,64 +743,33 @@ it("ADMIN-LAYOUT-02 separates console areas into cards with button actions and w
     };
   f.state.directory = {
     kind: "ready",
-    value: {
-      members: [member],
-      courses: [],
-      ...listing,
-      selected: { member, enrollments: [], plans: [], invoices: [] },
-    },
+    value: { members: [member], courses: [], ...listing },
   };
-  const get = async (app = f.app, cookie = `; ${COOKIE}=${"a".repeat(64)}`) =>
+  const main = mainHtml(
     (
       await (
-        await http(app)
+        await http(f.app)
       )
         .get("/operator")
-        .set("Cookie", `dne_staff=${credential}${cookie}`)
-    ).text;
-  // FRICTION-11: /admin needs a member account, so staff alone are not sent there.
-  expect(await get(f.app, "")).not.toContain('href="/admin"');
-  const selected = await get();
-  const main = mainHtml(selected);
+        .set("Cookie", `dne_staff=${credential}; ${COOKIE}=${"a".repeat(64)}`)
+    ).text,
+  );
   expect(main).toContain('<div class="portal-page administrator-console">');
-  for (const area of ["learners", "courses", "invoices"])
-    expect(main).toContain(`<section class="portal-card" id="${area}"`);
   expect(main).toContain(
-    '<section class="portal-card" aria-labelledby="selected-member">',
+    '<section class="admin-section" aria-labelledby="awaiting-review">',
   );
   expect(main).toContain(
-    '<nav class="portal-actions" aria-label="Administration sections">',
+    '<section class="admin-section" aria-labelledby="all-students"><h2 id="all-students">All students</h2><form class="portal-search" method="get" action="/operator">',
   );
   expect(main).toContain(
-    `<p class="portal-reference">Account reference: <code>${id}</code></p>`,
+    '<div class="table-scroll" tabindex="0" role="region" aria-label="Students">',
   );
-  expect(main).toContain(
-    '<form class="portal-search" method="get" action="/operator">',
-  );
-  expectPortalActions(selected, [
-    ["#learners", "Learners"],
-    [`/operator/invoices?ownerId=${id}`, "Compose courses for this learner"],
-    [`/operator/coaching/${id}`, "Coaching hours and rates"],
-    ["/operator/invoices", "Courses and invoices"],
-    ["/operator/coaching", "Coaching administration"],
-    // DIAG-02: read-only checks are one step from the console.
-    ["/operator/diagnostics", "Diagnostics"],
-    ["/admin", "Administrator session"],
-    ["/account", "My learning account"],
-  ]);
-  expect(main).toContain(
-    `<a href="/operator/invoices?ownerId=${id}" class="button">Compose courses`,
-  );
-  f.state.directory = {
-    kind: "ready",
-    value: { members: [], courses: [], ...listing },
-  };
-  const plain = mainHtml(await get());
-  expect(plain).not.toContain("selected-member");
-  expect(plain.match(/<section class="portal-card"/g)).toHaveLength(3);
+  expect(main).not.toContain("portal-card");
+  expect(main).not.toContain("portal-actions");
+  expect(main).not.toContain('name="ownerId"');
+  expect(main.match(/<h2/g)).toHaveLength(2);
 });
-
-it("CONSOLEMONTHS-01..03/CONSOLECOACH-02 shows this month, last month and earlier coaching, and jumps to the selection", async () => {
+it("ADMINHOME-01/CONSOLEMONTHS-01/02 shows this month's hours and status, linked to that month", async () => {
   const f = fixture();
   const base = {
     background: "professional",
@@ -698,7 +777,7 @@ it("CONSOLEMONTHS-01..03/CONSOLECOACH-02 shows this month, last month and earlie
     joined: new Date("2026-11-02T12:00:00Z"),
   };
   const coaching = (state: string, extra = {}) => ({
-    month: "2026-10",
+    month: "2026-11",
     minutes: 10320,
     state,
     returned: false,
@@ -714,41 +793,61 @@ it("CONSOLEMONTHS-01..03/CONSOLECOACH-02 shows this month, last month and earlie
       id: id(1),
       displayName: "Draft",
       ...base,
-      coaching: coaching("draft"),
-      thisMonth: coaching("draft", { month: "2026-11", minutes: 720 }),
+      // Earlier months are on the student's own page, not in this table.
+      coaching: coaching("draft", { month: "2026-09" }),
+      thisMonth: coaching("draft", { minutes: 720 }),
       lastMonth: coaching("submitted", { month: "2026-10", minutes: 90 }),
     },
     {
       id: id(2),
       displayName: "Review",
       ...base,
-      coaching: coaching("submitted"),
+      thisMonth: coaching("submitted"),
     },
     {
       id: id(3),
       displayName: "Paid",
       ...base,
-      coaching: coaching("invoiced", { totalCents: "5000", paidCents: "5000" }),
+      thisMonth: coaching("invoiced", {
+        totalCents: "5000",
+        paidCents: "5000",
+      }),
     },
     {
       id: id(4),
       displayName: "Due",
       ...base,
-      coaching: coaching("invoiced", { totalCents: "5000", paidCents: "1000" }),
+      thisMonth: coaching("invoiced", {
+        totalCents: "5000",
+        paidCents: "1000",
+      }),
     },
     {
       id: id(5),
       displayName: "Void",
       ...base,
-      coaching: coaching("invoiced", { totalCents: "5000", voided: true }),
+      thisMonth: coaching("invoiced", { totalCents: "5000", voided: true }),
     },
     {
       id: id(6),
       displayName: "Returned",
       ...base,
-      coaching: coaching("draft", { returned: true, minutes: 90 }),
+      thisMonth: coaching("draft", { returned: true, minutes: 90 }),
     },
-    { id: id(7), displayName: "None", ...base, coaching: null },
+    {
+      // #832: a defined period is named by its dates.
+      id: id(7),
+      displayName: "Period",
+      ...base,
+      thisMonth: coaching("draft", {
+        month: "2026-11-03",
+        periodStart: "2026-11-03",
+        periodEnd: "2026-11-16",
+        minutes: 60,
+      }),
+    },
+    { id: id(8), displayName: "None", ...base, thisMonth: null },
+    { id: id(9), displayName: "Never", ...base },
   ];
   const app = express();
   mountAdministratorEntry(
@@ -760,13 +859,10 @@ it("CONSOLEMONTHS-01..03/CONSOLECOACH-02 shows this month, last month and earlie
       console: async () => ({
         kind: "ready" as const,
         value: {
+          ...listing,
           members,
-          months: { current: "2026-11", previous: "2026-10" },
           courses: [],
-          total: 7,
-          page: 1,
-          pageSize: 25,
-          search: "",
+          total: 9,
         },
       }),
     },
@@ -784,36 +880,31 @@ it("CONSOLEMONTHS-01..03/CONSOLECOACH-02 shows this month, last month and earlie
     .get("/operator")
     .set("Cookie", `dne_staff=${credential}`);
   expect(res.status).toBe(200);
-  // CONSOLEMONTHS-01: each month column names its month and links to it.
+  const cell = 'data-label="This month" class="member-coaching">';
+  // CONSOLEMONTHS-01: the column names its month and links to it.
   expect(res.text).toContain(
-    '<th scope="col">This month<span>November 2026</span></th><th scope="col">Last month<span>October 2026</span></th><th scope="col">Earlier coaching</th>',
+    '<th scope="col">This month<span>November 2026</span></th>',
   );
-  expect(res.text).not.toContain("Latest coaching");
   expect(res.text).toContain(
-    `<td class="member-coaching"><a href="/operator/coaching/${id(1)}?month=2026-11">12h</a><span>Draft</span></td><td class="member-coaching"><a href="/operator/coaching/${id(1)}?month=2026-10">1h 30m</a><span>Awaiting review</span></td>`,
-  );
-  // CONSOLEMONTHS-03: an earlier month keeps its name beside the hours.
-  expect(res.text).toContain(
-    `<a href="/operator/coaching/${id(1)}?month=2026-10">October 2026</a><span>172h · Draft</span>`,
+    `${cell}<a href="/operator/coaching/${id(1)}?month=2026-11">12h</a><span>Draft</span></td>`,
   );
   for (const label of [
-    "172h · Awaiting review",
-    "172h · Invoiced · Paid",
-    "172h · Invoiced · CAD 40.00 due",
-    "172h · Void",
-    "1h 30m · Returned for correction",
+    "Awaiting review",
+    "Invoiced · Paid",
+    "Invoiced · CAD 40.00 due",
+    "Void",
+    "Returned for correction",
   ])
     expect(res.text).toContain(`<span>${label}</span>`);
-  // CONSOLEMONTHS-02: a month with nothing saved reads as empty.
-  expect(res.text.match(/<td class="member-coaching">—<\/td>/g)).toHaveLength(
-    13,
-  );
-  // CONSOLECOACH-02: a learner's name jumps to their summary below the table.
   expect(res.text).toContain(
-    `href="/operator?ownerId=${id(1)}&amp;page=1#selected-member"`,
+    `${cell}<a href="/operator/coaching/${id(7)}?month=2026-11-03">3 Nov 2026 to 16 Nov 2026</a><span>1h · Draft</span></td>`,
   );
+  // CONSOLEMONTHS-02: a month with nothing saved reads as empty.
+  expect(res.text.split(`${cell}—</td>`)).toHaveLength(3);
+  expect(res.text).not.toContain("month=2026-10");
+  expect(res.text).not.toContain("month=2026-09");
 });
-it("DEFCOACH-04/ROLEADMIN-01 shows the selected learner's coaches control and the Roles links", async () => {
+it("ADMINSTUDENT-01/DEFCOACH-04/ROLEADMIN-01 keeps the coaches control on the student's small page, and Roles in the menu", async () => {
   const id = "11111111-1111-4111-8111-111111111111";
   const learnerCoaches = vi.fn(async () => ({
     kind: "ready" as const,
@@ -872,20 +963,25 @@ it("DEFCOACH-04/ROLEADMIN-01 shows the selected learner's coaches control and th
     .set("Cookie", `dne_staff=${credential}`);
   expect(res.status).toBe(200);
   expect(learnerCoaches).toHaveBeenCalledWith(credential, id);
+  expect(res.text).toContain("<h1>Invented Ada</h1>");
   expect(res.text).toContain('<h2 id="learner-coach">Coaches</h2>');
+  expect(res.text).toContain("<legend>Coaches for this student</legend>");
   expect(res.text).toContain(
     `<input type="hidden" name="csrf" value="${csrf(credential, secret)}">`,
   );
   expect(res.text).toContain(
     `value="${"d".repeat(64)}" checked><span>Invented Coach</span>`,
   );
-  expect(res.text).toContain('href="/operator/roles"');
-  const admin = await client.get("/admin").set("Cookie", `${COOKIE}=${token}`);
-  expect(admin.text).toContain(
-    '<a href="/operator/roles" class="button secondary">Roles</a>',
-  );
+  // HIDE-01: roles are on and billing is off, so the menu says exactly that.
+  const menu =
+    '<a href="/operator/roles">Roles</a><a href="/operator/changes">History</a><a href="/staff">More</a></nav>';
+  expect(res.text).toContain(`<a href="/operator">Students</a>${menu}`);
+  expect(app.locals.adminMenu).toEqual({ invoices: false, roles: true });
+  const admin = await client
+    .get("/admin")
+    .set("Cookie", `${COOKIE}=${token}; dne_staff=${credential}`);
+  expect(admin.text).toContain(menu);
 });
-
 const consoleHtml = (res: { text: string }) => mainHtml(res.text);
 const emptyQueue = {
   waiting: 0,
@@ -958,7 +1054,7 @@ async function consoleWith(
 const row = (html: string, queue: string) =>
   html.match(new RegExp(`<tr data-work-queue="${queue}">.*?</tr>`))?.[0] ?? "";
 
-it("WAITWORK-01 shows waiting work first, with ages and links to each queue", async () => {
+it("WAITWORK-01 shows waiting work below the students, with ages and links to each queue", async () => {
   const work = vi.fn(async () => ({
     kind: "ready" as const,
     value: invented,
@@ -967,8 +1063,8 @@ it("WAITWORK-01 shows waiting work first, with ages and links to each queue", as
   expect(res.status).toBe(200);
   expect(work).toHaveBeenCalledWith(credential);
   const text = consoleHtml(res);
-  expect(text.indexOf('id="work-waiting"')).toBeLessThan(
-    text.indexOf('id="learners"'),
+  expect(text.indexOf('id="all-students"')).toBeLessThan(
+    text.indexOf('id="work-waiting"'),
   );
   expect(text).toContain("not a response-time promise");
   const support = row(text, "support");
@@ -987,7 +1083,35 @@ it("WAITWORK-01 shows waiting work first, with ages and links to each queue", as
     "<td>1</td><td>Under a minute</td><td>—</td><td>2</td>",
   );
 });
-
+it("HIDE-01 leaves Work waiting out when nothing is waiting or assigned in a queue that is on", async () => {
+  const quiet = {
+    support: emptyQueue,
+    feedback: emptyQueue,
+    workflow: { ...emptyQueue, references: [] },
+    contributions: { ...emptyQueue, assigned: null },
+  };
+  const ready = (value: unknown) => async () => ({ kind: "ready", value });
+  expect(consoleHtml(await consoleWith(ready(quiet)))).not.toContain(
+    "work-waiting",
+  );
+  // One assigned item, or one waiting item, brings the whole card back.
+  for (const busy of [
+    { ...quiet, feedback: { ...emptyQueue, assigned: 1 } },
+    { ...quiet, contributions: { ...quiet.contributions, waiting: 1 } },
+  ])
+    expect(consoleHtml(await consoleWith(ready(busy)))).toContain(
+      'id="work-waiting"',
+    );
+  // Work in a queue that is switched off here does not count.
+  expect(
+    consoleHtml(
+      await consoleWith(
+        ready({ ...quiet, support: { ...emptyQueue, waiting: 4 } }),
+        { support: false },
+      ),
+    ),
+  ).not.toContain("work-waiting");
+});
 it("WAITWORK-04 lists workflow references and says when the list is cut short", async () => {
   const many = consoleHtml(
     await consoleWith(async () => ({ kind: "ready", value: invented })),
@@ -1034,6 +1158,14 @@ it("WAITWORK-06 omits queues that are off on this site", async () => {
     }),
   );
   expect(none).not.toContain("work-waiting");
+  expect(
+    workWaitingCard(invented, {
+      support: false,
+      feedback: false,
+      workflow: false,
+      contributions: false,
+    }),
+  ).toBe("");
 });
 
 it("WAITWORK-07 reads nothing for a request the console refuses", async () => {
@@ -1075,7 +1207,7 @@ it("WAITWORK-08 keeps the console and never shows zero when counts cannot be rea
     const res = await consoleWith(work);
     expect(res.status).toBe(200);
     const text = consoleHtml(res);
-    expect(text).toContain('id="learners"');
+    expect(text).toContain('id="all-students"');
     expect(text).toContain("This does not mean nothing is waiting.");
     expect(text).not.toContain("data-work-queue");
     expect(text).not.toContain("private database failure");

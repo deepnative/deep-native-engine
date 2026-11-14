@@ -850,6 +850,7 @@ export function app(
       options.localHoldInspectionReads === true,
     proposals: Boolean(options.proposals),
     console: Boolean(options.administratorEntry),
+    diagnostics: Boolean(options.administratorDiagnostics),
     circles:
       Boolean(options.circleDiscussion) &&
       options.circleDiscussionEnabled === true,

@@ -35,6 +35,8 @@ export interface AdministratorConsole {
     background: string;
     goal: string;
     joined: Date;
+    /** ADMINHOME-01: the hourly coaching rate in effect this month. */
+    rateCents?: number | null;
     /** CONSOLEMONTHS-03: the latest saved month before last month. */
     coaching?: LatestCoaching | null;
     thisMonth?: LatestCoaching | null;
@@ -47,6 +49,15 @@ export interface AdministratorConsole {
   page: number;
   pageSize: number;
   search: string;
+  /** ADMINHOME-01: submitted hours awaiting review, oldest first. */
+  awaiting: Array<{
+    id: string;
+    displayName: string | null;
+    month: string;
+    periodStart: string;
+    periodEnd: string;
+    minutes: number;
+  }>;
   courses: Array<{ id: string; version: number; title: string }>;
   selected?: {
     member: {
@@ -233,6 +244,8 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
           const members = (
             await tx.query<AdministratorConsole["members"][number]>(
               `SELECT ${columns},
+                 (SELECT r.cents FROM coaching_rates r WHERE r.owner_id=l.id AND r.effective_month<=$5
+                   ORDER BY r.effective_month DESC,r.version DESC LIMIT 1) AS "rateCents",
                  ${summary("to_char(m.period_end,'YYYY-MM')=$5")} AS "thisMonth",
                  ${summary("to_char(m.period_end,'YYYY-MM')=$6")} AS "lastMonth",
                  ${summary("to_char(m.period_end,'YYYY-MM')<$6")} AS coaching
@@ -257,6 +270,22 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
               ).rows[0]
             : undefined;
           if (ownerId && !chosen) return { kind: "not-found" as const };
+          // ADMINHOME-01: hours submitted and not yet reviewed, for every
+          // student and not only this page of the table.
+          const awaiting = ownerId
+            ? []
+            : (
+                await tx.query<AdministratorConsole["awaiting"][number]>(
+                  `SELECT l.id,l.display_name AS "displayName",m.month,
+                     to_char(m.period_start,'YYYY-MM-DD') AS "periodStart",
+                     to_char(m.period_end,'YYYY-MM-DD') AS "periodEnd",m.minutes
+                   FROM coaching_months m JOIN learners l ON l.id=m.owner_id
+                   JOIN principals p ON p.id=l.id
+                   JOIN workspaces w ON w.owner_principal_id=l.id
+                   WHERE m.state='submitted' AND p.revoked_at IS NULL AND w.deleting_at IS NULL
+                   ORDER BY m.period_start,l.id LIMIT 100`,
+                )
+              ).rows;
           const courses = (
             await tx.query<AdministratorConsole["courses"][number]>(
               `SELECT id,version,title FROM content_versions c WHERE state='published'
@@ -272,6 +301,7 @@ export function administratorEntry(pool: Pool): AdministratorEntry {
             page,
             pageSize: LEARNERS_PER_PAGE,
             search,
+            awaiting,
             courses,
           };
           if (ownerId) {

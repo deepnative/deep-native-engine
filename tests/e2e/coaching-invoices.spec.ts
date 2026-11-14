@@ -445,16 +445,11 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await friendly(o, "owner-administration");
     await o.getByRole("button", { name: "Enter administration" }).click();
     await expect(
-      o.getByRole("heading", { name: "Administration console" }),
+      o.getByRole("heading", { name: "Students", level: 1 }),
     ).toBeVisible();
     await friendly(o, "owner-console");
+    // ADMINSTUDENT-01: the student's name opens their one page.
     await o.getByRole("link", { name: "Coaching member", exact: true }).click();
-    await expect(
-      o.getByRole("heading", { name: "Selected learner" }),
-    ).toBeVisible();
-    await o
-      .getByRole("link", { name: "Coaching hours and rates", exact: true })
-      .click();
     await o.getByLabel("Hourly rate (CAD)").fill("95.00");
     await o.getByLabel("Applies from").fill(month);
     await friendly(o, "owner-set-rate");
@@ -500,8 +495,13 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
 
     // 5. The owner finds the pending month, reviews it and issues the invoice.
     await menu(o).getByRole("link", { name: "Admin", exact: true }).click();
+    // ADMINNAV-01: the month summary is under More in the administrator menu.
     await o
-      .getByRole("link", { name: "Coaching administration", exact: true })
+      .getByRole("navigation", { name: "Administration", exact: true })
+      .getByRole("link", { name: "More", exact: true })
+      .click();
+    await o
+      .getByRole("link", { name: "Coaching hours by month", exact: true })
       .click();
     await expect(
       o.getByRole("heading", { name: "Awaiting review" }),
@@ -591,8 +591,13 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await expect(s.getByText(/CAD 213\.75 — Paid/)).toBeVisible();
     // DASH-04: invoiced, sent and fully paid on the manager dashboard.
     await menu(o).getByRole("link", { name: "Admin", exact: true }).click();
+    // ADMINNAV-01: the month summary is under More in the administrator menu.
     await o
-      .getByRole("link", { name: "Coaching administration", exact: true })
+      .getByRole("navigation", { name: "Administration", exact: true })
+      .getByRole("link", { name: "More", exact: true })
+      .click();
+    await o
+      .getByRole("link", { name: "Coaching hours by month", exact: true })
       .click();
     await expect(figure("Invoiced")).toHaveText("CAD 213.75");
     await expect(

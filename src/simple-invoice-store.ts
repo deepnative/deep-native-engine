@@ -45,6 +45,23 @@ export type InvoiceFailure = {
   kind: "denied" | "invalid" | "conflict" | "unavailable" | "not-found";
 };
 export type InvoiceResult<T> = { kind: "ready"; value: T } | InvoiceFailure;
+/** INVOICELIST-01: one issued invoice as the administrator's list reads it. */
+export interface AdminInvoiceRow {
+  id: string;
+  revision: number;
+  delivery: string;
+  number: string | null;
+  /** The student's name, or the billed name once the account is deleted. */
+  student: string | null;
+  totalCents: string;
+  paidCents: string;
+  refundedCents: string;
+  voided: boolean;
+  coaching: { month: string; periodStart?: string; periodEnd?: string } | null;
+  terms: boolean;
+  firstLine: string | null;
+  lineCount: number;
+}
 export interface InvoicePlan {
   id: string;
   ownerId: string;
@@ -1477,8 +1494,17 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           )
         ).rows;
         const invoices = (
-          await tx.query<{ id: string; revision: number; delivery: string }>(
-            "SELECT id,revision,delivery FROM simple_invoices WHERE ($1::uuid IS NULL OR owner_id=$1) ORDER BY created_at DESC LIMIT 100",
+          await tx.query<AdminInvoiceRow>(
+            // INVOICELIST-01: what the list names, read from the issued snapshot.
+            `SELECT i.id,i.revision,i.delivery,i.document->>'number' AS number,
+               COALESCE(l.display_name,i.document->>'billedTo') AS student,
+               i.total_cents::text AS "totalCents",i.paid_cents::text AS "paidCents",
+               i.refunded_cents::text AS "refundedCents",i.voided_at IS NOT NULL AS voided,
+               i.document->'coaching' AS coaching,i.document->'coachingTerms' IS NOT NULL AS terms,
+               i.document->'lines'->0->>'description' AS "firstLine",
+               jsonb_array_length(i.document->'lines') AS "lineCount"
+             FROM simple_invoices i LEFT JOIN learners l ON l.id=i.owner_id
+             WHERE ($1::uuid IS NULL OR i.owner_id=$1) ORDER BY i.created_at DESC LIMIT 100`,
             [ownerId ?? null],
           )
         ).rows;
