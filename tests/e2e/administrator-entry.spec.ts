@@ -602,7 +602,7 @@ test("[L280] BILLPROFILE01–04 saves a private billing recipient, resumes the s
     await expect(page.locator('input[name="revision"]')).toHaveValue("2");
     await page.waitForLoadState("load");
     await page.goto(f.origin + "/account/coaching");
-    await page.getByLabel("Whole hours").fill("2");
+    await page.getByLabel("Hours", { exact: true }).fill("2");
     await page.getByRole("button", { name: "Save draft" }).click();
     // NEXTSTEP-03: the save is confirmed and the draft keeps the recipient.
     await expect(page.getByRole("status")).toContainText(

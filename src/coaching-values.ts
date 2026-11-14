@@ -249,3 +249,24 @@ export function periodLabel(p: { key: string; start?: string; end?: string }) {
       ? dayLabel(start)
       : `${dayLabel(start)} to ${dayLabel(p.end)}`;
 }
+
+/**
+ * #842 MONTHNAV-01, #844 MONTHNAV-02: previous and next month links instead
+ * of a month box. The next link stops at the current month. `extra` is an
+ * already-escaped query suffix the links keep, such as a sort order.
+ */
+export function monthNav(
+  base: string,
+  month: string,
+  today: string,
+  extra = "",
+) {
+  const shift = (by: number) => {
+    const d = new Date(`${month}-01T00:00:00Z`);
+    d.setUTCMonth(d.getUTCMonth() + by);
+    return d.toISOString().slice(0, 7);
+  };
+  const prev = shift(-1),
+    next = shift(1);
+  return `<nav class="month-nav" aria-label="Months"><a href="${base}?month=${prev}${extra}">‹ ${periodLabel({ key: prev })}</a>${next <= today ? `<a href="${base}?month=${next}${extra}">${periodLabel({ key: next })} ›</a>` : ""}</nav>`;
+}
