@@ -60,11 +60,15 @@ function refuse(res: Response, kind: Kind) {
   );
 }
 
-/** COACHLINK-01 / #689 DEFCOACH-04: the coaches control on a student's page. */
+/**
+ * COACHLINK-01 / #689 DEFCOACH-04: the coaches control on a student's page.
+ * SAVED852-01: `from` asks the save to return to the student's coaching page.
+ */
 export function coachAssignmentCard(
   result: LearnerCoachResult,
   learnerId: string,
   anti: string,
+  from?: "coaching",
 ) {
   if (result.kind !== "ready")
     return '<section class="portal-card" aria-labelledby="learner-coach"><h2 id="learner-coach">Coaches</h2><p role="status">Coach assignment is unavailable right now.</p></section>';
@@ -77,7 +81,7 @@ export function coachAssignmentCard(
     .join("");
   return `<section class="portal-card" aria-labelledby="learner-coach"><h2 id="learner-coach">Coaches</h2><p>Each coach ticked here sees this student's monthly hours on their Coaching page. New students start with the default coaches.</p>${
     coaches.length
-      ? `<form class="coach-choices" method="post" action="/operator/coach-assignments"><input type="hidden" name="csrf" value="${anti}"><input type="hidden" name="learnerId" value="${escape(learnerId)}"><fieldset><legend>Coaches for this student</legend>${choices}</fieldset><button type="submit">Save coaches</button></form>`
+      ? `<form class="coach-choices" method="post" action="/operator/coach-assignments"><input type="hidden" name="csrf" value="${anti}"><input type="hidden" name="learnerId" value="${escape(learnerId)}">${from ? `<input type="hidden" name="from" value="${from}">` : ""}<fieldset><legend>Coaches for this student</legend>${choices}</fieldset><button type="submit">Save coaches</button></form>`
       : '<p role="status">Nobody holds the coach role yet. Grant it on <a href="/operator/roles">Roles</a>.</p>'
   }</section>`;
 }
@@ -244,17 +248,23 @@ export function mountAccountRoleAdmin(
   });
 
   app.post("/operator/coach-assignments", async (req, res) => {
-    if (!valid(req, res, ["learnerId", "coach"], ["coach"]))
-      return refuse(res, "denied");
     const body = req.body as Record<string, string | string[]>;
+    if (
+      !valid(req, res, ["learnerId", "coach", "from"], ["coach"]) ||
+      (body.from !== undefined && body.from !== "coaching")
+    )
+      return refuse(res, "denied");
     const learnerId = typeof body.learnerId === "string" ? body.learnerId : "";
     // No ticked box sends no `coach` field: the learner keeps no coach.
     const coaches = body.coach === undefined ? [] : [body.coach].flat();
     const result = await store.setCoaches(token(res), { learnerId, coaches });
+    // SAVED852-01: a fixed return path, never one the client supplies.
     return done(
       res,
       result,
-      `/operator?ownerId=${encodeURIComponent(learnerId)}#learner-coach`,
+      body.from
+        ? `/operator/coaching/${encodeURIComponent(learnerId)}?done=coaches#student-coaches`
+        : `/operator?ownerId=${encodeURIComponent(learnerId)}#learner-coach`,
     );
   });
 }

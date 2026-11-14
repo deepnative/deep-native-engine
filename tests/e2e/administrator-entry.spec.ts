@@ -1219,9 +1219,14 @@ test("[L292] ROLEADMIN/COACHLINK/DEFCOACH an administrator grants a coach role, 
     await coaches.getByLabel("Invented Owner").uncheck();
     await coaches.getByLabel("Invented Coach").check();
     await page.getByRole("button", { name: "Save coaches" }).click();
+    // SAVED852-01: back on her page with the coaches open and confirmed.
     await expect(page).toHaveURL(
-      `${owner.origin}/operator/coaching/${adaId}#learner-coach`,
+      `${owner.origin}/operator/coaching/${adaId}?done=coaches#student-coaches`,
     );
+    await expect(page.locator("#student-coaches")).toHaveAttribute("open", "");
+    await expect(
+      page.locator("#student-coaches").getByRole("status"),
+    ).toHaveText("Coaches saved.");
     await expect(coaches.getByLabel("Invented Coach")).toBeChecked();
     await expect(coaches.getByLabel("Invented Owner")).not.toBeChecked();
     await fits();
