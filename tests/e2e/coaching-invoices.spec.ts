@@ -14,6 +14,7 @@ import { monthLabel } from "../../src/coaching-values.ts";
 import { migrate, store } from "../../src/store.ts";
 import { simpleInvoiceStore } from "../../src/simple-invoice-store.ts";
 import { coachingTermsStore } from "../../src/coaching-terms.ts";
+import { billingProfileStore } from "../../src/billing-profile.ts";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
 import { administratorEntry } from "../../src/administrator-entry.ts";
@@ -97,6 +98,9 @@ async function fixture(
       invoiceSender: enabled ? { send: async () => {} } : undefined,
       // L284 only: verified owners enter administration through the menu.
       ...(ownerEntry ? { administratorEntry: administratorEntry(pool) } : {}),
+      // L284 only: #842 NOEMAIL-01 the month invoices the saved or verified
+      // sign-in recipient, as the runtime does.
+      ...(ownerEntry ? { billingProfiles: billingProfileStore(pool) } : {}),
       // L330 only: per-student coaching terms and their allowance units.
       ...(terms ? { coachingTerms: coachingTermsStore(pool) } : {}),
     }),
@@ -210,8 +214,6 @@ async function save(f: Fixture, p: Page, hours = "1", minutes = "30") {
   await p.goto(f.origin + "/account/coaching");
   await p.getByLabel("Whole hours").fill(hours);
   await p.getByLabel("Additional minutes").fill(minutes);
-  await p.getByLabel("Invoice recipient name").fill("陳 · Invented learner");
-  await p.getByLabel("Invoice email").fill("billing@example.invalid");
   // Confirm the redirected document before callers reload or submit it.
   await Promise.all([
     p.waitForURL(`${f.origin}/account/coaching?month=${f.month}&done=saved`, {
@@ -331,15 +333,14 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
     await admin.getByLabel("Hourly rate (CAD)").fill("120.00");
     await admin.getByRole("button", { name: "Save hourly rate" }).click();
     await recovered.goto(`${f.origin}/account/coaching?month=${pastMonth}`);
-    await expect(recovered.getByLabel("Calendar month (UTC)")).toHaveValue(
-      pastMonth,
-    );
+    await expect(
+      recovered.getByRole("heading", {
+        name: monthLabel(pastMonth),
+        exact: true,
+      }),
+    ).toBeVisible();
     await recovered.getByLabel("Whole hours").fill("2");
     await recovered.getByLabel("Additional minutes").fill("0");
-    await recovered
-      .getByLabel("Invoice recipient name")
-      .fill("Invented learner");
-    await recovered.getByLabel("Invoice email").fill("billing@example.invalid");
     await recovered.getByRole("button", { name: "Save draft" }).click();
     await expect(
       recovered.locator(
@@ -464,15 +465,26 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       .getByRole("link", { name: "Coaching hours", exact: true })
       .click();
     await expect(s).toHaveURL(f.origin + "/account/coaching");
-    await s.getByLabel("Calendar month (UTC)").fill(month);
-    await s.getByRole("button", { name: "Open month" }).click();
-    await expect(s.getByLabel("Calendar month (UTC)")).toHaveValue(month);
+    // MONTHNAV-01: the previous-month link opens last month.
+    const months = s.getByRole("navigation", { name: "Months" });
+    await expect(months.getByRole("link")).toHaveCount(1);
+    await months
+      .getByRole("link", { name: `‹ ${monthLabel(month)}`, exact: true })
+      .click();
+    await expect(s).toHaveURL(`${f.origin}/account/coaching?month=${month}`);
+    await expect(
+      s.getByRole("heading", { name: monthLabel(month), exact: true }),
+    ).toBeVisible();
+    await expect(
+      months.getByRole("link", { name: `${monthLabel(f.month)} ›` }),
+    ).toBeVisible();
+    // NOEMAIL-01: the invoice goes to the verified sign-in email; no box.
+    await expect(s.locator(".invoice-to")).toContainText(
+      "Invoice to: Coaching member · coaching-student@example.invalid.",
+    );
+    await expect(s.getByLabel("Invoice email")).toHaveCount(0);
     await s.getByLabel("Whole hours").fill("2");
     await s.getByLabel("Additional minutes").fill("15");
-    await s
-      .getByLabel("Invoice recipient name")
-      .fill("Invented coaching member");
-    await s.getByLabel("Invoice email").fill("billing@example.invalid");
     await friendly(s, "student-hours-form");
     await Promise.all([
       s.waitForURL(`${f.origin}/account/coaching?month=${month}&done=saved`, {

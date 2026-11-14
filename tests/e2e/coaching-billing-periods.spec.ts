@@ -32,7 +32,7 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
     await s.goto(f.origin + "/account");
     const id = await s.locator("code").first().innerText();
     await s.goto(f.origin + "/account/coaching");
-    await expect(s.getByLabel("Calendar month (UTC)")).toBeVisible();
+    await expect(s.getByRole("navigation", { name: "Months" })).toBeVisible();
     await expect(
       s.getByRole("heading", { name: "Your billing period" }),
     ).toHaveCount(0);
@@ -83,12 +83,6 @@ test("[L339] PERIOD832-01/02/03/04/10 an administrator sets a two-week billing p
       await s.getByRole("button", { name: "Open period" }).click();
       await s.getByLabel("Whole hours").fill(hours);
       await s.getByLabel("Additional minutes").fill("0");
-      await s
-        .getByLabel("Invoice recipient name")
-        .fill("Invented period student");
-      await s
-        .getByLabel("Invoice email")
-        .fill("period-student@example.invalid");
       await s.getByRole("button", { name: "Save draft" }).click();
       await s.getByRole("checkbox", { name: /I confirm these hours/ }).check();
       await s.getByRole("button", { name: "Save and request invoice" }).click();

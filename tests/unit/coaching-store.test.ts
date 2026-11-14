@@ -795,7 +795,7 @@ it("WALK44-01 an administrator's overview of a student reference no account has 
     own.query.mock.calls.some(([sql]) => sql.includes("AS student_present")),
   ).toBe(false);
 });
-it("DRAFTEMAIL-01/02 saves hours without an invoice email, keeps the reusable recipient and refuses to submit until one is given", async () => {
+it("DRAFTEMAIL-01/02 NOEMAIL-02 saves and submits hours without an invoice email, keeping the reusable recipient", async () => {
   const f = fixture();
   expect(
     (await f.service.saveCoaching(token, { ...save, email: "  " })).kind,
@@ -810,13 +810,14 @@ it("DRAFTEMAIL-01/02 saves hours without an invoice email, keeps the reusable re
       sql.startsWith("INSERT INTO billing_profiles"),
     ),
   ).toBe(false);
+  // #842 NOEMAIL-02: no email is still submitted; the snapshot keeps it empty.
   const g = fixture({ entry: { ...draft, email: "" } });
-  expect((await g.service.submitCoaching(token, submit)).kind).toBe("invalid");
+  expect((await g.service.submitCoaching(token, submit)).kind).toBe("ready");
   expect(
     g.query.mock.calls.some(([sql]) =>
       sql.startsWith("INSERT INTO coaching_submissions"),
     ),
-  ).toBe(false);
+  ).toBe(true);
 });
 
 const override = {

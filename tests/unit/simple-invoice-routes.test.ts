@@ -538,6 +538,37 @@ it("OFFPUR-02 clearly names actual invoice correspondence when the issuer is con
   expect(r.text).not.toContain(">Simulate invoice email</button>");
 });
 
+it("NOEMAIL-03 an invoice with no email address offers no send form and says where the student finds it", async () => {
+  const f = fixture();
+  for (const document of [
+    { ...doc, sample: false, recipientEmail: "" },
+    (({ recipientEmail: _, ...rest }) => rest)(doc),
+  ]) {
+    f.service.invoice.mockResolvedValueOnce(ready({ ...invoice, document }));
+    const r = await f.get(`${admin}/${id}`);
+    expect(r.status).toBe(200);
+    expect(r.text).toContain(
+      "<p>This invoice has no email address, so it is not sent by email. The student can open it under Courses and invoices.</p>",
+    );
+    expect(r.text).not.toContain(`action="${admin}/${id}/email"`);
+    expect(r.text).not.toContain("invoice email</button>");
+    expect(r.text).toContain(">Record offline payment</button>");
+  }
+  // Without a configured sender the existing wording stays.
+  const none = fixture(false, true);
+  none.service.invoice.mockResolvedValueOnce(
+    ready({ ...invoice, document: { ...doc, recipientEmail: "" } }),
+  );
+  const unconfigured = (await none.get(`${admin}/${id}`)).text;
+  expect(unconfigured).toContain("Invoice email is not configured");
+  expect(unconfigured).not.toContain("This invoice has no email address");
+  // A posted send the store refuses sends nothing.
+  f.service.claimEmail.mockResolvedValueOnce({ kind: "invalid" });
+  const refused = await f.post(`${admin}/${id}/email`, { confirm: "send" });
+  expect(refused.status).toBe(422);
+  expect(f.sender.send).not.toHaveBeenCalled();
+  expect(f.service.finishEmail).not.toHaveBeenCalled();
+});
 it("HOUR08 coaching invoice controls direct an unpaid correction back to the retained month", async () => {
   const f = fixture();
   f.service.invoice.mockResolvedValueOnce(

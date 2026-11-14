@@ -951,3 +951,93 @@ it("RECIPIENT-04/05 an accepted course keeps the optional company on the agreeme
     expect.objectContaining({ company: "Invented Co" }),
   ]);
 });
+it("NOEMAIL-01/02/03 a coaching month with no invoice email is requested, issued and opened by the student, and is never emailed", async () => {
+  const m = await member(),
+    month = today.slice(0, 7);
+  const rate = ready(
+    await invoices.setCoachingRate(admin, {
+      ownerId: m.id,
+      effectiveMonth: month,
+      cents: 12000,
+      expectedVersion: 0,
+      operationId: randomUUID(),
+    }),
+  );
+  // NOEMAIL-01: no saved recipient, so the form carries a name and no email.
+  const page = (await get("/account/coaching", m.token)).text;
+  expect(page).not.toContain("Invoice email");
+  expect(page).toContain('<input type="hidden" name="email" value="">');
+  expect(page).toContain("The invoice will be under Courses and invoices.");
+  const name = /<input type="hidden" name="name" value="([^"]*)">/.exec(
+    page,
+  )![1]!;
+  expect(name).not.toBe("");
+  // NOEMAIL-02: the request goes through without an email.
+  const requested = await post("/account/coaching/request", m.token, {
+    action: "request",
+    month,
+    revision: "0",
+    operationId: randomUUID(),
+    hours: "1",
+    minutes: "30",
+    name,
+    email: "",
+    company: "",
+    rateId: rate.rateId,
+    sample: "true",
+    confirm: "submit",
+  });
+  expect(requested.status).toBe(303);
+  const entry = ready(await invoices.coachingOverview(m.token)).entry!;
+  expect(entry).toMatchObject({ state: "submitted", email: "" });
+  const issued = ready(
+    await invoices.issueCoaching(admin, {
+      ownerId: m.id,
+      month,
+      expectedRevision: entry.revision,
+      taxCents: 0,
+      operationId: randomUUID(),
+    }),
+  );
+  const own = ready(await invoices.invoice(m.token, issued.invoiceId));
+  expect(own.delivery).toBe("not_sent");
+  expect((own.document as { recipientEmail?: string }).recipientEmail).toBe("");
+  expect(
+    (await get(`/account/purchases/invoices/${issued.invoiceId}`, m.token))
+      .status,
+  ).toBe(200);
+  // NOEMAIL-03: the administrator gets a note, not a send form.
+  const control = (await get(`/operator/invoices/${issued.invoiceId}`, admin))
+    .text;
+  expect(control).toContain(
+    "This invoice has no email address, so it is not sent by email. The student can open it under Courses and invoices.",
+  );
+  expect(control).not.toContain(
+    `action="/operator/invoices/${issued.invoiceId}/email"`,
+  );
+  // A forged send is refused by the store and nothing is sent.
+  const before = sent.length;
+  const forged = await post(
+    `/operator/invoices/${issued.invoiceId}/email`,
+    admin,
+    {
+      revision: String(own.revision),
+      operationId: randomUUID(),
+      confirm: "send",
+    },
+  );
+  expect(forged.status).toBe(422);
+  expect(sent).toHaveLength(before);
+  expect(
+    (
+      await invoices.claimEmail(admin, {
+        invoiceId: issued.invoiceId,
+        expectedRevision: own.revision,
+        operationId: randomUUID(),
+      })
+    ).kind,
+  ).toBe("invalid");
+  expect(
+    ready(await invoices.invoice(m.token, issued.invoiceId)).delivery,
+  ).toBe("not_sent");
+});

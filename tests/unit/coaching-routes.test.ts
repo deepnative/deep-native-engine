@@ -918,7 +918,7 @@ it("ISSUER-03 issues a configured coaching invoice with computed 13% HST and no 
   );
 });
 
-it("RECIPIENT-01/02/03 a new month suggests the member or saved recipient, and saving passes edits and an optional company", async () => {
+it("RECIPIENT-01/02/03 a new month carries the member or saved recipient in the form, and saving passes edits and an optional company", async () => {
   const f = fixture();
   f.service.coachingOverview.mockResolvedValue(
     ready({ ...value, entry: null }),
@@ -927,14 +927,12 @@ it("RECIPIENT-01/02/03 a new month suggests the member or saved recipient, and s
     ready({ name: "陳 Registered", email: "", revision: 0 }),
   );
   let text = (await f.get("/account/coaching")).text;
+  // #842 NOEMAIL-01: the recipient travels as hidden fields, shown in one line.
   expect(text).toContain(
-    '<label>Invoice recipient name<input name="name" autocomplete="name" maxlength="200" value="陳 Registered" required></label>',
+    '<input type="hidden" name="name" value="陳 Registered"><input type="hidden" name="email" value=""><input type="hidden" name="company" value="">',
   );
   expect(text).toContain(
-    '<label>Company name (optional)<input name="company" autocomplete="organization" maxlength="200" value=""></label>',
-  );
-  expect(text).toContain(
-    "Changes here are saved as your reusable billing recipient for later months.",
+    '<p class="invoice-to">Invoice to: <strong>陳 Registered</strong>. <a href="/account/billing">Change</a>',
   );
   f.profiles.suggest.mockResolvedValue(
     ready({
@@ -945,18 +943,25 @@ it("RECIPIENT-01/02/03 a new month suggests the member or saved recipient, and s
     }),
   );
   text = (await f.get("/account/coaching")).text;
-  expect(text).toContain('value="saved@example.invalid"');
-  expect(text).toContain('value="Invented &lt;Co&gt;"');
-  // A retained draft keeps its own company, even a blank one.
+  expect(text).toContain(
+    '<input type="hidden" name="email" value="saved@example.invalid">',
+  );
+  expect(text).toContain(
+    '<input type="hidden" name="company" value="Invented &lt;Co&gt;">',
+  );
+  expect(text).toContain(
+    "Invoice to: <strong>Saved</strong> · Invented &lt;Co&gt; · saved@example.invalid.",
+  );
+  // A retained draft with an email keeps its own company, even a blank one.
   f.service.coachingOverview.mockResolvedValue(
     ready({ ...value, entry: { ...entry, company: "Draft Co" } }),
   );
   expect((await f.get("/account/coaching")).text).toContain(
-    'name="company" autocomplete="organization" maxlength="200" value="Draft Co"',
+    '<input type="hidden" name="company" value="Draft Co">',
   );
   f.service.coachingOverview.mockResolvedValue(ready(value));
   expect((await f.get("/account/coaching")).text).toContain(
-    'name="company" autocomplete="organization" maxlength="200" value=""',
+    '<input type="hidden" name="company" value="">',
   );
   await f.post("/account/coaching/save", {
     action: "save",
@@ -978,7 +983,7 @@ it("RECIPIENT-01/02/03 a new month suggests the member or saved recipient, and s
   });
 });
 
-it("RECIPIENT-01/05 shows a submitted company and starts empty without a billing profile store", async () => {
+it("RECIPIENT-01/05 shows a submitted company and falls back to Student without a billing profile store", async () => {
   const f = fixture();
   const withCompany = { ...snapshot, company: "Invented <Co>" };
   f.service.coachingOverview.mockResolvedValue(
@@ -1019,11 +1024,9 @@ it("RECIPIENT-01/05 shows a submitted company and starts empty without a billing
     await withLoopback(app, (s) => request(s).get("/account/coaching"))
   ).text;
   expect(text).toContain(
-    'name="name" autocomplete="name" maxlength="200" value="" required',
+    '<input type="hidden" name="name" value="Student"><input type="hidden" name="email" value="">',
   );
-  expect(text).toContain(
-    'name="email" type="email" autocomplete="email" maxlength="254" value=""',
-  );
+  expect(text).toContain("Invoice to: <strong>Student</strong>.");
 });
 
 it("WALK44-01 an administrator opening a student reference no account has is told so, with the way back", async () => {
@@ -1044,7 +1047,7 @@ it("WALK44-01 an administrator opening a student reference no account has is tol
   expect(own.status).toBe(404);
   expect(own.text).toContain("Coaching request not confirmed");
 });
-it("DRAFTEMAIL-01/03 lets a member save hours with no invoice email and asks for one before requesting the invoice", async () => {
+it("DRAFTEMAIL-01/03 lets a member save and request hours with no invoice email, never asking for one", async () => {
   const f = fixture();
   f.service.coachingOverview.mockResolvedValue(
     ready({ ...value, entry: null }),
@@ -1053,23 +1056,21 @@ it("DRAFTEMAIL-01/03 lets a member save hours with no invoice email and asks for
     ready({ name: "Registered", email: "", revision: 0 }),
   );
   let text = (await f.get("/account/coaching")).text;
+  expect(text).not.toContain("Invoice email");
+  expect(text).toContain('<input type="hidden" name="email" value="">');
   expect(text).toContain(
-    '<label>Invoice email<input id="invoice-email" name="email" type="email" autocomplete="email" maxlength="254" value="" required></label>',
-  );
-  expect(text).toContain(
-    "You can save your hours now and add the invoice email before you request the invoice.",
+    '<br><span class="small">The invoice will be under Courses and invoices.</span></p>',
   );
   f.service.coachingOverview.mockResolvedValue(
     ready({ ...value, entry: { ...entry, email: "" } }),
   );
   text = (await f.get("/account/coaching")).text;
-  // NEXTSTEP-02: the draft's own form shows the recipient; the next step
-  // names the missing email.
+  // #842 NOEMAIL-02: a draft without an email is ready to request.
   expect(text).toContain(
-    "Your 1 hour 30 minutes are saved. Add your invoice email below, then choose Save and request invoice.",
+    "Ready to request: 1 hour 30 minutes at CAD 120.00 per hour is CAD 180.00 before tax.",
   );
-  // ONEPAGE-02: the email is required to request; the browser asks for it.
-  expect(text).toContain('maxlength="254" value="" required>');
+  expect(text).not.toContain("Add your invoice email");
+  expect(text).not.toContain('name="email" type="email"');
   await f.post("/account/coaching/save", {
     action: "save",
     month,
@@ -1082,6 +1083,217 @@ it("DRAFTEMAIL-01/03 lets a member save hours with no invoice email and asks for
   expect(f.service.saveCoaching).toHaveBeenLastCalledWith(
     token,
     expect.objectContaining({ minutes: 6000, email: "" }),
+  );
+});
+
+// #842 NOEMAIL-01..02: the student is never asked for an invoice email.
+const invoiceTo = (html: string) =>
+  /<p class="invoice-to">[\s\S]*?<\/p>/.exec(html)?.[0];
+const hiddenRecipient = (html: string) =>
+  ["name", "email", "company"].map(
+    (n) =>
+      new RegExp(`<input type="hidden" name="${n}" value="([^"]*)">`).exec(
+        html,
+      )?.[1],
+  );
+it("NOEMAIL-01 the hours form has no recipient inputs, only one invoice-to line and a link to change it", async () => {
+  const f = fixture();
+  const text = (await f.get("/account/coaching")).text;
+  for (const label of [
+    "Invoice recipient name",
+    "Invoice email",
+    "Company name (optional)",
+  ])
+    expect(text).not.toContain(label);
+  expect(text).not.toContain('autocomplete="email"');
+  expect(text).not.toContain("reusable billing recipient");
+  expect(invoiceTo(text)).toBe(
+    '<p class="invoice-to">Invoice to: <strong>Invented &lt;member&gt;</strong> · recipient@example.invalid. <a href="/account/billing">Change</a></p>',
+  );
+  // The suggestion is read even when a draft exists.
+  expect(f.profiles.suggest).toHaveBeenCalledWith(token);
+});
+it("NOEMAIL-01 prefers the draft's email, then the saved recipient's, then a name with no email", async () => {
+  const f = fixture();
+  f.profiles.suggest.mockResolvedValue(
+    ready({
+      name: "Saved <name>",
+      email: "saved@example.invalid",
+      company: "Saved Co",
+      revision: 1,
+    }),
+  );
+  // A draft with an email wins over the saved recipient.
+  let text = (await f.get("/account/coaching")).text;
+  expect(hiddenRecipient(text)).toEqual([
+    "Invented &lt;member&gt;",
+    "recipient@example.invalid",
+    "",
+  ]);
+  // A draft without an email takes the whole saved recipient.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: { ...entry, email: "", company: "Draft Co" } }),
+  );
+  text = (await f.get("/account/coaching")).text;
+  expect(hiddenRecipient(text)).toEqual([
+    "Saved &lt;name&gt;",
+    "saved@example.invalid",
+    "Saved Co",
+  ]);
+  expect(invoiceTo(text)).toContain(
+    "Invoice to: <strong>Saved &lt;name&gt;</strong> · Saved Co · saved@example.invalid.",
+  );
+  expect(invoiceTo(text)).not.toContain("Courses and invoices");
+  // Neither has an email: the draft's name, no email and the note.
+  f.profiles.suggest.mockResolvedValue(
+    ready({ name: "Saved", email: "", revision: 1 }),
+  );
+  text = (await f.get("/account/coaching")).text;
+  expect(hiddenRecipient(text)).toEqual(["Invented &lt;member&gt;", "", ""]);
+  expect(invoiceTo(text)).toBe(
+    '<p class="invoice-to">Invoice to: <strong>Invented &lt;member&gt;</strong>. <a href="/account/billing">Change</a><br><span class="small">The invoice will be under Courses and invoices.</span></p>',
+  );
+  // A draft with no name and no email takes the saved name.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: { ...entry, name: "", email: "" } }),
+  );
+  expect(hiddenRecipient((await f.get("/account/coaching")).text)[0]).toBe(
+    "Saved",
+  );
+});
+it("NOEMAIL-01 falls back to the account name, then Student", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: null, displayName: "Ada <Account>" }),
+  );
+  let text = (await f.get("/account/coaching")).text;
+  expect(hiddenRecipient(text)).toEqual(["Ada &lt;Account&gt;", "", ""]);
+  expect(invoiceTo(text)).toContain(
+    "Invoice to: <strong>Ada &lt;Account&gt;</strong>.",
+  );
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, entry: null, displayName: null }),
+  );
+  text = (await f.get("/account/coaching")).text;
+  expect(hiddenRecipient(text)).toEqual(["Student", "", ""]);
+  expect(invoiceTo(text)).toContain(
+    "The invoice will be under Courses and invoices.",
+  );
+});
+it("NOEMAIL-02 a month submitted without an email reads its recipient with no email and no gap", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      entry: {
+        ...entry,
+        email: "",
+        state: "submitted",
+        revision: 2,
+        submittedRevision: 2,
+        snapshot: { ...snapshot, email: "" },
+        returnReason: "Earlier <reason>",
+      },
+    }),
+  );
+  for (const path of ["/account/coaching", `/operator/coaching/${id}`]) {
+    const text = (await f.get(path)).text;
+    expect(text).toContain("<p>Invoice recipient: Invented &lt;member&gt;</p>");
+    expect(text).toContain(
+      "<p>Recipient: Invented &lt;member&gt; · Sample, not payable</p>",
+    );
+    expect(text).not.toContain("no invoice email yet");
+  }
+  expect((await f.get(`/operator/coaching/${id}`)).text).toContain(
+    '<p role="status">Returned for correction: Earlier &lt;reason&gt;</p>',
+  );
+  // The request form refuses fields it does not know before anything else.
+  expect(
+    (
+      await f.post("/account/coaching/request", {
+        ...requestFields,
+        extra: "x",
+      })
+    ).status,
+  ).toBe(403);
+  expect(f.service.saveCoaching).not.toHaveBeenCalled();
+});
+it("NOEMAIL-02 a request with no invoice email is saved and submitted", async () => {
+  const f = fixture();
+  const r = await f.post("/account/coaching/request", {
+    action: "request",
+    month,
+    hours: "2",
+    minutes: "15",
+    name: "Student",
+    email: "",
+    company: "",
+    rateId: id,
+    sample: "true",
+    confirm: "submit",
+  });
+  expect(r.status).toBe(303);
+  expect(r.headers.location).toBe(
+    `/account/coaching?month=${month}&done=requested`,
+  );
+  expect(f.service.saveCoaching).toHaveBeenLastCalledWith(
+    token,
+    expect.objectContaining({ minutes: 135, name: "Student", email: "" }),
+  );
+  expect(f.service.submitCoaching).toHaveBeenLastCalledWith(
+    token,
+    expect.objectContaining({ month, rateId: id, sample: true }),
+  );
+  // An unconfirmed request still names only what is missing.
+  const refused = await f.post("/account/coaching/request", {
+    action: "request",
+    month,
+    hours: "2",
+    minutes: "15",
+    name: "Student",
+    email: "",
+    company: "",
+    rateId: id,
+    sample: "true",
+  });
+  expect(refused.status).toBe(422);
+  expect(refused.text).toContain(
+    "Enter whole hours and minutes and tick the confirmation.",
+  );
+  expect(refused.text).not.toContain("invoice email");
+});
+// #842 MONTHNAV-01: previous and next month links replace the month box.
+const monthNavHtml = (html: string) =>
+  /<nav class="month-nav"[\s\S]*?<\/nav>/.exec(html)?.[0];
+it("MONTHNAV-01 links to the previous month always and the next month only up to the current month", async () => {
+  const f = fixture();
+  let text = (await f.get("/account/coaching")).text;
+  expect(text).not.toContain("Calendar month (UTC)");
+  expect(text).not.toContain("Open month");
+  expect(text).not.toContain('type="month"');
+  expect(monthNavHtml(text)).toBe(
+    '<nav class="month-nav" aria-label="Months"><a href="/account/coaching?month=2026-09">‹ September 2026</a></nav>',
+  );
+  // An earlier month links forward, up to and including the current one.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, month: "2026-09" }),
+  );
+  text = (await f.get("/account/coaching?month=2026-09")).text;
+  expect(monthNavHtml(text)).toBe(
+    '<nav class="month-nav" aria-label="Months"><a href="/account/coaching?month=2026-08">‹ August 2026</a><a href="/account/coaching?month=2026-10">October 2026 ›</a></nav>',
+  );
+  // Links cross a year and keep the administrator on the student's page.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, month: "2026-01", today: "2026-01" }),
+  );
+  expect(monthNavHtml((await f.get(`/operator/coaching/${id}`)).text)).toBe(
+    `<nav class="month-nav" aria-label="Months"><a href="/operator/coaching/${id}?month=2025-12">‹ December 2025</a></nav>`,
+  );
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, month: "2025-12", today: "2026-01" }),
+  );
+  expect(monthNavHtml((await f.get(`/operator/coaching/${id}`)).text)).toBe(
+    `<nav class="month-nav" aria-label="Months"><a href="/operator/coaching/${id}?month=2025-11">‹ November 2025</a><a href="/operator/coaching/${id}?month=2026-01">January 2026 ›</a></nav>`,
   );
 });
 
@@ -1384,7 +1596,10 @@ it("PERIOD832-02 a student on defined periods picks a started period, saves with
   );
   expect(page).toContain('name="hours" type="number" min="0" max="336"');
   expect(page).toContain('name="month" value="2026-10-19"');
-  expect(page).toContain("reusable billing recipient for later periods");
+  expect(page).toContain(
+    '<p class="invoice-to">Invoice to: <strong>Student</strong>. <a href="/account/billing">Change</a>',
+  );
+  expect(page).not.toContain('class="month-nav"');
   expect(page).toContain("effective October 2026");
   // An earlier calendar month the student saved stays in the picker.
   f.service.coachingOverview.mockResolvedValue(
@@ -1682,14 +1897,14 @@ it("NEXTSTEP-02 names one plain next action for each state of the month", async 
     "Your 1 hour 30 minutes are saved. Your hourly rate isn't set yet, so the invoice can't be requested. Ask your coach or administrator to set it, then come back here to request the invoice.",
   );
   expect(card(text)).not.toContain('class="button"');
-  // Rate set, but no invoice email.
+  // Rate set, no invoice email: #842 NOEMAIL-02 still ready to request.
   text = await show({ ...value, entry: { ...entry, email: "" } });
   expect(currentStep(text)).toBe("Request invoice");
   expect(card(text)).toContain(
-    "Your 1 hour 30 minutes are saved. Add your invoice email below, then choose Save and request invoice.",
+    "Ready to request: 1 hour 30 minutes at CAD 120.00 per hour is CAD 180.00 before tax.",
   );
   expect(card(text)).not.toContain('class="button"');
-  expect(text).toContain('<input id="invoice-email" name="email"');
+  expect(text).toContain('<input type="hidden" name="email" value="">');
   // Ready to request.
   text = await show(value);
   expect(currentStep(text)).toBe("Request invoice");
@@ -1887,7 +2102,10 @@ it("ONEPAGE-01 puts the hours, recipient and invoice request in one form with Sa
   const form = hoursForm(text);
   expect(form).toContain('action="/account/coaching/save"');
   expect(form).toContain(
-    '<label>Invoice email<input id="invoice-email" name="email" type="email" autocomplete="email" maxlength="254" value="recipient@example.invalid" required></label>',
+    '<input type="hidden" name="email" value="recipient@example.invalid">',
+  );
+  expect(form).toContain(
+    '<p class="invoice-to">Invoice to: <strong>Invented &lt;member&gt;</strong> · recipient@example.invalid. <a href="/account/billing">Change</a></p>',
   );
   expect(form).toContain(
     "<h3>Request the invoice</h3><p>Rate: CAD 120.00 per hour, set by your administrator. The subtotal is your hours × this rate, before separately supplied tax.</p>",
@@ -1940,11 +2158,13 @@ it("ONEPAGE-01 saves the entered values and requests the invoice in one step", a
   expect(saveKey).toBe(id);
   expect(submitKey).not.toBe(saveKey);
 });
-it("ONEPAGE-02 refuses a request without confirmation or an email, and says when the hours were saved but not requested", async () => {
+it("ONEPAGE-02 refuses a request without confirmation or an email field, and says when the hours were saved but not requested", async () => {
   const f = fixture();
+  const noEmail: Record<string, string> = { ...requestFields };
+  delete noEmail.email;
   for (const fields of [
     { ...requestFields, confirm: "" },
-    { ...requestFields, email: "" },
+    noEmail,
     { ...requestFields, sample: "maybe" },
     { ...requestFields, hours: "x" },
   ]) {
@@ -1985,7 +2205,9 @@ it("ONEPAGE-03 with no rate shows the request button unavailable and says to ask
     '<div class="form-actions"><button name="action" value="save">Save draft</button><button type="button" disabled>Save and request invoice</button></div>',
   );
   expect(form).not.toContain('name="confirm"');
-  expect(form).toContain('maxlength="254" value="recipient@example.invalid">');
+  expect(form).toContain(
+    '<input type="hidden" name="email" value="recipient@example.invalid">',
+  );
 });
 it("ONEPAGE-03 confirms a save with no rate by saying what to ask for", async () => {
   const f = fixture();
@@ -2065,7 +2287,7 @@ it("ONEPAGE-02 covers the request's remaining refusals and the first-visit wordi
   );
   for (const [kind, text] of [
     ["unavailable", "The outcome is uncertain"],
-    ["invalid", "Check the period, rate and invoice email"],
+    ["invalid", "Check the period and rate"],
   ] as const) {
     f.service.submitCoaching.mockResolvedValueOnce({ kind });
     const r = await f.post("/account/coaching/request", requestFields);
