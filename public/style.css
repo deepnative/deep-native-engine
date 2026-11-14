@@ -2531,10 +2531,6 @@ td code {
 .admin-details[open] {
   padding-bottom: 24px;
 }
-.admin-details h2 {
-  font-size: 20px;
-  margin: 32px 0 12px;
-}
 .student-page > .portal-actions {
   margin-top: 12px;
 }

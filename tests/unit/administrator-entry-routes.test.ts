@@ -16,11 +16,7 @@ import type {
   AdministratorConsoleResult,
 } from "../../src/administrator-entry.ts";
 import { csrf, COOKIE } from "../../src/session.ts";
-import {
-  expectPortalActions,
-  mainHtml,
-  portalActionRows,
-} from "../support/portal-layout.ts";
+import { mainHtml, portalActionRows } from "../support/portal-layout.ts";
 const listeners = new WeakMap<express.Express, Promise<Server>>();
 const ownedServers: Promise<Server>[] = [];
 async function http(application: express.Express) {

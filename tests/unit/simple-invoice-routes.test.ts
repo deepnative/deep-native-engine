@@ -5,7 +5,7 @@ import { expect, it, vi } from "vitest";
 import { mountSimpleInvoiceRoutes } from "../../src/simple-invoice-routes.ts";
 import type { SimpleInvoiceStore } from "../../src/simple-invoice-store.ts";
 import { csrf } from "../../src/session.ts";
-import { expectPortalActions, mainHtml } from "../support/portal-layout.ts";
+import { mainHtml } from "../support/portal-layout.ts";
 import { withLoopback } from "../support/loopback-server.ts";
 const token = "a".repeat(64),
   secret = "invoice-test",
