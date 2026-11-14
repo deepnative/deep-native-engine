@@ -63,7 +63,7 @@ export function learningPlan(
           : "Next session: review your saved starter exercise and its checks."
         : "Next session: browse published sample lessons for your current direction."
       : profile.weeklyMinutes == null
-        ? "Choose weekly time below to see a practice rhythm that fits your availability."
+        ? "Choose weekly time in your learning profile to see a practice rhythm that fits your availability."
         : profile.weeklyMinutes < 30
           ? `Next session: try the sample exercise: ${focus}.`
           : null,

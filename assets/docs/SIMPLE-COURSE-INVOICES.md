@@ -1,6 +1,6 @@
 # Individual course invoices
 
-Students register through the existing learning page. Registration itself creates no bill. In **My account**, the student can see their account reference and open **Courses and invoices**. Give that reference to course support when arranging a course bundle.
+Students register through the existing learning page. Registration itself creates no bill. In **My account**, the student can see their account reference and open **Invoices**, which lists each invoice by what it bills and shows course proposals once one is prepared. Give that reference to course support when arranging a course bundle.
 
 A current platform administrator opens **Staff tools → Course billing and invoices**, selects that registered account, selects the exact published course items and their versions, enters each price, and chooses one-time or monthly billing. On real (configured) invoices the server adds 13% HST to the course subtotal; there is no tax field. Sample invoices keep an invented tax field. This prepares a proposal; it does not issue an invoice or silently change any enrolment, saved learning or access.
 

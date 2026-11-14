@@ -2577,3 +2577,129 @@ main > .reading:first-child {
     text-align: left;
   }
 }
+
+/* #846 */
+/* HEADER-01: on a phone the view control sits beside the brand and the links
+   share one row beneath it. */
+@media (max-width: 760px) {
+  .site-header {
+    position: relative;
+  }
+  .site-header .main-navigation {
+    flex-wrap: nowrap;
+    gap: 2px;
+  }
+  .site-header .main-navigation a {
+    padding: 8px 6px;
+    white-space: nowrap;
+  }
+  .site-header .view-menu {
+    position: absolute;
+    top: 18px;
+    right: 20px;
+  }
+}
+/* ACCOUNT-01: plain link lines instead of rows of buttons. */
+.account-inline-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+}
+.account-inline-links a,
+.account-sharing a,
+.account-billing > p > a,
+.profile-link a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 650;
+}
+.account-page > section.account-sharing {
+  margin-top: 28px;
+  padding-top: 16px;
+}
+.account-sharing p {
+  margin: 0;
+}
+/* The profile is a long form; its checkbox groups run in columns. */
+.account-page > .profile-form {
+  max-width: none;
+}
+.account-page > .profile-form form {
+  margin-top: 16px;
+  padding: 24px;
+}
+.account-page .option-grid {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0 18px;
+}
+@media (max-width: 520px) {
+  .account-page .option-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0 12px;
+  }
+  .account-page > .profile-form form {
+    padding: 18px 16px;
+  }
+}
+/* FOLD-02: billing details are three short fields. */
+.account-billing form {
+  display: grid;
+  gap: 4px;
+  max-width: 440px;
+  margin-top: 12px;
+}
+.account-billing form button {
+  justify-self: start;
+  margin-top: 8px;
+}
+.account-billing > p:last-child {
+  margin-top: 12px;
+}
+.account-billing .notice {
+  margin: 0 0 12px;
+}
+/* Download and delete share one section; delete is set apart inside it. */
+.account-data .account-delete {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.account-data h3 {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+.deletion-details {
+  margin: 0 0 16px;
+}
+.deletion-details > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--accent);
+  font-weight: 650;
+  cursor: pointer;
+}
+.deletion-details > div {
+  margin-top: 8px;
+}
+.account-data .delete-form {
+  margin: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+.profile-link {
+  margin: 32px 0;
+}
+/* FOLD-01: one line per invoice. */
+.invoice-list {
+  margin: 16px 0 28px;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+.invoice-list li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}

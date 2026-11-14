@@ -133,10 +133,12 @@ import {
   profileEdit,
   submission,
   type Fields,
+  type ProfileEditResult,
 } from "./validation.ts";
 import {
   welcome,
   accountPage,
+  billingOutcome,
   attemptOperationRecoveryPage,
   dashboard,
   privateProgressPage,
@@ -4503,10 +4505,19 @@ export function app(
     contributions: options.memberContributions === true,
   });
   mountMemberRecordAccess(app, options.memberRecordAccess);
-  app.get("/account", async (_req, res) => {
+  // #846: My account, also shown again by a profile save that needs fixing.
+  async function sendAccount(
+    req: express.Request,
+    res: express.Response,
+    profileState?: ProfileEditResult,
+  ) {
     const memberToken = res.locals.token as string;
     const memberId = (res.locals.learner as Learner).id;
-    let deadline = res.locals.memberDeadline as number;
+    // A profile save arrives outside the account pages, so its time limit
+    // comes only from the account check below.
+    let deadline = profileState
+      ? Number.MAX_VALUE
+      : (res.locals.memberDeadline as number);
     if (!Number.isFinite(deadline) || performance.now() >= deadline)
       return res.redirect(303, "/");
     const status = options.memberEmail
@@ -4534,16 +4545,31 @@ export function app(
       status === "unlinked" && options.memberPassword
         ? (await options.memberPassword.status(memberToken)) === "set"
         : false;
+    // FOLD-02: billing details are edited here; without them the page stays.
+    const billing = options.billingProfiles
+      ? await options.billingProfiles.suggest(memberToken)
+      : undefined;
     const html = accountPage(
       current.learner,
       res.locals.csrf as string,
       status,
       passwordSet,
       Boolean(options.memberSharing),
+      {
+        billing:
+          billing?.kind === "ready"
+            ? {
+                profile: billing.value,
+                outcome: billingOutcome(req.query.billing),
+              }
+            : undefined,
+        profileState,
+      },
     );
     if (performance.now() >= deadline) return res.redirect(303, "/");
-    return res.send(html);
-  });
+    return res.status(profileState ? 422 : 200).send(html);
+  }
+  app.get("/account", (req, res) => sendAccount(req, res));
   app.get("/learn", async (_req, res) => {
     const member = res.locals.learner as Learner;
     const [progress, published, choice, activity, readiness] =
@@ -4576,7 +4602,6 @@ export function app(
       ),
       choice,
       recommendLesson(published, member, progress, activity),
-      undefined,
       readiness,
     );
     if (options.learningWorkspace)
@@ -5795,48 +5820,9 @@ export function app(
     res.redirect(303, "/career");
   });
   app.post("/profile", async (req, res) => {
-    const member = res.locals.learner as Learner;
     const edit = profileEdit(req.body as Fields);
-    if (!edit.input) {
-      const [progress, published, choice, activity, readiness] =
-        await Promise.all([
-          store.progress(member.id),
-          catalog.search({}),
-          store.assignmentChoice(member.id),
-          store.lessonActivities(res.locals.token as string),
-          assignmentReadiness.list(res.locals.token as string),
-        ]);
-      if (readiness === null) {
-        res
-          .status(503)
-          .send(
-            errorPage(
-              "Learning path unavailable",
-              "Your prerequisite status could not be checked. Nothing was changed.",
-            ),
-          );
-        return;
-      }
-      res
-        .status(422)
-        .send(
-          dashboard(
-            member,
-            progress,
-            res.locals.csrf as string,
-            [],
-            withPrerequisiteTitles(
-              eligibleAssignments(published, member, progress, activity),
-              published,
-            ),
-            choice,
-            recommendLesson(published, member, progress, activity),
-            edit,
-            readiness,
-          ),
-        );
-      return;
-    }
+    // PROFILE-01 (#846): the form lives on My account, so its errors do too.
+    if (!edit.input) return sendAccount(req, res, edit);
     if (!(await store.updateProfile(res.locals.token as string, edit.input))) {
       res
         .status(403)
@@ -5848,7 +5834,7 @@ export function app(
         );
       return;
     }
-    res.redirect(303, "/learn");
+    res.redirect(303, "/account#profile");
   });
   app.get("/lesson", async (req, res) => {
     const member = res.locals.learner as Learner;
