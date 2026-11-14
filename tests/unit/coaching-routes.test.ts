@@ -2974,6 +2974,18 @@ it("SEAM-01 the student's coaches and course records sit folded on the student's
   );
   const empty = (await f.get(`/operator/coaching/${id}`)).text;
   expect(empty).toContain("<summary>Coaches: none</summary>");
+  // SAVED852-01: the form returns to this page, and only after a save is
+  // the section open with its confirmation.
+  expect(text).toContain('<input type="hidden" name="from" value="coaching">');
+  expect(text).not.toContain("Coaches saved.");
+  expect(text).not.toContain('id="student-coaches" open');
+  const back = (await f.get(`/operator/coaching/${id}?done=coaches`)).text;
+  expect(back).toContain(
+    '<details class="coaching-details" id="student-coaches" open><summary>Coaches: Ada &lt;Coach&gt;, sh…@example.test (not signed up yet)</summary><p class="notice" role="status">Coaches saved.</p>',
+  );
+  // SAVED852-02: no other confirmation, and the student has none of this one.
+  expect((await f.get(`/operator/coaching/${id}?done=other`)).status).toBe(403);
+  expect((await f.get("/account/coaching?done=coaches")).status).toBe(403);
   expect(empty).toContain("<summary>Courses: none</summary>");
   expect(empty).toContain(
     "No course enrollment, bundle or course invoice yet.",

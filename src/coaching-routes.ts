@@ -110,6 +110,7 @@ function coachesDetails(
   result: Awaited<ReturnType<AccountRoleAdmin["learnerCoaches"]>>,
   ownerId: string,
   anti: string,
+  saved: boolean,
 ) {
   const names =
     result.kind !== "ready"
@@ -118,7 +119,8 @@ function coachesDetails(
           .filter((c) => result.value.assigned.includes(c.emailHash))
           .map((c) => escape(c.label))
           .join(", ") || "none";
-  return `<details class="coaching-details" id="student-coaches"><summary>Coaches: ${names}</summary>${coachAssignmentCard(result, ownerId, anti)}</details>`;
+  // SAVED852-01: after a save the section opens with its confirmation.
+  return `<details class="coaching-details" id="student-coaches"${saved ? " open" : ""}><summary>Coaches: ${names}</summary>${saved ? '<p class="notice" role="status">Coaches saved.</p>' : ""}${coachAssignmentCard(result, ownerId, anti, "coaching")}</details>`;
 }
 /** SEAM-01 (#850): course enrollments, bundles and course invoices, folded. */
 function coursesDetails(
@@ -487,10 +489,13 @@ export function mountCoachingRoutes(
     const path = admin ? `${adminPath}/:ownerId` : memberPath;
     app.get(path, async (req, res) => {
       // NEXTSTEP-03: the student's page also reads which action just finished.
-      if (!valid(req, res, [], admin ? ["month"] : ["month", "done"])) return;
+      if (!valid(req, res, [], ["month", "done"])) return;
+      // SAVED852-02: the administrator's one confirmation is a coaches save.
       if (
         req.query.done !== undefined &&
-        !["saved", "requested"].includes(req.query.done as string)
+        !(admin ? ["coaches"] : ["saved", "requested"]).includes(
+          req.query.done as string,
+        )
       )
         return failure(res, "denied", admin);
       if (!store)
@@ -679,6 +684,7 @@ export function mountCoachingRoutes(
             await student.roleAdmin.learnerCoaches(token(res), v.ownerId),
             v.ownerId,
             anti,
+            req.query.done === "coaches",
           );
         const courses = await student.administratorEntry?.console?.(
           token(res),

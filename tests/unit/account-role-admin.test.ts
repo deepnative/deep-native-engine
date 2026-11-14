@@ -548,6 +548,64 @@ it("DEFCOACH-04 saves one, several or no coaches and returns to the learner", as
   expect((await post(form([["learnerId", ada]]))).status).toBe(400);
 });
 
+it("SAVED852-01 a save from the student's page returns there with the coaches open", async () => {
+  const setCoaches = vi.fn<AccountRoleAdmin["setCoaches"]>(async () => ({
+    kind: "ready",
+  }));
+  const http = await routes({ setCoaches })();
+  const post = (fields: [string, string][]) =>
+    http
+      .post("/operator/coach-assignments")
+      .set("Origin", origin)
+      .type("form")
+      .send(new URLSearchParams([["csrf", good.csrf], ...fields]).toString());
+  const saved = await post([
+    ["learnerId", ada],
+    ["coach", h("d")],
+    ["from", "coaching"],
+  ]);
+  expect(saved.status).toBe(303);
+  expect(saved.headers.location).toBe(
+    `/operator/coaching/${ada}?done=coaches#student-coaches`,
+  );
+  expect(setCoaches).toHaveBeenCalledWith(staff, {
+    learnerId: ada,
+    coaches: [h("d")],
+  });
+  // The return path is fixed; the learner reference is encoded into it.
+  expect(
+    (
+      await post([
+        ["learnerId", "a/b?c"],
+        ["from", "coaching"],
+      ])
+    ).headers.location,
+  ).toBe("/operator/coaching/a%2Fb%3Fc?done=coaches#student-coaches");
+  setCoaches.mockClear();
+  // SAVED852-02: any other origin value, or a repeated one, is refused.
+  for (const fields of [
+    [
+      ["learnerId", ada],
+      ["from", "https://evil.example/"],
+    ],
+    [
+      ["learnerId", ada],
+      ["from", "coaching"],
+      ["from", "coaching"],
+    ],
+  ] as [string, string][][])
+    expect((await post(fields)).status).toBe(403);
+  expect(setCoaches).not.toHaveBeenCalled();
+  // SAVED852-03: a refused save keeps its refusal, wherever it came from.
+  setCoaches.mockResolvedValueOnce({ kind: "invalid" });
+  const refused = await post([
+    ["learnerId", ada],
+    ["from", "coaching"],
+  ]);
+  expect(refused.status).toBe(400);
+  expect(refused.headers.location).toBeUndefined();
+});
+
 it("ROLEADMIN-01 adds no routes without a store", async () => {
   const http = await routes()();
   expect((await http.get("/operator/roles")).status).toBe(404);
@@ -583,6 +641,12 @@ it("DEFCOACH-04 renders the console coaches card", () => {
   expect(card).toContain(`name="csrf" value="${anti}"`);
   expect(card).toContain("Save coaches");
   expect(card).not.toContain("Nobody holds the coach role yet");
+  // SAVED852-01: only the student's page asks to come back to itself.
+  expect(card).not.toContain('name="from"');
+  const value = { assigned: [], coaches: [{ emailHash: h("c"), label: "Bo" }] };
+  expect(
+    coachAssignmentCard({ kind: "ready", value }, ada, anti, "coaching"),
+  ).toContain('<input type="hidden" name="from" value="coaching">');
   const none = coachAssignmentCard(
     { kind: "ready", value: { assigned: [], coaches: [] } },
     ada,
