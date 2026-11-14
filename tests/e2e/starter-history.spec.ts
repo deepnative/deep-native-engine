@@ -3,6 +3,10 @@ import { browserOrigin } from "../support/browser-origin.js";
 import { createHash } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { testPool } from "../support/database.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 const pool = testPool();
 const origin = browserOrigin;
@@ -122,8 +126,9 @@ test("[L89] retained starter versions remain private, exact and text-free after 
       "Version three invented private words",
     );
     await page.goto("/learn");
+    await openLearningProfile(page);
     await chooseLearningGoal(page, goal === "work" ? "build" : "work");
-    await page.getByRole("button", { name: "Save my direction" }).click();
+    await saveLearningProfile(page);
     await page.goto("/progress");
     await expect(rows).toHaveCount(3);
     await expect(
@@ -152,7 +157,7 @@ test("[L89] retained starter versions remain private, exact and text-free after 
     } finally {
       await outsider.close();
     }
-    await page.goto("/learn");
+    await page.goto("/account");
     await page.getByLabel("Delete my local preview").check();
     await page.getByRole("button", { name: "Delete this preview" }).click();
     expect(

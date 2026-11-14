@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
@@ -10,6 +11,10 @@ import {
 } from "../support/administrator-fixture.ts";
 import { evidenceStore, fileObjectStorage } from "../../src/evidence.ts";
 import { readdir } from "node:fs/promises";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 const pool = testPool();
 const origin = process.env.DNE_E2E_ORIGIN ?? browserOrigin;
 const instruction =
@@ -149,7 +154,7 @@ async function useToken(context: BrowserContext, value: string) {
   ]);
 }
 async function csrfToken(page: Page) {
-  return page.locator('input[name="csrf"]').first().inputValue();
+  return formToken(page);
 }
 async function uploadEvidence(
   page: Page,
@@ -246,8 +251,9 @@ for (const [id, background, goal, extraName, extraValue] of [
       .fill("A sample draft that must retain its original context");
     await page.getByRole("button", { name: "Save draft" }).click();
     await page.getByRole("link", { name: "Your learning path" }).click();
+    await openLearningProfile(page);
     await chooseLearningGoal(page, goal === "everyday" ? "work" : "everyday");
-    await page.getByRole("button", { name: "Save my direction" }).click();
+    await saveLearningProfile(page);
     await expect(page).toHaveURL(/\/learn$/);
     await page.reload();
     await page.getByRole("link", { name: "Open lesson" }).click();
@@ -280,19 +286,22 @@ test("[L29] exploratory learner revises a time-fitting plan without rewriting sa
   await expect(plan.locator("li")).toHaveCount(1);
   await expect(plan).toContainText("Next session: try the sample exercise");
   await expect(plan).toContainText("another direction later");
-  await page.reload();
+  // #846 PROFILE-01: the saved choices are shown on My account.
+  await page.goto("/account");
   await expect(page.getByLabel("Weekly time available")).toHaveValue("15");
+  await page.goto("/learn");
   await page.getByRole("link", { name: "Open lesson" }).click();
   await page
     .getByLabel("Your instruction to AI")
     .fill("A sample draft for the community event");
   await page.getByRole("button", { name: "Save draft" }).click();
   await page.getByRole("link", { name: "Your learning path" }).click();
+  await openLearningProfile(page);
   await chooseLearningGoal(page, "work");
   await page.getByLabel("Experience with AI").selectOption("some");
   await page.getByLabel("Time zone (optional)").fill("America/Toronto");
   await page.getByLabel("Weekly time available").selectOption("60");
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   await expect(plan).toContainText("Turn meeting notes into next steps");
   await expect(plan.locator("li")).toHaveCount(3);
   await expect(plan).toContainText("America/Toronto");
@@ -360,8 +369,9 @@ test("[L101] completed starter plan advances without attributing an earlier goal
   } finally {
     await otherContext.close();
   }
+  await openLearningProfile(page);
   await chooseLearningGoal(page, "work");
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   await expect(page).toHaveURL(/\/learn$/);
   await expect(plan).toContainText("Turn meeting notes into next steps");
   await expect(plan).not.toContainText("completed for your current goal");
@@ -401,7 +411,8 @@ test("[L30] professional can correct an invalid time zone and retain a noncoding
   await expect(
     page.getByRole("button", { name: /buy|purchase|book/i }),
   ).toHaveCount(0);
-  await page.reload();
+  // #846 PROFILE-01: the saved choices are shown on My account.
+  await page.goto("/account");
   await expect(page.getByLabel("Weekly time available")).toHaveValue("30");
 });
 test("[L78] profile error preserves every intended edit until keyboard correction saves it", async ({
@@ -411,7 +422,7 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
   try {
     const unrelatedPage = await unrelatedContext.newPage();
     await begin(unrelatedPage, "explorer", "everyday");
-    await unrelatedPage.goto("/learn");
+    await unrelatedPage.goto("/account");
     for (const [background, startingGoal, nextGoal] of [
       ["explorer", "everyday", "work"],
       ["professional", "work", "build"],
@@ -455,6 +466,8 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
         const before = await saved();
         const plan = page.getByRole("region", { name: "Your starter plan" });
         const originalPlan = await plan.innerText();
+        // #846 PROFILE-01: the profile form is on My account only.
+        await openLearningProfile(page);
         await chooseLearningGoal(page, nextGoal);
         await page
           .locator('input[name="domain_tags"][value="education"]')
@@ -471,8 +484,11 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
             response.url().endsWith("/profile") &&
             response.request().method() === "POST",
         );
-        await page.getByRole("button", { name: "Save my direction" }).click();
+        await page.getByRole("button", { name: "Save my profile" }).click();
         expect((await invalidResponse).status()).toBe(422);
+        await expect(
+          page.getByRole("heading", { name: "My account", exact: true }),
+        ).toBeVisible();
         await expect(
           page.locator('select[name="goal"], input[name="goal"]:checked'),
         ).toHaveValue(nextGoal);
@@ -498,17 +514,21 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
           name: /Time zone/i,
         });
         await expect(errorLink).toHaveAttribute("href", "#timezone");
-        await page
-          .getByRole("link", {
-            name: "Download my structured preview records",
-          })
-          .focus();
-        await page.keyboard.press("Tab");
+        // The summary is the stop just before the form's first field.
+        await page.getByLabel("Display name").focus();
+        await page.keyboard.press("Shift+Tab");
         await expect(errorLink).toBeFocused();
         await page.keyboard.press("Enter");
         await expect(timezone).toBeFocused();
         expect(await saved()).toEqual(before);
-        expect(await plan.innerText()).toBe(originalPlan);
+        const learning = await context.newPage();
+        await learning.goto("/learn");
+        expect(
+          await learning
+            .getByRole("region", { name: "Your starter plan" })
+            .innerText(),
+        ).toBe(originalPlan);
+        await learning.close();
         await unrelatedPage.reload();
         await expect(
           unrelatedPage.locator(
@@ -524,8 +544,8 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
         await expect(unrelatedPage.getByText("Mars/Olympus")).toHaveCount(0);
 
         await timezone.fill("America/Toronto");
-        await page.getByRole("button", { name: "Save my direction" }).click();
-        await expect(page).toHaveURL(/\/learn$/);
+        await page.getByRole("button", { name: "Save my profile" }).click();
+        await expect(page).toHaveURL(/\/account#profile$/);
         await page.reload();
         await expect(
           page.locator('select[name="goal"], input[name="goal"]:checked'),
@@ -550,6 +570,7 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
           time_zone: "America/Toronto",
           weekly_minutes: 60,
         });
+        await page.goto("/learn");
         await page.getByRole("link", { name: "Open lesson" }).click();
         await expect(page.locator("#exercise-title")).not.toHaveText(
           originalTitle,
@@ -571,7 +592,7 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
           instruction: originalDraft,
         });
 
-        await page.goto("/learn");
+        await page.goto("/account");
         const retainedProfile = await saved();
         const retainedHistory = (
           await pool.query(
@@ -589,7 +610,7 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
             response.url().endsWith("/profile") &&
             response.request().method() === "POST",
         );
-        await page.getByRole("button", { name: "Save my direction" }).click();
+        await page.getByRole("button", { name: "Save my profile" }).click();
         expect((await deniedResponse).status()).toBe(403);
         await expect(
           page.getByRole("heading", { name: "Profile unavailable" }),
@@ -598,7 +619,7 @@ test("[L78] profile error preserves every intended edit until keyboard correctio
           page.getByText(originalDraft, { exact: true }),
         ).toHaveCount(0);
         await expect(
-          page.getByRole("button", { name: "Save my direction" }),
+          page.getByRole("button", { name: "Save my profile" }),
         ).toHaveCount(0);
         expect(await saved()).toEqual(retainedProfile);
         expect(
@@ -757,7 +778,7 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         expect(
           (await page.request.get("/learn", { maxRedirects: 0 })).status(),
         ).toBe(303);
-        await unrelatedPage.reload();
+        await unrelatedPage.goto("/account");
         await expect(
           unrelatedPage.getByLabel("Time zone (optional)"),
         ).toHaveValue("America/Vancouver");
@@ -848,7 +869,7 @@ test("[L79] onboarding error keeps safe choices until one-field correction creat
         await page
           .getByRole("button", { name: "Save my profile", exact: true })
           .click();
-        await expect(page).toHaveURL(/\/learn$/);
+        await expect(page).toHaveURL(/\/account#profile$/);
         expect((await session(context)).id).toBe(member.id);
         expect((await session(unrelatedContext)).id).toBe(unrelated.id);
         expect(
@@ -1146,7 +1167,7 @@ test("[L09] deleting the preview removes owned records and invalidates the old c
   await fill(page);
   await page.getByRole("button", { name: "Save draft" }).click();
   const old = await session(context);
-  await page.goto("/learn");
+  await page.goto("/account");
   await page.getByLabel("Delete my local preview").check();
   await page.getByRole("button", { name: "Delete this preview" }).click();
   expect(
@@ -1681,7 +1702,7 @@ test("[L54] changing learner direction cannot mint staff or another workspace ac
           },
         });
         expect(changed.status()).toBe(303);
-        expect(changed.headers().location).toBe("/learn");
+        expect(changed.headers().location).toBe("/account#profile");
         const saved = await pool.query(
           `SELECT l.background,l.goal,p.kind,
                   (SELECT count(*) FROM staff_profiles s WHERE s.principal_id=p.id) AS staff_count

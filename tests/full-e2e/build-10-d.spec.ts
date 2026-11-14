@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -134,10 +135,7 @@ test("[F-BUILD-10-D] queued private review remains truthful after a fresh local 
       );
       expect(after.rows).toEqual([{ id: submissionId, status: "queued" }]);
 
-      const ownerCsrf = await returnedPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const ownerCsrf = await formToken(returnedPage);
       const ownerLink = await returnedPage.request.post(
         `/api/evidence/${evidenceId}/download-link`,
         { headers: { Origin: origin, "X-CSRF-Token": ownerCsrf } },
@@ -171,10 +169,7 @@ test("[F-BUILD-10-D] queued private review remains truthful after a fresh local 
       ]);
       const reviewerPage = await reviewer.newPage();
       await reviewerPage.goto("/");
-      const reviewerCsrf = await reviewerPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const reviewerCsrf = await formToken(reviewerPage);
       const denied = await reviewerPage.request.post(
         `/api/evidence/${evidenceId}/download-link`,
         { headers: { Origin: origin, "X-CSRF-Token": reviewerCsrf } },

@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { readFile } from "node:fs/promises";
@@ -6,6 +7,10 @@ import { test, expect, type Page } from "@playwright/test";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 const pool = testPool();
 const origin = browserOrigin;
@@ -187,16 +192,18 @@ test("[L49] professional keeps an old private draft when goal and published vers
   await page.getByLabel("I used only invented or sample information").check();
   await page.getByRole("button", { name: "Save private draft" }).click();
   await page.goto("/learn");
+  await openLearningProfile(page);
   await chooseLearningGoal(page, "everyday");
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   await page.goto(`/assignments/attempts/${oldAttempt}`);
   await expect(page.getByText("cannot be edited")).toBeVisible();
   await expect(
     page.getByText("An invented draft remains private"),
   ).toBeVisible();
   await page.goto("/learn");
+  await openLearningProfile(page);
   await chooseLearningGoal(page, "work");
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   await publish(actors, {
     ...sample(id, 2, title),
     goals: ["work"],
@@ -248,7 +255,7 @@ test("[L50] IT learner's stale tab and unconfirmed submission cannot overwrite s
   await expect(page.getByLabel("Private sample response")).toHaveValue(
     "A synthetic technical review with enough detail to submit.",
   );
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const revision = await page
     .locator('input[name="revision"]')
     .first()
@@ -457,7 +464,7 @@ test("[L52] an IT learner checks an uncertain local submission before retrying",
   }
   await page.getByRole("link", { name: "Reload this attempt" }).click();
   await expect(page.getByText("private draft saved")).toBeVisible();
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const revision = await page
     .locator('input[name="revision"]')
     .first()

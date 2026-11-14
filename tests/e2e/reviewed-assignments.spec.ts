@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page } from "@playwright/test";
 import {
@@ -5,6 +6,10 @@ import {
   reviewedAssignmentImportStore,
 } from "../../src/reviewed-assignments.ts";
 import { reviewedContentFixture as fixture } from "../support/reviewed-content-browser.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 // Staff credentials are invented, private setup and are excluded from traces.
 test.use({ trace: "off" });
@@ -132,10 +137,7 @@ test("[L233] ASN103-01 editors import two ordinary assignment drafts and distinc
         .getByRole("button", { name: "Submit for review" })
         .click();
       await reviewer.page.goto(url);
-      const csrf = await reviewer.page
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const csrf = await formToken(reviewer.page);
       expect(
         (
           await reviewer.page.request.post(url + "/approve", {
@@ -254,8 +256,9 @@ test("[L235] ASN103-03 changed goals and retired preparation preserve exact prio
       "Invented signup checks: verify one missing-field case and one valid-email case against the brief, without writing code.";
     const url = await save(member, text);
     await member.goto(f.origin + "/learn");
+    await openLearningProfile(member);
     await chooseLearningGoal(member, "everyday");
-    await member.getByRole("button", { name: "Save my direction" }).click();
+    await saveLearningProfile(member);
     await expect(
       member.getByRole("button", { name: `Choose ${assignments[0]!.title}` }),
     ).toHaveCount(0);

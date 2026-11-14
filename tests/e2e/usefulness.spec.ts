@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
@@ -173,10 +174,7 @@ test("[L69] a member privately reports, corrects and withdraws exact-version use
     const outsiderExport = await outsider.request.get("/api/member/export");
     expect((await outsiderExport.json()).records.lessonUsefulness).toEqual([]);
     await outsider.goto("/learn");
-    const csrf = await outsider
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const csrf = await formToken(outsider);
     const forged = await outsider.request.post(
       `/library/${lessonId}/usefulness`,
       {

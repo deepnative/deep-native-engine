@@ -263,7 +263,8 @@ it("SUPADM-05-BOUNDARIES real parser and selected CSRF reject foreign origins ho
   const f = await fixture(),
     cookie = await signIn(f.admin, `${COOKIE}=${f.owner}`),
     fields = await assignment(f, cookie),
-    member = await get("/learn", cookie).expect(200);
+    // #846: My account always holds a form; the learning page may not.
+    member = await get("/account", cookie).expect(200);
   const learnerCsrf = csrfFrom(member.text);
   await post("/operator/support-assignment/assign", cookie, {
     ...fields,

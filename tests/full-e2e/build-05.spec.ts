@@ -57,9 +57,7 @@ async function sampleInvoice(f: Fixture) {
   await admin.page
     .getByRole("button", { name: "Prepare course billing proposal" })
     .click();
-  await member
-    .getByRole("link", { name: "Courses and invoices", exact: true })
-    .click();
+  await member.getByRole("link", { name: "Invoices", exact: true }).click();
   await member
     .getByLabel("Invoice recipient name")
     .fill("Invented provisional student");

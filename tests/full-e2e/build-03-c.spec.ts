@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { expect, test, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
 import { authorizationStore } from "../support/administrator-fixture.ts";
@@ -128,9 +129,7 @@ test("[F-BUILD-03-C] staff cancel the race winner's sample hold and one replacem
 
       const memberCsrf = await loser.page
         .goto("/availability")
-        .then(() =>
-          loser.page.locator('input[name="csrf"]').first().inputValue(),
-        );
+        .then(() => formToken(loser.page));
       const forged = await loser.page.request.post(submitted.action, {
         headers: { Origin: slotOrigin },
         form: {

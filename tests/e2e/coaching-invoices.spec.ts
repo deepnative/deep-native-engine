@@ -303,9 +303,7 @@ test("[L273] HOUR01/02/03/04/09 recovered members submit their own rates and rec
       await expect(p.getByText("Status: Awaiting review")).toBeVisible();
       const invoiceId = await issue(f, admin, id);
       await p.goto(f.origin + "/account/purchases");
-      await p
-        .getByRole("link", { name: `DN-${invoiceId}`, exact: true })
-        .click();
+      await p.locator(`a[href$="/invoices/${invoiceId}"]`).click();
       await expect(
         p.getByRole("table", { name: "Coaching charges" }),
       ).toContainText(f.month);
@@ -422,7 +420,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await s.getByRole("button", { name: "Continue", exact: true }).click();
 
     // 2. Sign out, then sign back in to the same account by email.
-    await menu(s).getByRole("link", { name: "Account", exact: true }).click();
+    await menu(s).getByRole("link", { name: "Sign out", exact: true }).click();
     await s.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(
       s.getByRole("heading", { name: "Signed out", exact: true }),
@@ -443,9 +441,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     // 3. The owner enters administration and sets the rate for that month.
     const owner = await f.owner(),
       o = owner.page;
-    await menu(o)
-      .getByRole("link", { name: "Administration", exact: true })
-      .click();
+    await menu(o).getByRole("link", { name: "Admin", exact: true }).click();
     await friendly(o, "owner-administration");
     await o.getByRole("button", { name: "Enter administration" }).click();
     await expect(
@@ -465,9 +461,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await o.getByRole("button", { name: "Save hourly rate" }).click();
 
     // 4. The student reports last month's hours from Coaching hours.
-    await menu(s)
-      .getByRole("link", { name: "Coaching hours", exact: true })
-      .click();
+    await menu(s).getByRole("link", { name: "Coaching", exact: true }).click();
     await expect(s).toHaveURL(f.origin + "/account/coaching");
     // MONTHNAV-01: the previous-month link opens last month.
     const months = s.getByRole("navigation", { name: "Months" });
@@ -505,9 +499,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await friendly(s, "student-submitted");
 
     // 5. The owner finds the pending month, reviews it and issues the invoice.
-    await menu(o)
-      .getByRole("link", { name: "Administration", exact: true })
-      .click();
+    await menu(o).getByRole("link", { name: "Admin", exact: true }).click();
     await o
       .getByRole("link", { name: "Coaching administration", exact: true })
       .click();
@@ -559,11 +551,11 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
 
     // 7. The student opens the invoice and sees what is due and how to pay.
     await menu(s).getByRole("link", { name: "Account", exact: true }).click();
-    await s
-      .getByRole("link", { name: "Courses and invoices", exact: true })
-      .click();
+    await s.getByRole("link", { name: "Invoices", exact: true }).click();
     await friendly(s, "student-invoices");
-    await s.getByRole("link", { name: `DN-${invoiceId}`, exact: true }).click();
+    // #846 FOLD-01: the invoice is named by the month it bills.
+    await expect(s.locator(".invoice-list li")).toContainText(/^Coaching · /);
+    await s.locator(`a[href$="/invoices/${invoiceId}"]`).click();
     await expect(
       s.getByRole("table", { name: "Coaching charges" }),
     ).toContainText(month);
@@ -596,11 +588,9 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await s
       .getByRole("link", { name: "Courses and invoices", exact: true })
       .click();
-    await expect(s.getByText(/CAD 213\.75 · Paid/)).toBeVisible();
+    await expect(s.getByText(/CAD 213\.75 — Paid/)).toBeVisible();
     // DASH-04: invoiced, sent and fully paid on the manager dashboard.
-    await menu(o)
-      .getByRole("link", { name: "Administration", exact: true })
-      .click();
+    await menu(o).getByRole("link", { name: "Admin", exact: true }).click();
     await o
       .getByRole("link", { name: "Coaching administration", exact: true })
       .click();
@@ -717,8 +707,8 @@ test("[L275] HOUR03/06/09 committed submission recovery preserves zero totals wi
     const m = await f.member(),
       admin = await f.admin();
     await m.page
-      .locator("#main")
-      .getByRole("link", { name: "Coaching hours", exact: true })
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "Coaching", exact: true })
       .click();
     await expect(
       m.page.getByText(/Your hourly rate isn't set yet/).first(),
@@ -776,8 +766,8 @@ test("[L276] HOUR09 disabled invoicing keeps monthly entry honest and learning a
   try {
     const m = await f.member();
     await m.page
-      .locator("#main")
-      .getByRole("link", { name: "Coaching hours", exact: true })
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "Coaching", exact: true })
       .click();
     await expect(
       m.page.getByText(/Coaching invoicing is not configured/),

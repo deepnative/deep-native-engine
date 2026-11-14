@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -60,7 +61,7 @@ test("[L82] three backgrounds discover synthetic events by keyboard without enro
   ]) {
     await context.clearCookies();
     await onboard(page, background!, goal!, timezone!);
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     const eventLink = page.getByRole("link", { name: "Explore local events" });
     await eventLink.focus();
     await page.keyboard.press("Enter");
@@ -99,10 +100,10 @@ test("[L82] three backgrounds discover synthetic events by keyboard without enro
       await expect(page.getByText(/GMT-0[45]/)).toBeVisible();
     } else {
       const recovery = page.getByRole("link", { name: "Set your time zone" });
-      await expect(recovery).toHaveAttribute("href", "/learn#timezone");
+      await expect(recovery).toHaveAttribute("href", "/account#timezone");
       await recovery.focus();
       await page.keyboard.press("Enter");
-      await expect(page).toHaveURL(/\/learn#timezone$/);
+      await expect(page).toHaveURL(/\/account#timezone$/);
       await expect(page.getByLabel("Time zone (optional)")).toBeVisible();
       await page.goto(`/events/${id}/${version}`);
     }

@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type BrowserContext } from "@playwright/test";
@@ -196,7 +197,7 @@ test("[F-ROADMAP-01-B] publishing content does not assess a learner", async ({
     const mismatched = await page.request.post("/assignments/select", {
       headers: { Origin: origin },
       form: {
-        csrf: await page.locator('input[name="csrf"]').first().inputValue(),
+        csrf: await formToken(page),
         content_id: otherId,
         content_version: "1",
       },

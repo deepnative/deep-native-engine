@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { rmSync, writeFileSync } from "node:fs";
@@ -79,7 +80,7 @@ test("[F-ROADMAP-02-A] guessed workspace, evidence and staff APIs reveal no othe
       await expect(otherPage.getByText(privateDraft)).toHaveCount(0);
     });
 
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     const uploaded = await page.request.post("/api/evidence", {
       headers: {
         Origin: origin,
@@ -110,10 +111,7 @@ test("[F-ROADMAP-02-A] guessed workspace, evidence and staff APIs reveal no othe
     expect(await ownerDownload.body()).toEqual(privateBytes);
 
     await requiredCheck(2, async () => {
-      const outsiderCsrf = await otherPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const outsiderCsrf = await formToken(otherPage);
       const noLink = await otherPage.request.post(
         `/api/evidence/${evidenceId}/download-link`,
         { headers: { Origin: origin, "X-CSRF-Token": outsiderCsrf } },
@@ -138,10 +136,7 @@ test("[F-ROADMAP-02-A] guessed workspace, evidence and staff APIs reveal no othe
       // The staff route that serves member A's private evidence to a
       // reviewer refuses member B: reading it, drafting and publishing, each
       // sent with B's own valid form token.
-      const outsiderCsrf = await otherPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const outsiderCsrf = await formToken(otherPage);
       const reviewPath = `/review/evidence/${evidenceId}/feedback`;
       // Control: member A submits this evidence for review, and a reviewer
       // with an exact grant for that submission does read it on this route.
@@ -230,7 +225,7 @@ test("[F-ROADMAP-02-D] editor publication role cannot read private member work",
   await page.getByRole("link", { name: "Open lesson" }).click();
   await page.getByLabel("Your instruction to AI").fill(privateDraft);
   await page.getByRole("button", { name: "Save draft" }).click();
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const uploaded = await page.request.post("/api/evidence", {
     headers: {
       Origin: origin,
@@ -290,10 +285,7 @@ test("[F-ROADMAP-02-D] editor publication role cannot read private member work",
       expect(await workspace.json()).toEqual({ error: "forbidden" });
       expect((await workspace.text()).includes(privateDraft)).toBe(false);
 
-      const editorCsrf = await editorPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const editorCsrf = await formToken(editorPage);
       const noLink = await editorPage.request.post(
         `/api/evidence/${evidenceId}/download-link`,
         { headers: { Origin: origin, "X-CSRF-Token": editorCsrf } },
@@ -325,7 +317,7 @@ test("[F-ROADMAP-02-B] assigned reviewer reads only one exact submitted evidence
 }) => {
   await onboard(page, "professional");
   const ownerId = await memberId(context);
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const evidence = evidenceStore(
     pool,
     fileObjectStorage(process.env.DNE_TEST_PRIVATE_STORAGE_ROOT!),
@@ -413,14 +405,8 @@ test("[F-ROADMAP-02-B] assigned reviewer reads only one exact submitted evidence
     const unrelatedPage = await otherReviewer.newPage();
     await reviewerPage.goto("/");
     await unrelatedPage.goto("/");
-    const reviewerCsrf = await reviewerPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
-    const unrelatedCsrf = await unrelatedPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const reviewerCsrf = await formToken(reviewerPage);
+    const unrelatedCsrf = await formToken(unrelatedPage);
     const linkFor = (staffPage: Page, id: string, staffCsrf: string) =>
       staffPage.request.post(`/api/evidence/${id}/download-link`, {
         headers: { Origin: origin, "X-CSRF-Token": staffCsrf },
@@ -497,7 +483,7 @@ test("[F-ROADMAP-02-C] revoked reviewer grant and expired signed link deny priva
   try {
     await onboard(page, "professional");
     const ownerId = await memberId(context);
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     const uploaded = await page.request.post("/api/evidence", {
       headers: {
         Origin: origin,
@@ -568,10 +554,7 @@ test("[F-ROADMAP-02-C] revoked reviewer grant and expired signed link deny priva
     ]);
     const reviewerPage = await reviewer.newPage();
     await reviewerPage.goto("/");
-    const reviewerCsrf = await reviewerPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const reviewerCsrf = await formToken(reviewerPage);
     const linkFor = () =>
       reviewerPage.request.post(`/api/evidence/${evidenceId}/download-link`, {
         headers: { Origin: origin, "X-CSRF-Token": reviewerCsrf },

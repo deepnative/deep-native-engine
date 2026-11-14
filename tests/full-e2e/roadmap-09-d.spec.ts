@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -197,7 +198,7 @@ test("[F-ROADMAP-09-D] member and operator export stay within authorization, and
     });
 
     // Source evidence with a derived text extract, and an issued, paid invoice.
-    const csrf = await owner.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(owner);
     const source = Buffer.from(`Invented source material ${tag}.`),
       derived = Buffer.from(`Invented text extract ${tag}.`);
     const uploaded = await owner.request.post(f.origin + "/api/evidence", {

@@ -122,7 +122,7 @@ export async function saveRecipient(student: Page, origin: string) {
   await student
     .getByLabel("Invoice email")
     .fill("invented.student@example.invalid");
-  await student.getByRole("button", { name: "Save billing recipient" }).click();
+  await student.getByRole("button", { name: "Save billing details" }).click();
 }
 
 /**

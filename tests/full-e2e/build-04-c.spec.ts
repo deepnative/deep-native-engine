@@ -121,9 +121,7 @@ test("[F-BUILD-04-C] a monthly offer accepted after its start date cannot activa
       expect((await storedPlans(f, reference))[0]!.state).toBe("offered");
       expect(await invoices(f.pool, reference)).toEqual([]);
       await member.goto(f.origin + "/account/purchases");
-      await expect(
-        member.locator("h2", { hasText: "Your invoices" }).locator("+ ul li"),
-      ).toHaveCount(0);
+      await expect(member.locator(".invoice-list li")).toHaveCount(0);
     });
 
     await requiredCheck(2, async () => {
@@ -162,9 +160,7 @@ test("[F-BUILD-04-C] a monthly offer accepted after its start date cannot activa
       await expect(member.locator(`#plan-${late!.id}`)).toContainText(
         "Acceptance closed",
       );
-      await expect(
-        member.locator("h2", { hasText: "Your invoices" }).locator("+ ul li"),
-      ).toHaveCount(1);
+      await expect(member.locator(".invoice-list li")).toHaveCount(1);
     });
   } finally {
     await f.close();

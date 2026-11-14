@@ -28,8 +28,8 @@ it("OFFPUR-01/07 a signed-in learner can open the native purchase entry without 
       .get("/account/purchases")
       .set("Host", "127.0.0.1:3000");
     expect(response.status).toBe(200);
-    expect(response.text).toContain("Courses and invoices");
-    expect(response.text).toContain("No payable offer is configured");
+    expect(response.text).toContain("<h1>Invoices</h1>");
+    expect(response.text).toContain("Invoices are not set up here.");
     expect(response.text).not.toContain("Zoho");
   } finally {
     await closeLoopback(server);

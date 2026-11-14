@@ -121,7 +121,7 @@ test("[L285] PWD-01/02/06 a verified member sets a password, signs out and signs
       page.getByRole("heading", { name: "Password set" }),
     ).toBeVisible();
 
-    await page.goto(`${origin}/account`);
+    await page.goto(`${origin}/account/sign-out`);
     await page
       .locator("form[action='/account/sign-out']")
       .getByRole("button", { name: "Sign out" })
@@ -157,9 +157,11 @@ test("[L285] PWD-01/02/06 a verified member sets a password, signs out and signs
     // PWEMAIL-01: the password sign-in kept the verified email, so the
     // invoice email starts from it.
     await page.goto(`${origin}/account/billing`);
-    await expect(page.getByLabel("Invoice email", { exact: true })).toHaveValue(
-      address,
-    );
+    // #846 FOLD-02: the billing address leads to the form on My account.
+    await expect(page).toHaveURL(`${origin}/account#billing`);
+    await expect(
+      page.getByLabel("Invoice email (optional)", { exact: true }),
+    ).toHaveValue(address);
     await friendly(page, "billing-prefilled-after-password");
     expect((await members.session(token)).kind).not.toBe("active");
   } finally {
@@ -240,6 +242,7 @@ test("[L286] SIGNUP-01/02/04/06 a visitor signs up with email and password, sign
       page.getByRole("heading", { name: "Email not yet verified" }),
     ).toBeVisible();
     await friendly(page, "signup-account-unverified");
+    await page.goto(`${origin}/account/sign-out`);
     await page
       .locator("form[action='/account/sign-out']")
       .getByRole("button", { name: "Sign out" })

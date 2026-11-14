@@ -304,7 +304,7 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
       expect(
         (await download("reporter-unavailable-snapshot")).decision,
       ).toBeNull();
-      await page.goto(origin + "/learn");
+      await page.goto(origin + "/account");
       await page.getByLabel("Delete my local preview").check();
       await page
         .getByRole("button", { name: "Delete this preview", exact: true })
@@ -326,7 +326,7 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
         path: info.outputPath("reporter-private-unavailable-after-leave.png"),
         fullPage: true,
       });
-      await peer.goto(origin + "/learn");
+      await peer.goto(origin + "/account");
       await peer.getByLabel("Delete my local preview").check();
       await peer
         .getByRole("button", { name: "Delete this preview", exact: true })

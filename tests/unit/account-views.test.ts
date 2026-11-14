@@ -45,9 +45,9 @@ it("ROLES-02 picks a saved view only when held, else the highest held role", () 
 });
 
 it.each([
-  ["student", "/account/coaching", "Coaching hours"],
+  ["student", "/account/coaching", "Coaching"],
   ["coach", "/coach", "Coaching"],
-  ["admin", "/admin", "Administration"],
+  ["admin", "/admin", "Admin"],
 ] as const)(
   "ROLES-01/02/03 the %s view shows its own header links",
   (view, path, label) => {
@@ -57,8 +57,14 @@ it.each([
     );
     const nav = navigation(html);
     expect(nav).toContain(`href="${path}">${label}</a>`);
-    for (const other of ["/account/coaching", "/coach", "/admin"])
-      if (other !== path) expect(nav).not.toContain(`href="${other}"`);
+    // #846 HEADER-01: every view has one Coaching link; a coach's goes to
+    // their students unless they are viewing as a student. Only the admin
+    // view has the Admin link.
+    expect(nav.match(/>Coaching<\/a>/g)).toHaveLength(1);
+    expect(nav).toContain(
+      `href="${view === "student" ? "/account/coaching" : "/coach"}">Coaching</a>`,
+    );
+    expect(nav.includes('href="/admin"')).toBe(view === "admin");
     expect(nav).toContain('href="/account/sign-out"');
     // ROLES-02: a person with several roles can switch to each other view.
     const form = nav.match(
@@ -120,7 +126,7 @@ it("ROLES-02/03 the header follows the saved view and offers the switch", async 
   const f = fixture();
   const http = await f.http();
   const first = await http.get("/probe").set("Cookie", member);
-  expect(navigation(first.text)).toContain('href="/admin">Administration</a>');
+  expect(navigation(first.text)).toContain('href="/admin">Admin</a>');
   expect(first.text).toContain(`value="${csrf(token, secret)}"`);
   // The body's Administration link appears only for an admin role.
   expect(first.text).toContain('<main id="main"><a href="/admin">');

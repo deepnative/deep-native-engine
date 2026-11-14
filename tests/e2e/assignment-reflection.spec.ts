@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { createHash, randomBytes } from "node:crypto";
@@ -324,7 +325,7 @@ test("[L98] stale, forged, outsider and expired reflection writes preserve priva
     await expect(
       ownerReflection.getByLabel("Evidence I can point to"),
     ).toHaveValue("Current private evidence");
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     const forged = await page.request.post(
       `/assignments/attempts/${attemptId}/reflections/1/save`,
       {

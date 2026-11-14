@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page } from "@playwright/test";
 import { randomBytes } from "node:crypto";
@@ -40,7 +41,7 @@ test("[L278] a member over the upload budget keeps their typed sample and saves 
   const prefix = `admit-${randomBytes(6).toString("hex")}`;
   await onboard(page);
   await page.goto("/evidence");
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   // Nine earlier uploads in this window; the tenth goes through the page.
   for (let i = 1; i <= 9; i++) {
     const response = await page.request.post("/evidence", {

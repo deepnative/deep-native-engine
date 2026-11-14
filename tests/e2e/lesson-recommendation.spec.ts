@@ -5,6 +5,10 @@ import { test, expect, type Page } from "@playwright/test";
 import { authorizationStore } from "../support/administrator-fixture.ts";
 import { catalogStore, type DraftContent } from "../../src/catalog.ts";
 import { testPool } from "../support/database.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 const pool = testPool();
 test.use({ trace: "on" });
@@ -90,14 +94,16 @@ test("[L65] a private plan recommends only a current eligible sample lesson", as
     await unrelated.close();
   }
 
+  await openLearningProfile(page);
   await chooseLearningGoal(page, "build");
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   await expect(suggestion).not.toContainText("Invented next reading");
   await page.goto("/progress");
   await expect(page.locator("main ol")).toContainText("version 1");
   await page.goto("/learn");
+  await openLearningProfile(page);
   await chooseLearningGoal(page, "everyday");
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   await publish(2, "Invented next reading revised");
   await page.reload();
   await expect(suggestion).toContainText(

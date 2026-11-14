@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
@@ -147,7 +148,7 @@ test("[F-BUILD-08-B] member revocation stops current reviewer links while retain
 }) => {
   await onboard(page);
   const ownerId = await memberId(context);
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const bytes = Buffer.from(
     "Invented evidence retained after consent revocation.",
   );
@@ -224,10 +225,7 @@ test("[F-BUILD-08-B] member revocation stops current reviewer links while retain
     ]);
     const reviewerPage = await reviewer.newPage();
     await reviewerPage.goto("/");
-    const reviewerCsrf = await reviewerPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const reviewerCsrf = await formToken(reviewerPage);
     const issued = await reviewerPage.request.post(
       `/api/evidence/${id}/download-link`,
       { headers: { Origin: origin, "X-CSRF-Token": reviewerCsrf } },
@@ -286,10 +284,7 @@ test("[F-BUILD-08-B] member revocation stops current reviewer links while retain
       );
       expect(newLink.status()).toBe(403);
       expect(await newLink.json()).toEqual({ error: "forbidden" });
-      const currentCsrf = await page
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const currentCsrf = await formToken(page);
       const ownerLink = await page.request.post(
         `/api/evidence/${id}/download-link`,
         { headers: { Origin: origin, "X-CSRF-Token": currentCsrf } },
@@ -319,11 +314,8 @@ test("[F-BUILD-08-C] owner deletion removes configured synthetic source and deri
   try {
     await onboard(page);
     await onboard(otherPage);
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
-    const otherCsrf = await otherPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const csrf = await formToken(page);
+    const otherCsrf = await formToken(otherPage);
     const uploaded = await page.request.post("/api/evidence", {
       headers: {
         Origin: origin,

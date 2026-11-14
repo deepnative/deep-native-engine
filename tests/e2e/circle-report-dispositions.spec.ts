@@ -259,7 +259,7 @@ for (const [index, [background, goal, circle, title]] of audiences.entries()) {
         "Closed after a recorded decision · revision 3",
       );
       // RPTD-08: account erasure removes it; a stale download has no attachment.
-      await peer.goto(origin + "/learn");
+      await peer.goto(origin + "/account");
       await peer.getByLabel("Delete my local preview").check();
       await peer
         .getByRole("button", { name: "Delete this preview", exact: true })

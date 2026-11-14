@@ -192,18 +192,33 @@ test("[L213] email verification restores the exact saved member in another brows
     const deleteHeading = (await fresh
       .getByRole("heading", { name: "Delete your account", exact: true })
       .boundingBox())!;
+    // #846 ACCOUNT-01: two periods beside the control, the full list one
+    // click away, still ahead of the confirmation.
+    const summary = (await fresh.locator(".account-delete > p").boundingBox())!;
     const deletionKept = (await fresh
-      .locator(".account-delete #deletion-kept")
+      .locator(".account-delete .deletion-details")
       .boundingBox())!;
     const deleteCheck = (await fresh
       .locator(".account-delete .check")
       .boundingBox())!;
     expect(
-      deletionKept.y - (deleteHeading.y + deleteHeading.height),
+      summary.y - (deleteHeading.y + deleteHeading.height),
     ).toBeLessThanOrEqual(24);
+    expect(deletionKept.y - (summary.y + summary.height)).toBeLessThanOrEqual(
+      24,
+    );
     expect(
       deleteCheck.y - (deletionKept.y + deletionKept.height),
     ).toBeLessThanOrEqual(24);
+    await expect(fresh.locator(".account-delete > p")).toHaveText(
+      "This cannot be undone. Issued invoices stay for 6 years for tax records, and backup copies for up to 30 days.",
+    );
+    await expect(fresh.locator("#deletion-kept")).toBeHidden();
+    await fresh.getByText("What stays after deletion").click();
+    await expect(
+      fresh.locator("#deletion-kept").getByRole("listitem"),
+    ).toHaveCount(5);
+    await fresh.getByText("What stays after deletion").click();
     await expect(fresh.locator(".account-delete .delete-form")).toHaveCSS(
       "border-top-style",
       "none",
@@ -214,22 +229,23 @@ test("[L213] email verification restores the exact saved member in another brows
       (await fresh.getByRole("heading", { name, exact: true }).boundingBox())!;
     const title = await box("My account"),
       email = await box("Verified email linked"),
-      signOut = await box("Sign out of your account"),
+      data = await box("Your data"),
       profile = await box("Your learning profile");
+    // #846 ACCOUNT-01: the header signs out; the page has no second control.
+    await expect(
+      fresh.locator("#main").getByText("Sign out", { exact: false }),
+    ).toHaveCount(0);
     const accountWidth = (await fresh.locator(".account-page").boundingBox())!
       .width;
-    expect(new Set([title.x, email.x, signOut.x]).size).toBe(1);
+    expect(new Set([title.x, email.x, data.x]).size).toBe(1);
     if (fresh.viewportSize()!.width >= 1000) {
       expect(accountWidth).toBeGreaterThan(1000);
       expect(profile.x).toBeGreaterThan(email.x + accountWidth / 3);
       expect(Math.abs(profile.y - email.y)).toBeLessThan(4);
-      expect(signOut.y - email.y).toBeLessThan(400);
+      expect(data.y - email.y).toBeLessThan(400);
       // ACCT-PLAIN-01: the left column has no empty space before Delete, even
       // though the profile beside it is much taller.
-      const records = await box("Your records");
-      expect((await box("Delete your account")).y - records.y).toBeLessThan(
-        250,
-      );
+      expect((await box("Delete your account")).y - data.y).toBeLessThan(250);
       // ACCT-LAYOUT-03/04: the intro uses the page width, so each paragraph
       // stays on one line and the account links share one row.
       const introLines = await fresh
@@ -243,16 +259,13 @@ test("[L213] email verification restores the exact saved member in another brows
         );
       expect(introLines.length).toBeGreaterThanOrEqual(2);
       expect(Math.max(...introLines)).toBeLessThan(1.5);
-      const accountLinkRows = await fresh
-        .locator(".account-intro .account-links a")
-        .evaluateAll(
-          (links) =>
-            new Set(links.map((link) => link.getBoundingClientRect().top)).size,
-        );
-      expect(accountLinkRows).toBe(1);
+      // #846 ACCOUNT-01: the header carries the destinations; no button row.
+      await expect(fresh.locator(".account-links")).toHaveCount(0);
     } else {
+      // #846 ACCOUNT-01: who you are, the profile, then your data.
       expect(profile.x).toBe(title.x);
-      expect(profile.y).toBeGreaterThan(signOut.y);
+      expect(profile.y).toBeGreaterThan(email.y);
+      expect(data.y).toBeGreaterThan(profile.y);
     }
     expect(
       await fresh.evaluate(
@@ -264,13 +277,14 @@ test("[L213] email verification restores the exact saved member in another brows
       fullPage: true,
     });
     await fresh
-      .getByRole("link", { name: "Return to learning", exact: true })
+      .getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "Learning", exact: true })
       .click();
-    // ACCT-PLAIN-01: on the learning page the form stands alone and keeps it.
-    await expect(fresh.locator(".delete-form")).toHaveCSS(
-      "border-top-style",
-      "solid",
-    );
+    // #846 PROFILE-01: the learning page has no delete form or profile form.
+    await expect(fresh.locator(".delete-form")).toHaveCount(0);
+    await expect(
+      fresh.getByRole("link", { name: "Change your learning profile" }),
+    ).toHaveAttribute("href", "/account#profile");
     await fresh.getByRole("link", { name: "Review your work" }).click();
     await expect(
       fresh.getByText("My invented learning plan has three careful steps."),

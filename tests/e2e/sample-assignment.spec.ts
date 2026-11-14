@@ -417,6 +417,8 @@ for (const [index, [background, goal]] of audiences.entries()) {
       ).not.toBeChecked();
       // Owner erasure is a deliberate final action, after retained feedback and
       // progress were observed. An absent receipt must not imply no prior commit.
+      // #846: the delete control is on My account only.
+      await page.goto(new URL("/account", page.url()).href);
       await page.getByLabel("Delete my local preview").check();
       await page
         .getByRole("button", { name: "Delete this preview", exact: true })

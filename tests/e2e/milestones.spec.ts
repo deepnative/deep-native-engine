@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Page } from "@playwright/test";
@@ -5,6 +6,10 @@ import { test, expect, type Page } from "@playwright/test";
 import { COOKIE } from "../../src/session.ts";
 import { hash } from "../../src/store.ts";
 import { testPool } from "../support/database.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 const pool = testPool();
 test.afterAll(async () => pool.end());
 
@@ -107,8 +112,9 @@ test("[L35] general learner saves a private noncoding milestone and revises dire
     await other.close();
   }
   await page.getByRole("link", { name: "Return to learning" }).click();
+  await openLearningProfile(page);
   await chooseLearningGoal(page, "work");
-  await page.getByRole("button", { name: "Save my direction" }).click();
+  await saveLearningProfile(page);
   await page.getByRole("link", { name: "Plan goals and milestones" }).click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
   const session = (await page.context().cookies()).find(
@@ -198,7 +204,7 @@ test("[L37] IT learner's self-reported progress cannot be forged or edited by an
     "complete · self-reported",
   );
   await expect(page.getByText(/NO OUTBOUND REMINDERS/i)).toBeVisible();
-  const ownCsrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const ownCsrf = await formToken(page);
   const other = await browser.newContext({ baseURL: origin });
   try {
     const outsider = await other.newPage();

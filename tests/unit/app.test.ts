@@ -337,15 +337,18 @@ it("keeps personalized assignment preparation private, exact and read-only", asy
   readiness.list.mockResolvedValueOnce(null);
   const unavailable = await agent.get("/learn").set("Host", host).expect(503);
   expect(unavailable.text).not.toContain("Invented sample");
-  readiness.list.mockResolvedValueOnce(null);
+  // #846 PROFILE-01: a refused profile save no longer reads assignment
+  // preparation; this session has no account time limit, so it goes home.
   const unsavedProfile = await agent
     .post("/profile")
     .set("Host", host)
     .set("Origin", origin)
     .type("form")
     .send({ csrf })
-    .expect(503);
+    .expect(303)
+    .expect("Location", "/");
   expect(unsavedProfile.text).not.toContain("Invented sample");
+  expect(readiness.list).toHaveBeenCalledTimes(2);
   db.session.mockResolvedValue({ kind: "expired" });
   await agent
     .get("/assignments/readiness/SYN-831?version=1")
@@ -2220,6 +2223,15 @@ function active() {
     learner: member,
   });
 }
+// #846: My account, and so a refused profile save, checks the account's time.
+function activeAccount() {
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    deadline: performance.now() + 60000,
+    learner: member,
+  });
+}
 it("denies a member tailored-review request without accepting a service", async () => {
   const tracks = {
     ...disabledTrackStore(),
@@ -3586,8 +3598,7 @@ it.each(["linked", "unlinked", "unavailable", "disabled"] as const)(
       .get("/account?memberId=another-member")
       .set("Host", host)
       .expect(200);
-    expect(account.text).toContain("My account");
-    expect(account.text).toContain("Signed in");
+    expect(account.text).toContain("<h1>My account</h1>");
     expect(account.text).toContain('value="America/Toronto"');
     expect(account.text).toContain('<option value="professional" selected>');
     expect(account.text).toContain('<option value="work" selected>');
@@ -3618,8 +3629,73 @@ it.each(["linked", "unlinked", "unavailable", "disabled"] as const)(
     expect(learning.text).toMatch(
       /dashboard-head[\s\S]*?Signed in[\s\S]*?href="\/account"[\s\S]*?<h1>/,
     );
+    // #846 PROFILE-01: the profile form is on My account only.
+    expect(learning.text).not.toContain('action="/profile"');
+    expect(learning.text).toContain(
+      '<a href="/account#profile">Change your learning profile</a>',
+    );
   },
 );
+it("FOLD-02 My account shows the billing form with its outcome, and stays without it when billing is unavailable", async () => {
+  const db = storage();
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    deadline: performance.now() + 60000,
+    learner: { displayName: "Sample learner", ...member },
+  });
+  const suggest = vi.fn().mockResolvedValue({
+    kind: "ready",
+    value: {
+      name: "Sample <payer>",
+      email: "payer@example.invalid",
+      company: null,
+      revision: 4,
+    },
+  });
+  const agent = await managedAgent(
+    app(db, {
+      origin,
+      secret: "secret",
+      billingProfiles: { suggest } as never,
+    }),
+  );
+  const plain = await agent.get("/account").set("Host", host).expect(200);
+  expect(plain.text).toContain(
+    '<section class="account-billing" id="billing"><h2>Billing details</h2><p>Shown on your invoices.</p><form method="post" action="/account/billing">',
+  );
+  expect(plain.text).toContain('value="Sample &lt;payer&gt;"');
+  expect(plain.text).toContain('name="revision" value="4"');
+  expect(suggest).toHaveBeenCalledWith(db.session.mock.calls[0]![0]);
+  const saved = await agent
+    .get("/account?billing=saved")
+    .set("Host", host)
+    .expect(200);
+  expect(saved.text).toContain(
+    '<p class="notice" role="status">Billing details saved.</p>',
+  );
+  const forged = await agent
+    .get("/account?billing=%3Cscript%3E")
+    .set("Host", host)
+    .expect(200);
+  expect(forged.text).toContain('id="billing"');
+  expect(forged.text).not.toContain('class="notice"');
+  suggest.mockResolvedValueOnce({ kind: "unavailable" });
+  const without = await agent.get("/account").set("Host", host).expect(200);
+  expect(without.text).toContain("<h1>My account</h1>");
+  expect(without.text).not.toContain('id="billing"');
+  // An account check that sets no time limit shows nothing.
+  db.session.mockResolvedValue({
+    kind: "active",
+    expiresAt: new Date(Date.now() + 3600000),
+    learner: member,
+  });
+  await agent
+    .get("/account")
+    .set("Host", host)
+    .expect(303)
+    .expect("Location", "/");
+});
 it.each(["new", "expired"] as const)(
   "MON-06 refuses account data for a %s session",
   async (kind) => {
@@ -3921,7 +3997,7 @@ it("MON-01 rejects forged onboarding inputs while ordinary profiles need no samp
 });
 it("lets an active member revise their direction without selecting another owner", async () => {
   const { agent, csrf } = await client();
-  active();
+  activeAccount();
   const rejected = await agent
     .post("/profile")
     .set("Host", host)
@@ -3949,11 +4025,14 @@ it("lets an active member revise their direction without selecting another owner
     'name="domain_tags" value="education" checked',
   );
   expect(rejected.text).toContain('name="it_roles" value="analysis" checked');
-  expect(rejected.text).toContain("Understand AI and try something useful");
+  // #846 PROFILE-01: the refusal is My account, where the form lives.
+  expect(rejected.text).toContain("<h1>My account</h1>");
+  expect(rejected.text).toContain('id="profile"');
   expect(db.updateProfile).not.toHaveBeenCalled();
-  const savedPage = await agent.get("/learn").set("Host", host).expect(200);
+  const savedPage = await agent.get("/account").set("Host", host).expect(200);
   expect(savedPage.text).toContain('<option value="everyday" selected>');
   expect(savedPage.text).not.toContain('value="Mars/Olympus"');
+  expect(savedPage.text).not.toContain("Error in your profile");
   await agent
     .post("/profile")
     .set("Host", host)
@@ -3972,7 +4051,7 @@ it("lets an active member revise their direction without selecting another owner
       id: "other",
     })
     .expect(303)
-    .expect("Location", "/learn");
+    .expect("Location", "/account#profile");
   expect(db.updateProfile).toHaveBeenCalledWith(
     db.session.mock.calls.at(-1)![0],
     expect.objectContaining({
@@ -6681,16 +6760,26 @@ it("withholds private lesson history consistently across every consumer and keep
     expect(response.text).not.toContain(item.title);
     expect(response.text).not.toContain(item.id);
   }
-  for (const path of ["/assignments/select", "/profile"]) {
-    const response = await agent
-      .post(path)
-      .set("Host", host)
-      .set("Origin", origin)
-      .type("form")
-      .send({ csrf })
-      .expect(403);
-    expect(response.text).toContain("Lesson history unavailable");
-  }
+  const selection = await agent
+    .post("/assignments/select")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf })
+    .expect(403);
+  expect(selection.text).toContain("Lesson history unavailable");
+  // #846 PROFILE-01: a refused profile save shows My account, which reads no
+  // lesson history.
+  activeAccount();
+  const profile = await agent
+    .post("/profile")
+    .set("Host", host)
+    .set("Origin", origin)
+    .type("form")
+    .send({ csrf })
+    .expect(422);
+  expect(profile.text).toContain("Error in your profile");
+  expect(profile.text).not.toContain(item.title);
   expect(db.chooseAssignment).not.toHaveBeenCalled();
   expect(db.updateProfile).not.toHaveBeenCalled();
   db.lessonActivities.mockRejectedValue(
@@ -7206,7 +7295,7 @@ it("NAV-05 and NAV-06 offer Administration only where administrator entry exists
     expect(navigation(result!.text)).toContain('href="/account/sign-out"');
     expect(result!.text).not.toContain('href="/admin"');
   }
-  expect(navigation(shown!.text)).toContain('href="/admin">Administration</a>');
+  expect(navigation(shown!.text)).toContain('href="/admin">Admin</a>');
 });
 it("NAV-09/10 keeps the signed-out header on form responses and offers sign-in buttons after sign-out", async () => {
   const db = storage();
@@ -7236,7 +7325,7 @@ it("NAV-09/10 keeps the signed-out header on form responses and offers sign-in b
   const invalid = await post("/start", { display_name: "" });
   expect(invalid.status).toBe(422);
   expect(navigation(invalid.text)).toBe(
-    '<a href="/learn">Learning</a><a href="/email/sign-in">Sign in</a><a class="nav-create" href="/#your-path">Create account</a>',
+    '<a href="/email/sign-in">Sign in</a><a class="nav-create" href="/#your-path">Create account</a>',
   );
   // An active member signs out: the response is already a signed-out page.
   db.session.mockResolvedValue({
@@ -7247,7 +7336,7 @@ it("NAV-09/10 keeps the signed-out header on form responses and offers sign-in b
   const out = await post("/account/sign-out", {});
   expect(out.text).toContain("Signed out");
   expect(navigation(out.text)).toBe(
-    '<a href="/learn">Learning</a><a href="/email/sign-in">Sign in</a><a class="nav-create" href="/#your-path">Create account</a>',
+    '<a href="/email/sign-in">Sign in</a><a class="nav-create" href="/#your-path">Create account</a>',
   );
   const main = out.text.match(/<main[^>]*>([\s\S]*?)<\/main>/)?.[1] ?? "";
   expect(main).toContain('class="button" href="/email/sign-in">Sign in</a>');
@@ -7267,9 +7356,10 @@ it("FOOTER-01 lists footer links as whole items without dot separators", async (
   );
   expect(footer).not.toContain(" · ");
   expect(footer).not.toMatch(/<\/a>\.<\/span>/);
+  // #846: My courses is a member page, so a visitor is not offered it.
+  expect(footer).not.toContain("My courses");
   for (const label of [
     "Explore programs",
-    "My courses",
     "Local circles",
     "Workflow demonstrations",
     "Service status",
@@ -7317,8 +7407,9 @@ it("NAV-08 shows signed-out visitors Sign in instead of member account links", a
     });
     const links = navigation(visitor.text);
     expect(links).toContain('href="/email/sign-in">Sign in</a>');
-    expect(links).toContain('href="/learn">Learning</a>');
+    // #846 HEADER-01: Learning would only send a visitor back home.
     for (const href of [
+      "/learn",
       "/account",
       "/account/coaching",
       "/admin",
@@ -7340,10 +7431,11 @@ it("NAV-08 shows signed-out visitors Sign in instead of member account links", a
   const withoutEmail = await withLoopback(app(storage(), options), (s) =>
     request(s).get("/readiness").set("Host", host),
   );
-  expect(navigation(withoutEmail.text)).toBe('<a href="/learn">Learning</a>');
+  // #846 HEADER-01: with no way to sign in, a visitor's header has no links.
+  expect(navigation(withoutEmail.text)).toBe("");
   const links = navigation(signedIn.text);
   // ROLES-02: an owner's default admin view, with the switch to the others.
-  for (const label of ["Account", "Administration", "Sign out"])
+  for (const label of ["Account", "Admin", "Sign out"])
     expect(links).toContain(`>${label}</a>`);
   expect(links).toContain(">Switch to student view</button>");
   expect(links).not.toContain("/email/sign-in");
@@ -7392,9 +7484,9 @@ it("ADMINLINK-01/02/03 shows Administration only to verified owners and grants n
   // ADMINLINK-02: a verified owner sees it, whatever their session state.
   accountRoles.mockResolvedValue(["student", "coach", "admin"]);
   const owner = await read("/readiness");
-  expect(navigation(owner!.text)).toContain('href="/admin">Administration</a>');
+  expect(navigation(owner!.text)).toContain('href="/admin">Admin</a>');
   expect((await read("/account"))!.text).toContain(
-    '<a class="button secondary" href="/admin">Administration</a>',
+    '<a href="/admin">Administration</a>',
   );
   // ADMINLINK-03: seeing the link gives no authority; the route still decides.
   expect((await read("/admin"))!.status).toBe(403);
@@ -7565,6 +7657,7 @@ it("REALINPUT-01/02/03 hosted private learning forms take real information while
     db.session.mockResolvedValue({
       kind: "active",
       expiresAt: new Date(Date.now() + 3600000),
+      deadline: performance.now() + 60000,
       learner: member,
     });
     db.openLesson.mockResolvedValue(true);
@@ -7735,10 +7828,13 @@ it("REALINPUT-01/02/03 hosted private learning forms take real information while
   expect(practiceForm.text).not.toContain("SAMPLE ONLY");
   const dashboardPage = await hosted.get("/learn");
   expect(dashboardPage.text).toContain("YOUR PRIVATE PLAN");
-  expect(dashboardPage.text).toContain("Delete my account");
-  expect(dashboardPage.text).not.toContain("Delete this preview");
   expect(dashboardPage.text).not.toContain("FOUNDATION PREVIEW");
-  expect((await local.get("/learn")).text).toContain("Delete this preview");
+  // #846 PROFILE-01: the delete control is on My account only.
+  expect(dashboardPage.text).not.toContain("Delete my account");
+  const hostedAccount = await hosted.get("/account");
+  expect(hostedAccount.text).toContain("Delete my account");
+  expect(hostedAccount.text).not.toContain("Delete this preview");
+  expect((await local.get("/account")).text).toContain("Delete this preview");
 });
 it("READABLE-14 a hosted member sees the prerequisite lesson's title on its route", async () => {
   const hostedOrigin = "https://engine.deepnative.io";

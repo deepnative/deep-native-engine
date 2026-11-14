@@ -329,7 +329,7 @@ for (const [index, [background, goal]] of audiences.entries())
           exact: true,
         }),
       ).toHaveCount(0);
-      await page.goto(origin + "/learn");
+      await page.goto(origin + "/account");
       await page
         .getByLabel("Delete my local preview and all its saved work.", {
           exact: true,

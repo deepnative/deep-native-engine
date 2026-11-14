@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { expect, test, type BrowserContext } from "@playwright/test";
@@ -49,7 +50,7 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
      VALUES($1,$2,'Invented goal',$3,'Check my next step')`,
     [randomUUID(), ownerId, privateText],
   );
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const uploaded = await page.request.post("/api/evidence", {
     headers: {
       Origin: origin,
@@ -133,10 +134,7 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
     ]);
     const operatorPage = await operator.newPage();
     await operatorPage.goto("/");
-    const operatorCsrf = await operatorPage
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const operatorCsrf = await formToken(operatorPage);
 
     await requiredCheck(1, async () => {
       for (const path of [
@@ -196,10 +194,7 @@ test("[F-ECO-08-C] operator aggregates do not grant private member drill-down", 
       );
       expect(outsiderEvidence.status()).toBe(200);
       expect(await outsiderEvidence.text()).not.toContain(evidenceId);
-      const outsiderCsrf = await outsiderPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const outsiderCsrf = await formToken(outsiderPage);
       const outsiderLink = await outsiderPage.request.post(
         `/api/evidence/${evidenceId}/download-link`,
         { headers: { Origin: origin, "X-CSRF-Token": outsiderCsrf } },

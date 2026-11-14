@@ -44,9 +44,7 @@ async function offer(f: Fixture, member: Page, cadence = "one_time") {
   await admin.page
     .getByRole("button", { name: "Prepare course billing proposal" })
     .click();
-  await member
-    .getByRole("link", { name: "Courses and invoices", exact: true })
-    .click();
+  await member.getByRole("link", { name: "Invoices", exact: true }).click();
   await expect(
     member.getByRole("heading", { name: "Course bundle" }),
   ).toBeVisible();
@@ -134,7 +132,7 @@ test("[L266] registered student accepts two courses on one printable individual 
     await member
       .getByRole("link", { name: "Courses and invoices", exact: true })
       .click();
-    await expect(member.getByText(/CAD 30.00 · Paid/)).toBeVisible();
+    await expect(member.getByText(/CAD 30.00 — Paid/)).toBeVisible();
     expect(
       await member.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -179,7 +177,7 @@ test("[L267] monthly course agreement requires explicit acceptance and cancellat
         instructions: "Unused",
       }).generateScheduled(),
     ).toEqual({ kind: "ready", value: { created: 0 } });
-    await expect(member.getByRole("link", { name: /^DN-/ })).toHaveCount(1);
+    await expect(member.locator(".invoice-list a")).toHaveCount(1);
   } finally {
     await f.close();
   }

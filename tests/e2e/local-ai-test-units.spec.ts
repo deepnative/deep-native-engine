@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -365,7 +366,7 @@ test("[L123] absent units, pause and a seeded uncertain claim never create an au
     await expect(
       own.item.getByRole("button", { name: "Run local test request" }),
     ).toHaveCount(0);
-    const csrf = await page.locator('[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     const response = await page.request.post(`/evidence/local-ai/${job}/run`, {
       form: { csrf },
       headers: { Origin: origin },

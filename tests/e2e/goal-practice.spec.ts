@@ -1,6 +1,10 @@
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page } from "@playwright/test";
 import { observeNativeSubmission } from "./native-submission-observation.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 const observations = new WeakMap<
   Page,
@@ -42,12 +46,13 @@ test("[L102] three audiences keep exact private starter practice when changing g
     await page.goto("/learn");
     // PARTNAV-03: preserve the original L102 history and withdrawal checks
     // while also observing discovery after background and goal changes.
+    await openLearningProfile(page);
     await page.getByLabel("Display name").fill("Sample learner");
     await page
       .getByLabel("Your starting point")
       .selectOption(background === "explorer" ? "professional" : "explorer");
     await chooseLearningGoal(page, b);
-    await page.getByRole("button", { name: "Save my direction" }).click();
+    await saveLearningProfile(page);
     await expect(
       page.getByRole("progressbar", { name: "Exercises completed" }),
     ).toHaveAttribute("value", "0");
@@ -122,10 +127,11 @@ test("[L102] three audiences keep exact private starter practice when changing g
     expect(JSON.stringify(payload)).not.toContain(first);
     expect(JSON.stringify(payload)).toContain(second);
     await page.goto("/learn");
+    await openLearningProfile(page);
     await page.getByLabel("Display name").fill("Sample learner");
     await page.getByLabel("Your starting point").selectOption(background);
     await chooseLearningGoal(page, a);
-    await page.getByRole("button", { name: "Save my direction" }).click();
+    await saveLearningProfile(page);
     await expect(
       page.getByRole("progressbar", { name: "Exercises completed" }),
     ).toHaveAttribute("value", "1");

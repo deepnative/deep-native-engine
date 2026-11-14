@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
@@ -82,10 +83,7 @@ test("[L80] members correct a private draft and submit only the confirmed revisi
         await expect(page.getByText(/^Saved revision 1\./)).toBeVisible();
         const staleTab = await member.newPage();
         await staleTab.goto("/contribute/" + id);
-        const staleCsrf = await staleTab
-          .locator('input[name="csrf"]')
-          .first()
-          .inputValue();
+        const staleCsrf = await formToken(staleTab);
         await moderatorPage.goto("/moderate/proposals");
         await expect(moderatorPage.getByText(originalTitle)).toHaveCount(0);
 

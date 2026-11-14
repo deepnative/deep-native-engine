@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { expect, test, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { catalogStore } from "../../src/catalog.ts";
@@ -162,10 +163,7 @@ test("[L257] LWORK-05 editor imports the full teaching bundle as an unpublished 
       .getByRole("button", { name: "Submit for review" })
       .click();
     await reviewer.page.goto(editorialUrl(f.origin));
-    const csrf = await reviewer.page
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const csrf = await formToken(reviewer.page);
     expect(
       (
         await reviewer.page.request.post(editorialUrl(f.origin) + "/approve", {
@@ -251,7 +249,7 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
       for (const [label, path] of [
         ["My account", "/account"],
         ["Sign out", "/account/sign-out"],
-        ["Coaching hours", "/account/coaching"],
+        ["Coaching", "/account/coaching"],
       ] as const) {
         const action = accountServices.getByRole("link", {
           name: label,
@@ -504,7 +502,7 @@ for (const [background, goal, route, sourceFact, freshFact, correction] of [
       const recordActions = member.getByRole("navigation", {
         name: "Learning and account",
       });
-      for (const label of ["My account", "Sign out", "Coaching hours"])
+      for (const label of ["My account", "Sign out", "Coaching"])
         await expect(
           recordActions.getByRole("link", { name: label, exact: true }),
         ).toBeVisible();

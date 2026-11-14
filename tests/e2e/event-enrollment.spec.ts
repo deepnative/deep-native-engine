@@ -164,7 +164,7 @@ for (const [index, [background, goal]] of (
             .at(-1),
         );
       }
-      await peer.goto(`${origin}/learn`);
+      await peer.goto(`${origin}/account`);
       await peer.getByLabel("Delete my local preview").check();
       await peer.getByRole("button", { name: "Delete this preview" }).click();
       await expect(

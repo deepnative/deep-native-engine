@@ -10,6 +10,7 @@ import {
   page,
   notice,
   welcome,
+  accountPage,
   dashboard,
   lesson,
   exerciseWriteRecoveryPage,
@@ -261,23 +262,15 @@ it("keeps blocked synthetic assignments separate from selectable choices and esc
     eligible: false,
     requirements: [],
   };
-  const html = dashboard(
-    learner,
-    undefined,
-    "token",
-    [],
-    [],
-    null,
-    null,
-    undefined,
-    [blocked],
-  );
+  const html = dashboard(learner, undefined, "token", [], [], null, null, [
+    blocked,
+  ]);
   expect(html).toContain("Prepare a future assignment");
   expect(html).toContain("Prepare Invented &lt;practice&gt;");
   expect(html).toContain("/assignments/readiness/SYN-831?version=2");
   expect(html).not.toContain("Invented <practice>");
   expect(
-    dashboard(learner, undefined, "token", [], [], null, null, undefined, [
+    dashboard(learner, undefined, "token", [], [], null, null, [
       { ...blocked, eligible: true },
     ]),
   ).not.toContain("Prepare a future assignment");
@@ -423,7 +416,7 @@ it("shows versioned synthetic event discovery and truthful local time without fi
   expect(detail).toContain("Expert coverage: unresolved");
   expect(detail).toContain("Recording: unresolved");
   expect(eventDetailPage({ status: "current", event })).toContain(
-    'href="/learn#timezone"',
+    'href="/account#timezone"',
   );
   for (const [status, message] of [
     ["past", "This event has already started"],
@@ -1687,8 +1680,11 @@ it("shows optional profile choices and retains the exercise context after a goal
     experience: "some" as const,
     exploratory: true,
   };
-  const path = dashboard(profile, undefined, "token", ["Invalid choice"]);
-  expect(path).toContain("Invalid choice");
+  // #846 PROFILE-01: the choices are edited on My account only.
+  const learn = dashboard(profile, undefined, "token", ["Invalid choice"]);
+  expect(learn).toContain("Invalid choice");
+  expect(learn).not.toContain('name="it_roles"');
+  const path = accountPage(profile, "token", "linked");
   expect(path).toContain('value="security" checked');
   expect(path).toContain('name="exploratory" value="yes" checked');
   const previous = lesson(
@@ -1719,7 +1715,9 @@ it("renders unsaved profile edits with an actionable field error while keeping t
     timezone: "Mars/Olympus",
     weekly_minutes: "60",
   });
-  const html = dashboard(saved, undefined, "token", [], [], null, null, edit);
+  const html = accountPage(saved, "token", "linked", false, false, {
+    profileState: edit,
+  });
   expect(html).toContain("<title>Error in your profile");
   expect(html).toContain("Your changes were not saved");
   expect(html).toContain('href="#timezone"');
@@ -1734,10 +1732,12 @@ it("renders unsaved profile edits with an actionable field error while keeping t
   expect(html).not.toContain('name="domain_tags" value="education" checked');
   expect(html).toContain('<option value="60" selected>');
   expect(html).toContain('<option value="" selected>Not specified</option>');
-  expect(html).toContain("Understand AI and try something useful");
-  expect(html).toContain("Weekly time: About 15 minutes · Time zone: UTC");
-  expect(html.indexOf('href="/member/export"')).toBeLessThan(
+  // The summary sits inside the profile form, above its fields.
+  expect(html.indexOf('action="/profile"')).toBeLessThan(
     html.indexOf('href="#timezone"'),
+  );
+  expect(html.indexOf('href="#timezone"')).toBeLessThan(
+    html.indexOf('id="display_name"'),
   );
 });
 it("links multiple profile errors and escapes attempted text without reflecting forged options", () => {
@@ -1750,7 +1750,9 @@ it("links multiple profile errors and escapes attempted text without reflecting 
     weekly_minutes: ["15", "60"],
     exploratory: "no",
   });
-  const html = dashboard(learner, undefined, "token", [], [], null, null, edit);
+  const html = accountPage(learner, "token", "linked", false, false, {
+    profileState: edit,
+  });
   expect(html).toContain('href="#goal"');
   expect(html).toContain('href="#domain_tags"');
   expect(html).toContain('href="#timezone"');

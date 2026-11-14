@@ -414,7 +414,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
           .filter((row) => row.operation === "consume")
           .reduce((total, row) => total + row.quantity, 0),
       ).toBe(15);
-      await page.goto("/learn");
+      await page.goto("/account");
       await page.getByLabel("Delete my local preview").check();
       await page.getByRole("button", { name: "Delete this preview" }).click();
       expect((await page.request.get("/api/member/export")).status()).toBe(403);

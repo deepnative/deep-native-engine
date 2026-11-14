@@ -14,6 +14,10 @@ import {
   PROVIDED_SAMPLE_LABEL,
 } from "../../src/prepared-sample-values.ts";
 import { COOKIE } from "../../src/session.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 const pool = testPool();
 const origin = process.env.DNE_PREPARED_BROWSER_ORIGIN ?? browserOrigin;
 // Staff credentials belong only in password fields, never retained network traces.
@@ -316,11 +320,12 @@ for (const [index, [background, goal]] of audiences.entries()) {
       // PREPARED-06: a changed learning goal does not relabel the original
       // provided source. Editing creates pending member text, not another
       // trusted fixture or a transfer of the old reviewer's access/feedback.
+      await openLearningProfile(page);
       await chooseLearningGoal(
         page,
         audiences[(index + 1) % audiences.length]![1],
       );
-      await page.getByRole("button", { name: "Save my direction" }).click();
+      await saveLearningProfile(page);
       await page.goto(origin + "/evidence");
       await expect(source).toContainText(PROVIDED_SAMPLE_LABEL);
       await expect(source).toContainText(example.digest);

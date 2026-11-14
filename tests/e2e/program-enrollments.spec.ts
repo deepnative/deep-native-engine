@@ -342,7 +342,7 @@ for (const [index, [background, goal]] of audiences.entries()) {
             activity.contentVersion === 3,
         ),
       ).toBe(false);
-      await returning.goto(f.origin + "/learn");
+      await returning.goto(f.origin + "/account");
       await returning.getByLabel("Delete my local preview").check();
       await returning
         .getByRole("button", { name: "Delete this preview", exact: true })

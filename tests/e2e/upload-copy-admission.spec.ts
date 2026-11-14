@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect } from "@playwright/test";
 import { randomBytes } from "node:crypto";
@@ -21,7 +22,7 @@ test("[L279] a member over the upload budget keeps a refused provided copy and r
   await page.getByRole("button", { name: "Start my learning path" }).click();
   await expect(page).toHaveURL(/\/learn$/);
   await page.goto("/evidence");
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   // Ten earlier uploads use this member's whole window.
   for (let i = 1; i <= 10; i++) {
     const response = await page.request.post("/evidence", {

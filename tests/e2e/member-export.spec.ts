@@ -244,7 +244,7 @@ test("[L67] deterministic member jobs export only to their owner and disappear w
       await other.request.get("/api/member/export")
     ).json();
     expect(elsewhere.records.adapterJobs).toEqual([]);
-    await page.goto("/learn");
+    await page.goto("/account");
     await page.getByLabel("Delete my local preview").check();
     await page.getByRole("button", { name: "Delete this preview" }).click();
     expect(

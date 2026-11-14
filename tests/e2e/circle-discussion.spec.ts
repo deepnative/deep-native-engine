@@ -57,7 +57,7 @@ async function sharing(page: Page, origin: string, circle: string) {
     .click();
 }
 async function erase(page: Page, origin: string) {
-  await page.goto(`${origin}/learn`);
+  await page.goto(`${origin}/account`);
   await page.getByLabel("Delete my local preview").check();
   await page.getByRole("button", { name: "Delete this preview" }).click();
   await expect(

@@ -2834,7 +2834,7 @@
       "id": "L318",
       "actor": "Member deleting their account",
       "preconditions": "Dedicated synthetic PostgreSQL database, one invented member created through the ordinary start form, port0 server; desktop/mobile Chromium",
-      "steps": "ERASE-06: the member follows See what stays from the learning path to My account, reads what stays after deletion, ticks the confirmation and deletes the account",
+      "steps": "ERASE-06: the member opens What stays after deletion on My account, reads what stays after deletion, ticks the confirmation and deletes the account",
       "expected": "The account page says what deletion removes and lists the five kinds of records that stay (issued invoices first) and that backup copies go when backups expire; deletion is confirmed and the account row is gone; no sideways scrolling",
       "issues": [40],
       "critical": false

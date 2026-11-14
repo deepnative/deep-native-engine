@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { expect, test } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
 import { createServer } from "node:net";
@@ -176,10 +177,7 @@ test("[F-ROADMAP-05-A] opting out dispatches nothing, the demo says it is simula
         );
         // This page offers no form at all, so take a token from the evidence page.
         await livePage.goto("/evidence");
-        const csrf = await livePage
-          .locator('input[name="csrf"]')
-          .first()
-          .inputValue();
+        const csrf = await formToken(livePage);
         const attempt = await livePage.request.post(
           `/evidence/local-ai/${randomUUID()}/queue`,
           {

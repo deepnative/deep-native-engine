@@ -1,8 +1,13 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, type Page } from "@playwright/test";
 import { reviewedFoundation } from "../../src/foundation-pack.ts";
 import { store } from "../../src/store.ts";
 import { reviewedContentFixture as fixture } from "../support/reviewed-content-browser.ts";
+import {
+  openLearningProfile,
+  saveLearningProfile,
+} from "../support/learning-profile.ts";
 
 // Invented staff sign-in credentials must not be retained in network traces.
 test.use({ trace: "off" });
@@ -64,10 +69,7 @@ test("[L230] FOUND-01/02 editor imports six drafts and a distinct reviewer check
         .click();
       await reviewer.page.goto(url);
       if (item.id === "FND-001") {
-        const csrf = await reviewer.page
-          .locator('input[name="csrf"]')
-          .first()
-          .inputValue();
+        const csrf = await formToken(reviewer.page);
         const denied = await reviewer.page.request.post(url + "/approve", {
           headers: { origin: f.origin },
           form: { csrf },
@@ -190,8 +192,9 @@ test("[L231] FOUND-03/04 all three backgrounds read six lessons and retain priva
         "Self-assessed complete · version 2",
       );
       await member.goto(f.origin + "/learn");
+      await openLearningProfile(member);
       await chooseLearningGoal(member, goal === "work" ? "everyday" : "work");
-      await member.getByRole("button", { name: "Save my direction" }).click();
+      await saveLearningProfile(member);
       await member.goto(f.origin + "/library");
       const history = member.locator(
         'section[aria-labelledby="reading-history-title"]',
@@ -276,10 +279,7 @@ test("[L232] FOUND-01/02/04 cached history refuses replacement, retirement prese
       }),
     ).toBeVisible();
     await editor.page.goto(f.origin + "/editor/library");
-    const csrf = await editor.page
-      .locator('input[name="csrf"]')
-      .first()
-      .inputValue();
+    const csrf = await formToken(editor.page);
     await f.pool.query(
       "UPDATE principals SET revoked_at=clock_timestamp() WHERE id=$1",
       [editor.id],

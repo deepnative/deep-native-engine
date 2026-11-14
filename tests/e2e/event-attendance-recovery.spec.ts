@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { test, expect, devices, type BrowserContext } from "@playwright/test";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -192,7 +193,7 @@ test("[L198] ATTEND-06/08 member deliberately inspects and repeats original perm
       }),
     ).toHaveCount(0);
     // Recover the same checked instruction with the fresh current CSRF after pause.
-    const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+    const csrf = await formToken(page);
     const inspected = await page.request.post(receipt + "/recover", {
       form: { csrf, key, kind: "permit", checked: instruction },
       headers: { Origin: origin },

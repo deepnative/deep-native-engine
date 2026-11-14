@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
@@ -102,10 +103,7 @@ test("[L83] three learning backgrounds follow an exact prerequisite before choos
     const learnerPage = index === 0 ? page : await context.newPage();
     try {
       await onboard(learnerPage, background, goal);
-      const csrf = await learnerPage
-        .locator('input[name="csrf"]')
-        .first()
-        .inputValue();
+      const csrf = await formToken(learnerPage);
       const choices = learnerPage.getByRole("region", {
         name: "Choose a practice assignment",
       });
@@ -198,7 +196,7 @@ test("[L83] three learning backgrounds follow an exact prerequisite before choos
   const staleChoice = await page.request.post("/assignments/select", {
     headers: { origin: browserOrigin },
     form: {
-      csrf: await page.locator('input[name="csrf"]').first().inputValue(),
+      csrf: await formToken(page),
       content_id: assignmentId,
       content_version: "1",
     },

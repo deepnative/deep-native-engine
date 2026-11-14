@@ -128,7 +128,7 @@ test("[L70] operator sees only a suppressed local usefulness snapshot after a me
     );
     expect(forged.status()).toBe(200);
     expect((await forged.json()).usefulness).toEqual(report.usefulness);
-    await page.goto("/learn");
+    await page.goto("/account");
     await page.getByLabel("Delete my local preview").check();
     await page.getByRole("button", { name: "Delete this preview" }).click();
     expect(

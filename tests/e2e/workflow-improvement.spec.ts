@@ -1,3 +1,4 @@
+import { formToken } from "../support/form-token.ts";
 import { chooseLearningGoal } from "../support/choose-learning-goal.ts";
 import { browserOrigin } from "../support/browser-origin.js";
 import { randomBytes } from "node:crypto";
@@ -42,7 +43,7 @@ test("[L74] member submits and withdraws a version-pinned private workflow impro
       name: "Private improvement for WF-001 version 3",
     }),
   ).toBeVisible();
-  const csrf = await page.locator('input[name="csrf"]').first().inputValue();
+  const csrf = await formToken(page);
   const title = `Invented workflow improvement ${testInfo.project.name}`;
   const body = "Add one plain-language check using only invented requirements.";
   const invalid = await context.request.post("/contribute", {
