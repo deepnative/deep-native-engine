@@ -33,14 +33,14 @@ it("NAME02/03/04 preserves legacy rows and work, names the same account, exports
   );
   const old = (
     await pool.query(
-      "SELECT to_jsonb(l)-'display_name' row FROM learners l WHERE id=$1",
+      "SELECT to_jsonb(l)-'display_name'-'created_on_demo_site' row FROM learners l WHERE id=$1",
       [id],
     )
   ).rows[0].row;
   await migrate(pool);
   const after = (
     await pool.query(
-      "SELECT to_jsonb(l)-'display_name' row,display_name FROM learners l WHERE id=$1",
+      "SELECT to_jsonb(l)-'display_name'-'created_on_demo_site' row,display_name FROM learners l WHERE id=$1",
       [id],
     )
   ).rows[0];
