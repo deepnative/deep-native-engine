@@ -22,7 +22,7 @@ import {
 } from "./administration-presentation.ts";
 import { coachingStatus } from "./coaching-routes.ts";
 import { hours } from "./coaching-dashboard-views.ts";
-import { monthLabel, periodLabel } from "./coaching-values.ts";
+import { dayLabel, monthLabel, periodLabel } from "./coaching-values.ts";
 import type { AccountRoleAdmin } from "./account-role-admin.ts";
 import { coachAssignmentCard } from "./account-role-admin-routes.ts";
 import type { AdministratorDiagnostics } from "./administrator-diagnostics.ts";
@@ -55,7 +55,7 @@ function awaitingReview(v: AdministratorConsole) {
 }
 
 /** ADMINHOME-01: one row per student; the name opens the student's page. */
-function studentsTable(v: AdministratorConsole) {
+function studentsTable(v: AdministratorConsole, billing: boolean) {
   const href = (page: number) => {
     const query = new URLSearchParams({ page: String(page) });
     if (v.search) query.set("q", v.search);
@@ -79,26 +79,26 @@ function studentsTable(v: AdministratorConsole) {
   const rows = v.members
     .map(
       (m) =>
-        `<tr><td data-label="Name"><a href="/operator/coaching/${escape(m.id)}">${named(m.displayName)}</a></td><td data-label="Hourly rate">${m.rateCents == null ? "Not set" : cad(m.rateCents)}</td><td data-label="This month" class="member-coaching">${month(m)}</td><td data-label="Coaches"><a href="/operator?ownerId=${escape(m.id)}" aria-label="Coaches for ${named(m.displayName)}">Coaches</a></td><td data-label="Joined">${m.joined.toISOString().slice(0, 10)}</td></tr>`,
+        `<tr><td data-label="Name"><a href="${billing ? "/operator/coaching/" : "/operator?ownerId="}${escape(m.id)}">${named(m.displayName)}</a></td><td data-label="Hourly rate">${m.rateCents == null ? "Not set" : cad(m.rateCents)}</td><td data-label="This month" class="member-coaching">${month(m)}</td><td data-label="Joined">${dayLabel(m.joined.toISOString().slice(0, 10))}</td></tr>`,
     )
     .join("");
   const list = v.members.length
-    ? `<p role="status">Showing ${count(first)}–${count(last)} of ${count(v.total)}</p><div class="table-scroll" tabindex="0" role="region" aria-label="Students"><table class="member-table stack-table"><thead><tr><th scope="col">Name</th><th scope="col">Hourly rate</th><th scope="col">This month<span>${monthLabel(v.months.current)}</span></th><th scope="col">Coaches</th><th scope="col">Joined</th></tr></thead><tbody>${rows}</tbody></table></div>${pages > 1 ? `<nav class="member-pager" aria-label="Student pages">${v.page > 1 ? `<a class="button secondary" href="${href(v.page - 1)}">Previous</a>` : ""}<span>Page ${count(v.page)} of ${count(pages)}</span>${v.page < pages ? `<a class="button secondary" href="${href(v.page + 1)}">Next</a>` : ""}</nav>` : ""}`
+    ? `<p role="status">Showing ${count(first)}–${count(last)} of ${count(v.total)}</p><div class="table-scroll" tabindex="0" role="region" aria-label="Students"><table class="member-table stack-table"><thead><tr><th scope="col">Name</th><th scope="col">Hourly rate</th><th scope="col">This month<span>${monthLabel(v.months.current)}</span></th><th scope="col">Joined</th></tr></thead><tbody>${rows}</tbody></table></div>${pages > 1 ? `<nav class="member-pager" aria-label="Student pages">${v.page > 1 ? `<a class="button secondary" href="${href(v.page - 1)}">Previous</a>` : ""}<span>Page ${count(v.page)} of ${count(pages)}</span>${v.page < pages ? `<a class="button secondary" href="${href(v.page + 1)}">Next</a>` : ""}</nav>` : ""}`
     : `<p role="status">${v.search ? "No students match this search." : "No students yet."}</p>`;
   return `<section class="admin-section" aria-labelledby="all-students"><h2 id="all-students">All students</h2><form class="portal-search" method="get" action="/operator"><label for="console-search">Search by name</label><div><input id="console-search" type="text" name="q" maxlength="${CONSOLE_SEARCH_MAX}" value="${escape(v.search)}"><button>Search</button></div></form>${v.search ? '<p><a href="/operator">Clear search</a></p>' : ""}${list}</section>`;
 }
 
 /**
  * ADMINSTUDENT-01: old "selected learner" links land on a small page for one
- * student: the way to their hours, their coaches, and any course billing.
+ * student: their coaches and any course records. #850 SEAM-01: a site with
+ * billing on shows both on the student's one page instead, so this page is
+ * only rendered where billing is switched off.
  */
 function studentPage(
   chosen: NonNullable<AdministratorConsole["selected"]>,
   coachCard: string,
-  billing: boolean,
   menu: string,
 ) {
-  const id = escape(chosen.member.id);
   const group = (title: string, items: string[]) =>
     items.length
       ? `<div><h3>${title}</h3><ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul></div>`
@@ -119,7 +119,7 @@ function studentPage(
           `<a href="/operator/invoices/${escape(i.id)}">${escape(shortInvoiceNumber(i.number))}</a> · ${cad(Number(i.totalCents))} · ${i.delivery === "sent" ? "Sent" : "Not sent"}`,
       ),
     );
-  return `<div class="portal-page student-page">${menu}<h1>${named(chosen.member.displayName)}</h1>${portalActions([[`/operator/coaching/${id}`, "Hours, rate and invoices"]], true)}${coachCard}<section class="portal-card" aria-labelledby="student-courses"><h2 id="student-courses">Courses</h2>${records ? `<div class="portal-columns">${records}</div>` : "<p>No course enrollment, bundle or course invoice yet.</p>"}${billing ? `<p><a href="/operator/invoices?ownerId=${id}">Prepare course billing for this student</a></p>` : "<p>Billing is switched off on this site.</p>"}</section></div>`;
+  return `<div class="portal-page student-page">${menu}<h1>${named(chosen.member.displayName)}</h1><p class="page-kind">Student</p>${coachCard}<section class="portal-card" aria-labelledby="student-courses"><h2 id="student-courses">Courses</h2>${records ? `<div class="portal-columns">${records}</div>` : "<p>No course enrollment, bundle or course invoice yet.</p>"}<p>Billing is switched off on this site.</p></section><p class="back-link"><a href="/operator">All students</a></p></div>`;
 }
 
 function memberToken(req: Request) {
@@ -213,7 +213,11 @@ export function mountAdministratorEntry(
             : 503,
       );
     const v = result.value,
-      chosen = v.selected;
+      chosen = v.selected,
+      billing = Boolean(options.simpleInvoices);
+    // #850 SEAM-01: the student's one page has their coaches and courses.
+    if (chosen && billing)
+      return res.redirect(303, `/operator/coaching/${chosen.member.id}`);
     // COACHLINK-01 / #689: the student's coaches, chosen from coach-role holders.
     const coachCard =
       chosen && options.roleAdmin
@@ -226,12 +230,12 @@ export function mountAdministratorEntry(
             csrf(cookie.value, options.secret),
           )
         : "";
-    const menu = adminMenu(chosen ? undefined : "students", available);
+    const menu = adminMenu("students", available);
     if (chosen)
       return res.send(
         page(
           chosen.member.displayName ?? "Student",
-          studentPage(chosen, coachCard, Boolean(options.simpleInvoices), menu),
+          studentPage(chosen, coachCard, menu),
         ),
       );
     // WAITWORK-08: a failed read says so, never shows zero, and keeps the page.
@@ -260,7 +264,7 @@ export function mountAdministratorEntry(
     return res.send(
       page(
         "Students",
-        `<div class="portal-page administrator-console">${menu}<h1>Students</h1>${awaitingReview(v)}${studentsTable(v)}${waiting}${courses}</div>`,
+        `<div class="portal-page administrator-console">${menu}<h1>Students</h1>${awaitingReview(v)}${studentsTable(v, billing)}${waiting}${courses}</div>`,
       ),
     );
   });

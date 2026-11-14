@@ -4,8 +4,17 @@ import type { Express, Request, Response } from "express";
 import { csrf, validCsrf } from "./session.ts";
 import { page, escape } from "./views.ts";
 import { hostingText } from "./hosting-presentation.ts";
-import { administrationLink } from "./administration-presentation.ts";
-import { portalActions } from "./backend-portal-presentation.ts";
+import {
+  adminMenuFor,
+  administrationLink,
+  shortInvoiceNumber,
+} from "./administration-presentation.ts";
+import { coachAssignmentCard } from "./account-role-admin-routes.ts";
+import type { AccountRoleAdmin } from "./account-role-admin.ts";
+import type {
+  AdministratorConsole,
+  AdministratorEntry,
+} from "./administrator-entry.ts";
 import {
   coachingDashboardSection,
   DASHBOARD_SORTS,
@@ -84,16 +93,67 @@ function failure(
     );
 }
 /** WALK44-01: an administrator opened a student reference no account has now. */
-function studentGonePage() {
+function studentGonePage(menu: string) {
   return page(
     "Student account not found",
-    `<section class="invoice-workspace portal-workspace"><h1>Student account not found</h1><p role="alert">No student account has this reference now. If the student deleted their account, their coaching terms, hours and allowances were removed with it.</p><p>Invoices already issued to a deleted account are kept for the tax record and stay listed under Courses and invoices, without a link to the account.</p>${portalActions(
-      [
-        [adminPath, "Choose another student"],
-        ["/operator/invoices", "Courses and invoices"],
-      ],
-    )}</section>`,
+    `<section class="invoice-workspace portal-workspace">${menu}<h1>Student account not found</h1><p role="alert">No student account has this reference now. If the student deleted their account, their coaching terms, hours and allowances were removed with it.</p><p>Invoices already issued to a deleted account are kept for the tax record and stay listed under Invoices, without a link to the account.</p>${ALL_STUDENTS}</section>`,
   );
+}
+// BACK-01 (#850): the one way back from a student's page; the menu has the rest.
+const ALL_STUDENTS =
+  '<p class="back-link"><a href="/operator">All students</a></p>';
+/**
+ * SEAM-01 (#850): the student's coaches, folded on their page. The form and
+ * its POST are the ones the old Coaches page used.
+ */
+function coachesDetails(
+  result: Awaited<ReturnType<AccountRoleAdmin["learnerCoaches"]>>,
+  ownerId: string,
+  anti: string,
+) {
+  const names =
+    result.kind !== "ready"
+      ? "unavailable"
+      : result.value.coaches
+          .filter((c) => result.value.assigned.includes(c.emailHash))
+          .map((c) => escape(c.label))
+          .join(", ") || "none";
+  return `<details class="coaching-details" id="student-coaches"><summary>Coaches: ${names}</summary>${coachAssignmentCard(result, ownerId, anti)}</details>`;
+}
+/** SEAM-01 (#850): course enrollments, bundles and course invoices, folded. */
+function coursesDetails(
+  chosen: NonNullable<AdministratorConsole["selected"]>,
+  ownerId: string,
+) {
+  const count = (n: number, one: string) =>
+    n ? [`${n} ${one}${n === 1 ? "" : "s"}`] : [];
+  const group = (title: string, items: string[]) =>
+    items.length
+      ? `<h3>${title}</h3><ul>${items.map((i) => `<li>${i}</li>`).join("")}</ul>`
+      : "";
+  const records =
+    group(
+      "Enrollments",
+      chosen.enrollments.map((e) => `${escape(e.title)} · ${escape(e.id)}`),
+    ) +
+    group(
+      "Course bundles",
+      chosen.plans.map((p) => `Course bundle · ${escape(p.state)}`),
+    ) +
+    group(
+      "Invoices",
+      chosen.invoices.map(
+        (i) =>
+          `<a href="/operator/invoices/${escape(i.id)}">${escape(shortInvoiceNumber(i.number))}</a> · ${money(Number(i.totalCents))} · ${i.delivery === "sent" ? "Sent" : "Not sent"}`,
+      ),
+    );
+  const summary =
+    [
+      ...count(chosen.enrollments.length, "enrollment"),
+      ...count(chosen.plans.length, "bundle"),
+      ...count(chosen.invoices.length, "invoice"),
+    ].join(", ") || "none";
+  return `<details class="coaching-details" id="student-courses"><summary>Courses: ${summary}</summary>${records || "<p>No course enrollment, bundle or course invoice yet.</p>"}<p><a href="/operator/invoices?ownerId=${escape(ownerId)}">Prepare course billing for this student</a></p></details>`;
 }
 /** HOURTABLE-01/02: saved periods with hours, amount, readable status and invoice. */
 // #844 TABLE-01: the explicit roles keep this a table for assistive technology
@@ -334,6 +394,11 @@ export function mountCoachingRoutes(
     coachingTerms?: CoachingTermsStore;
     agreedChanges?: CoachingAgreedChangesStore;
   },
+  /** #850: the student's coaches and course records on their page. */
+  student: {
+    roleAdmin?: Pick<AccountRoleAdmin, "learnerCoaches">;
+    administratorEntry?: Pick<AdministratorEntry, "console">;
+  } = {},
 ) {
   const token = (res: Response) => res.locals.token as string;
   function valid(
@@ -413,13 +478,8 @@ export function mountCoachingRoutes(
     };
     res.send(
       page(
-        "Coaching administration",
-        `<section class="invoice-workspace portal-workspace"><h1>Coaching administration</h1><p>Choose a student to set an hourly rate or billing period, or to review submitted hours.</p>${portalActions(
-          [
-            ["/operator/invoices", "Courses and invoices"],
-            ["/operator", "Administration console"],
-          ],
-        )}${coachingDashboardSection(students, adminPath, sort)}<section class="portal-card" aria-labelledby="awaiting-review"><h2 id="awaiting-review">Awaiting review</h2><ul class="portal-list">${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${escape(m.displayName ?? "Name needed")} · ${periodLabel({ key: m.month, start: m.periodStart, end: m.periodEnd })}</a></li>`).join("") || "<li>No submitted hours await review.</li>"}</ul></section>${renewals}</section>`,
+        "Coaching hours by month",
+        `<section class="invoice-workspace portal-workspace">${adminMenuFor(res, "more")}<h1>Coaching hours by month</h1><p>Choose a student to set an hourly rate or billing period, or to review submitted hours.</p>${coachingDashboardSection(students, adminPath, sort)}<section class="portal-card" aria-labelledby="awaiting-review"><h2 id="awaiting-review">Awaiting review</h2><ul class="portal-list">${result.value.coachingPending.map((m) => `<li><a href="${adminPath}/${m.ownerId}?month=${m.month}">${escape(m.displayName ?? "Name needed")} · ${periodLabel({ key: m.month, start: m.periodStart, end: m.periodEnd })}</a></li>`).join("") || "<li>No submitted hours await review.</li>"}</ul></section>${renewals}</section>`,
       ),
     );
   });
@@ -438,8 +498,8 @@ export function mountCoachingRoutes(
           .status(admin ? 503 : 200)
           .send(
             page(
-              "Coaching hours",
-              "<h1>Coaching hours</h1><p>Coaching invoicing is not configured. No rate or payable amount is assumed. Your learning and saved work remain available.</p><h2>How to enter coaching hours</h2><p>Hours entry is unavailable " +
+              "Coaching",
+              "<h1>Coaching</h1><p>Coaching invoicing is not configured. No rate or payable amount is assumed. Your learning and saved work remain available.</p><h2>How to enter coaching hours</h2><p>Hours entry is unavailable " +
                 hostingText("on this preview", "here") +
                 " while coaching invoicing is disabled. Ask your administrator to arrange coaching and enable the agreed workflow; there is no hours form to complete here yet.</p><ol><li>When coaching is configured, choose the billing period and save hours and minutes as a draft.</li><li>Your administrator records the agreed hourly rate before you submit.</li><li>Review and submit your hours. Submission does not take payment; an administrator reviews it before an invoice is issued.</li></ol><p>" +
                 administrationLink('<a href="/admin">Administration</a> · ') +
@@ -452,7 +512,9 @@ export function mountCoachingRoutes(
         admin ? (req.params as Record<string, string>).ownerId! : undefined,
       );
       if (admin && r.kind === "not-found")
-        return res.status(404).send(studentGonePage());
+        return res
+          .status(404)
+          .send(studentGonePage(adminMenuFor(res, "students")));
       if (r.kind !== "ready") return failure(res, r.kind, admin);
       const v = r.value,
         e = v.entry,
@@ -541,7 +603,7 @@ export function mountCoachingRoutes(
           request = rate
             ? `<h3>Request the invoice</h3><p>The subtotal is your hours × your hourly rate, before ${hst ? `${escape(hst.label)}. ${escape(hst.label)} at ${taxRate(hst)} is added when the invoice is issued` : "tax"}.</p>${e && amount === 0 ? "<p>A zero-total submission creates no invoice.</p>" : ""}${e && amount === null ? '<p role="alert">The saved duration at this rate exceeds the invoice amount limit. Correct the draft or ask the administrator to review the rate.</p>' : ""}<label class="check"><input type="checkbox" name="confirm" value="submit" required><span>I confirm these hours, recipient and the rate ${money(rate.cents)} per hour for ${label}. ${v.sample ? "This is a sample, not payable." : "I submit for configured offline invoicing; issued financial records may be retained after account deletion."}</span></label>${hidden("rateId", rate.id)}${hidden("sample", String(v.sample))}<div class="form-actions"><button class="secondary" name="action" value="save" formnovalidate>Save draft</button><button name="action" value="request" formaction="${base}/request">Save and request invoice</button></div>`
             : `<h3>Request the invoice</h3><p class="rate-missing">Your hourly rate for ${label} isn't set yet, so the invoice can't be requested. Ask your coach or administrator to set it. You can save your hours now and request the invoice here once it's set.</p><div class="form-actions"><button name="action" value="save">Save draft</button><button type="button" disabled>Save and request invoice</button></div>`;
-        body += `<h2>Your hours</h2><form id="hours-form" method="post" action="${base}/save">${fields}<div class="duration-fields"><label>Hours<input name="hours" type="number" min="0" max="${defined ? period.days * 24 : 744}" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label></div>${hidden("name", to.name)}${hidden("email", to.email)}${hidden("company", to.company)}<p class="invoice-to">Invoice to: <strong>${escape(to.name)}</strong>${to.company ? ` · ${escape(to.company)}` : ""}${to.email ? ` · ${escape(to.email)}` : ""}. <a href="/account/billing">Change</a>${to.email ? "" : '<br><span class="small">The invoice will be under Courses and invoices.</span>'}</p>${request}</form>`;
+        body += `<h2>Your hours</h2><form id="hours-form" method="post" action="${base}/save">${fields}<div class="duration-fields"><label>Hours<input name="hours" type="number" min="0" max="${defined ? period.days * 24 : 744}" step="1" value="${Math.floor((e?.minutes ?? 0) / 60)}" required></label><label>Minutes<input name="minutes" type="number" min="0" max="59" step="1" value="${(e?.minutes ?? 0) % 60}" required></label></div>${hidden("name", to.name)}${hidden("email", to.email)}${hidden("company", to.company)}<p class="invoice-to">Invoice to: <strong>${escape(to.name)}</strong>${to.company ? ` · ${escape(to.company)}` : ""}${to.email ? ` · ${escape(to.email)}` : ""}. <a href="/account/billing">Change</a>${to.email ? "" : '<br><span class="small">The invoice will be under Invoices.</span>'}</p>${request}</form>`;
       }
       if (e?.invoiceId)
         body += `${admin ? `<p><a href="/operator/invoices/${e.invoiceId}">View issued invoice</a></p>` : ""}<p>To correct an issued ${unit}, the administrator must first void its unpaid invoice. Paid or partially paid invoices cannot be corrected here; contact the administrator for financial review.</p>`;
@@ -611,6 +673,19 @@ export function mountCoachingRoutes(
         }
         if (has)
           side += `<p class="coaching-more"><a href="${base}/package">Coaching package and agreed changes</a></p>`;
+        // SEAM-01 (#850): coaches and course records live on this page now.
+        if (student.roleAdmin)
+          side += coachesDetails(
+            await student.roleAdmin.learnerCoaches(token(res), v.ownerId),
+            v.ownerId,
+            anti,
+          );
+        const courses = await student.administratorEntry?.console?.(
+          token(res),
+          v.ownerId,
+        );
+        if (courses?.kind === "ready" && courses.value.selected)
+          side += coursesDetails(courses.value.selected, v.ownerId);
       } else {
         foot = `<p class="small coaching-contact">${NO_CANCELLATION}</p>`;
         if (options.coachingTerms) {
@@ -628,15 +703,14 @@ export function mountCoachingRoutes(
             side += `<details class="coaching-details"><summary>Agreed changes, early release and refunds</summary>${memberAgreedSection(a.value)}</details>`;
         }
       }
-      body = `<section class="invoice-workspace coaching-page${admin ? " portal-workspace" : ""}"><h1>${admin ? "Review coaching hours" : "Coaching hours"}</h1>${done ? `<p class="notice" role="status">${done}</p>` : ""}${admin || v.sample ? `<p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p>` : ""}<p>${admin ? `Student: <strong>${escape(v.displayName ?? "Name needed")}</strong>` : `Enter your hours for the ${periodic ? "billing period" : "month"}, then request the invoice; your administrator reviews it before it is issued and nothing is charged on this site.`}</p><div class="coaching-layout"><div class="coaching-main">${body}</div>${side ? `<aside class="coaching-side">${side}</aside>` : ""}</div>${foot}${
+      body = `<section class="invoice-workspace coaching-page${admin ? " portal-workspace" : ""}">${admin ? adminMenuFor(res, "students") : ""}<h1>${admin ? escape(v.displayName ?? "Name needed") : "Coaching"}</h1>${admin ? '<p class="page-kind">Student</p>' : ""}${done ? `<p class="notice" role="status">${done}</p>` : ""}${admin || v.sample ? `<p>${v.sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Configured offline invoicing. Submission does not take payment; an administrator reviews it before issuing an invoice."}</p>` : ""}${admin ? "" : `<p>Enter your hours for the ${periodic ? "billing period" : "month"}, then request the invoice; your administrator reviews it before it is issued and nothing is charged on this site.</p>`}<div class="coaching-layout"><div class="coaching-main">${body}</div>${side ? `<aside class="coaching-side">${side}</aside>` : ""}</div>${foot}${
         admin
-          ? portalActions([
-              [adminPath, "Choose another student"],
-              ["/operator/invoices", "Courses and invoices"],
-            ])
-          : '<p class="account-links"><a class="button secondary" href="/account">My account</a> <a class="button secondary" href="/account/purchases">Courses and invoices</a></p>'
+          ? ALL_STUDENTS
+          : '<p class="back-link"><a href="/account/purchases">Invoices</a></p>'
       }</section>`;
-      res.send(page(admin ? "Review coaching hours" : "Coaching hours", body));
+      res.send(
+        page(admin ? (v.displayName ?? "Name needed") : "Coaching", body),
+      );
     });
   }
   // #840 SIMPLE-02: the optional coaching package, its invoice and agreed
@@ -646,7 +720,10 @@ export function mountCoachingRoutes(
     if (!store) return failure(res, "unavailable", true);
     const ownerId = (req.params as Record<string, string>).ownerId!;
     const r = await store.coachingOverview(token(res), undefined, ownerId);
-    if (r.kind === "not-found") return res.status(404).send(studentGonePage());
+    if (r.kind === "not-found")
+      return res
+        .status(404)
+        .send(studentGonePage(adminMenuFor(res, "students")));
     if (r.kind !== "ready") return failure(res, r.kind, true);
     const refused = (kind: string) =>
       failure(res, (kind === "invalid" ? "denied" : kind) as never, true);
@@ -682,7 +759,7 @@ export function mountCoachingRoutes(
     res.send(
       page(
         "Coaching package",
-        `<section class="invoice-workspace portal-workspace coaching-page"><h1>Coaching package</h1><p>Student: <strong>${escape(r.value.displayName ?? "Name needed")}</strong></p><p>Optional. Most students only need an hourly rate, which you set on their <a href="${base}">hours page</a>. Use this page for a prepaid coaching package with allowances, its invoice, or a change you agreed with the student.</p><div class="coaching-layout"><div class="coaching-main">${main}</div><aside class="coaching-side">${side}</aside></div><p class="account-links"><a class="button secondary" href="${base}">Back to hours and rate</a></p></section>`,
+        `<section class="invoice-workspace portal-workspace coaching-page">${adminMenuFor(res, "students")}<h1>Coaching package</h1><p class="page-kind">Student: <a href="${base}">${escape(r.value.displayName ?? "Name needed")}</a></p><p>Optional. Most students only need an hourly rate, which you set on their page. Use this page for a prepaid coaching package with allowances, its invoice, or a change you agreed with the student.</p><div class="coaching-layout"><div class="coaching-main">${main}</div><aside class="coaching-side">${side}</aside></div></section>`,
       ),
     );
   });

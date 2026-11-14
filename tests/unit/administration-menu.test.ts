@@ -2,6 +2,10 @@ import { expect, it } from "vitest";
 import {
   adminMenu,
   adminMenuFor,
+  adminMenuItem,
+  adminMenuOnEveryPage,
+  withAdminMenu,
+  withAdministration,
 } from "../../src/administration-presentation.ts";
 
 const all =
@@ -41,4 +45,83 @@ it("ADMINNAV-01 a page reads which areas are on from the app, and shows every it
   expect(
     adminMenuFor({ app: { locals: { adminMenu: { roles: false } } } }, "more"),
   ).toBe(adminMenu("more", { roles: false }));
+});
+
+it("MENUALL-01 names the menu item that owns each administrator address", () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  for (const [path, item] of [
+    ["/operator", "students"],
+    [`/operator/coaching/${id}`, "students"],
+    [`/operator/coaching/${id}/package`, "students"],
+    ["/operator/coaching", "more"],
+    ["/operator/invoices", "invoices"],
+    [`/operator/invoices/${id}`, "invoices"],
+    ["/operator/invoice-reconciliation", "more"],
+    ["/operator/roles", "roles"],
+    ["/operator/changes", "history"],
+    ["/operator/staff-capacity", "more"],
+    ["/moderate/proposals", "more"],
+  ] as const)
+    expect(adminMenuItem(path)).toBe(item);
+});
+
+it("MENUALL-01 adds the menu to a page built without it, once, as the first thing in the main content", () => {
+  const page = '<body><main id="main"><h1>Report</h1></main></body>';
+  const menu = adminMenu("more");
+  const added = withAdminMenu(page, menu);
+  expect(added).toBe(
+    `<body><main id="main">${menu}<h1>Report</h1></main></body>`,
+  );
+  expect(withAdminMenu(added, menu)).toBe(added);
+  expect(withAdminMenu("{}", menu)).toBe("{}");
+});
+
+it("MENUALL-01 every report and tool page an admin account opens carries the menu; refusals and other responses pass through", () => {
+  const page = '<main id="main"><h1>Staff capacity</h1></main>';
+  const run = (
+    path: string,
+    body: unknown,
+    { status = 200, admin = true, locals = {} } = {},
+  ) => {
+    const sent: unknown[] = [];
+    const res = {
+      statusCode: status,
+      app: { locals },
+      send(this: unknown, value?: unknown) {
+        expect(this).toBe(res);
+        sent.push(value);
+        return res;
+      },
+    };
+    let continued = false;
+    withAdministration(admin, () =>
+      adminMenuOnEveryPage({ path }, res, () => {
+        continued = true;
+        expect(res.send(body)).toBe(res);
+      }),
+    );
+    expect(continued).toBe(true);
+    return sent[0];
+  };
+  expect(run("/operator/staff-capacity", page)).toBe(
+    `<main id="main">${adminMenu("more")}<h1>Staff capacity</h1></main>`,
+  );
+  expect(run("/moderate/proposals", page)).toContain('class="admin-menu"');
+  expect(run("/operator", page)).toContain(
+    '<a href="/operator" aria-current="page">Students</a>',
+  );
+  // HIDE-01: the injected menu follows the areas this site has on.
+  expect(
+    run("/operator/delivery-cost", page, {
+      locals: { adminMenu: { invoices: false } },
+    }),
+  ).not.toContain("Invoices");
+  // Not an administrator address, not an admin account, or not a shown page.
+  expect(run("/account", page)).toBe(page);
+  expect(run("/operators", page)).toBe(page);
+  expect(run("/operator/staff-capacity", page, { admin: false })).toBe(page);
+  expect(run("/operator/staff-capacity", page, { status: 403 })).toBe(page);
+  const data = { rows: 1 };
+  expect(run("/operator/metrics", data)).toBe(data);
+  expect(run("/operator/metrics", undefined)).toBeUndefined();
 });

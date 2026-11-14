@@ -253,7 +253,7 @@ it("TERMSINV318-03 without a saved billing recipient or terms, nothing is issued
     (await get(`/operator/coaching/${m.id}/package`, admin)).text,
   );
   expect(page).toContain(
-    "This student hasn't saved a billing recipient yet. Ask them to save one on their Billing recipient page before you issue an invoice for these terms.",
+    "This student hasn't saved a billing recipient yet. Ask them to save one under Billing details on My account before you issue an invoice for these terms.",
   );
   expect(await invoices.issueCoachingTerms(admin, issueInput(m.id))).toEqual({
     kind: "conflict",

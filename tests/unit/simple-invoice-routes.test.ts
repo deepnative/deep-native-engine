@@ -557,7 +557,7 @@ it("NOEMAIL-03 an invoice with no email address offers no send form and says whe
     const r = await f.get(`${admin}/${id}`);
     expect(r.status).toBe(200);
     expect(r.text).toContain(
-      "<p>This invoice has no email address, so it is not sent by email. The student can open it under Courses and invoices.</p>",
+      "<p>This invoice has no email address, so it is not sent by email. The student can open it under Invoices.</p>",
     );
     expect(r.text).not.toContain(`action="${admin}/${id}/email"`);
     expect(r.text).not.toContain("invoice email</button>");
@@ -944,7 +944,7 @@ it("AUDIT-01/02/03 shows readable delivery states, month names and button naviga
   const document = (await f.get(`/account/purchases/invoices/${id}`)).text;
   expect(document).toContain("Month: October 2026");
   expect(document).toContain(
-    '<a class="button secondary" href="/account/purchases">Courses and invoices</a>',
+    '<p class="back-link"><a href="/account/purchases">All invoices</a></p>',
   );
   // #846 FOLD-01: the header and My account carry the other destinations.
   const purchases = mainHtml((await f.get("/account/purchases")).text);
@@ -959,14 +959,15 @@ it("AUDIT-01/02/03 shows readable delivery states, month names and button naviga
 it("GAPS-01 an administrator's invoice links stay in administration; a member's keep theirs", async () => {
   const f = fixture();
   const staff = (await f.get(`/operator/invoices/${id}`)).text;
-  expect(staff).toContain('href="/operator/invoices">Courses and invoices</a>');
-  expect(staff).toContain('href="/operator">Administration console</a>');
+  // #850 MENUALL-01/BACK-01: the menu, then one way back to the list.
+  expect(staff).toContain(
+    '<main id="main"><nav class="admin-menu" aria-label="Administration"><a href="/operator">Students</a><a href="/operator/invoices" aria-current="page">Invoices</a>',
+  );
+  expect(staff).toContain('<a href="/operator/invoices">All invoices</a>');
   expect(staff).not.toContain('href="/account/purchases"');
   const member = (await f.get(`${base}/invoices/${id}`)).text;
-  expect(member).toContain(
-    'href="/account/purchases">Courses and invoices</a>',
-  );
-  expect(member).toContain('href="/account">My account</a>');
+  expect(member).toContain('<a href="/account/purchases">All invoices</a>');
+  expect(member).not.toContain("admin-menu");
 });
 it("GAPS-02 confirms a prepared proposal and keeps the learner selected", async () => {
   const f = fixture();
@@ -983,7 +984,7 @@ it("GAPS-02 confirms a prepared proposal and keeps the learner selected", async 
   const page = await f.get(done.headers.location!);
   expect(page.status).toBe(200);
   expect(page.text).toContain(
-    '<p role="status">Course billing proposal prepared. The student can now review and accept it in Courses and invoices.</p>',
+    '<p role="status">Proposal prepared. The student can now review and accept it under Invoices.</p>',
   );
   expect((await f.get(`${admin}?ownerId=${id}`)).text).not.toContain(
     "Course billing proposal prepared",

@@ -43,7 +43,7 @@ export async function prepareBundle(
   await admin
     .getByLabel("Billing", { exact: true })
     .selectOption(terms.cadence);
-  await admin.getByLabel("Starts on (UTC date)").fill(await utcToday(f));
+  await admin.getByLabel("Starts on", { exact: true }).fill(await utcToday(f));
   if (terms.tax === undefined)
     await expect(
       admin.getByText("HST at 13% is added to each invoice"),

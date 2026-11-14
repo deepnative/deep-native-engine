@@ -5,7 +5,7 @@ import { escape, hidden, page } from "./views.ts";
 export const RECORD_ACCESS_PATH = "/account/record-access";
 export const OPERATOR_RECORDS_PATH = "/operator/member-records";
 const TITLE = "Let operators download my records";
-const OPERATOR_TITLE = "Download a member's records";
+const OPERATOR_TITLE = "Download a student's records";
 
 export const RECORD_SCOPE_NAMES: Record<RecordScope, string> = {
   learning: "learning records",

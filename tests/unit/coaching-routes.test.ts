@@ -5,7 +5,7 @@ import { mountCoachingRoutes } from "../../src/coaching-routes.ts";
 import { csrf } from "../../src/session.ts";
 import type { SimpleInvoiceStore } from "../../src/simple-invoice-store.ts";
 import { withLoopback } from "../support/loopback-server.ts";
-import { expectPortalActions, mainHtml } from "../support/portal-layout.ts";
+import { mainHtml, portalActionRows } from "../support/portal-layout.ts";
 const id = "11111111-1111-4111-8111-111111111111",
   token = "a".repeat(64),
   origin = "http://127.0.0.1:3000",
@@ -111,7 +111,7 @@ const dashboard = {
   ],
 };
 const ready = (v: unknown) => ({ kind: "ready", value: v });
-function fixture(disabled = false) {
+function fixture(disabled = false, student: Record<string, unknown> = {}) {
   const service = {
     adminOverview: vi
       .fn()
@@ -150,6 +150,7 @@ function fixture(disabled = false) {
     app,
     disabled ? undefined : (service as unknown as SimpleInvoiceStore),
     { origin, secret, billingProfiles: profiles },
+    student,
   );
   const get = (path: string) => withLoopback(app, (s) => request(s).get(path));
   const post = (
@@ -299,13 +300,13 @@ it("HOUR07 #844 PLAIN-01 admin review names the student, with no account referen
   );
   const named = (await f.get(`/operator/coaching/${id}`)).text;
   expect(named).toContain(
-    "<p>Student: <strong>Invented &lt;Coaching&gt; member</strong></p>",
+    '<h1>Invented &lt;Coaching&gt; member</h1><p class="page-kind">Student</p>',
   );
   f.service.coachingOverview.mockResolvedValueOnce(
     ready({ ...value, displayName: null }),
   );
   expect((await f.get(`/operator/coaching/${id}`)).text).toContain(
-    "Student: <strong>Name needed</strong>",
+    '<h1>Name needed</h1><p class="page-kind">Student</p>',
   );
 });
 const noMembers = () => ready({ members: [], coachingPending: [] });
@@ -706,33 +707,27 @@ it("BILLPROFILE03 suggests the saved recipient only on a new member coaching mon
     'value="Reusable &lt;recipient&gt;"',
   );
 });
-it("ADMIN-LAYOUT-02 coaching administration groups its lists in cards and navigation as buttons", async () => {
+it("ADMIN-LAYOUT-02 coaching administration groups its lists in cards; #850 BACK-01 the menu replaces the button rows", async () => {
   const f = fixture();
   const overview = (await f.get("/operator/coaching")).text;
-  expectPortalActions(overview, [
-    ["/operator/invoices", "Courses and invoices"],
-    ["/operator", "Administration console"],
-  ]);
+  expect(portalActionRows(overview)).toEqual([]);
   const main = mainHtml(overview);
   expect(main).toContain(
-    '<section class="invoice-workspace portal-workspace">',
+    '<section class="invoice-workspace portal-workspace"><nav class="admin-menu"',
   );
   expect(main).toContain(
     '<section class="portal-card" aria-labelledby="awaiting-review"><h2 id="awaiting-review">Awaiting review</h2>',
   );
   const review = (await f.get(`/operator/coaching/${id}`)).text;
-  expectPortalActions(review, [
-    ["/operator/coaching", "Choose another student"],
-    ["/operator/invoices", "Courses and invoices"],
-  ]);
+  expect(portalActionRows(review)).toEqual([]);
   expect(mainHtml(review)).toContain(
-    '<section class="invoice-workspace coaching-page portal-workspace">',
+    '<section class="invoice-workspace coaching-page portal-workspace"><nav class="admin-menu"',
   );
   const member = mainHtml((await f.get("/account/coaching")).text);
   expect(member).toContain('<section class="invoice-workspace coaching-page">');
-  // AUDIT-03 (#643): student navigation is a button row too.
+  // #850 BACK-01: the header has My account; one text link reaches Invoices.
   expect(member).toContain(
-    '<p class="account-links"><a class="button secondary" href="/account">My account</a> <a class="button secondary" href="/account/purchases">Courses and invoices</a></p>',
+    '<p class="back-link"><a href="/account/purchases">Invoices</a></p>',
   );
   expect(member).not.toContain("</a> · <a");
 });
@@ -1055,8 +1050,9 @@ it("WALK44-01 an administrator opening a student reference no account has is tol
   expect(gone.text).toContain("<h1>Student account not found</h1>");
   expect(gone.text).toContain("No student account has this reference now.");
   expect(gone.text).toContain("If the student deleted their account");
-  expect(gone.text).toContain('href="/operator/coaching"');
-  expect(gone.text).toContain('href="/operator/invoices"');
+  expect(mainHtml(gone.text)).toContain(
+    '<p class="back-link"><a href="/operator">All students</a></p>',
+  );
   expect(gone.text).not.toContain("Coaching request not confirmed");
   expect(gone.text).not.toContain("Set member rate");
   // A member's own page never takes that branch.
@@ -1077,7 +1073,7 @@ it("DRAFTEMAIL-01/03 lets a member save and request hours with no invoice email,
   expect(text).not.toContain("Invoice email");
   expect(text).toContain('<input type="hidden" name="email" value="">');
   expect(text).toContain(
-    '<br><span class="small">The invoice will be under Courses and invoices.</span></p>',
+    '<br><span class="small">The invoice will be under Invoices.</span></p>',
   );
   f.service.coachingOverview.mockResolvedValue(
     ready({ ...value, entry: { ...entry, email: "" } }),
@@ -1169,7 +1165,7 @@ it("NOEMAIL-01 prefers the draft's email, then the saved recipient's, then a nam
   text = (await f.get("/account/coaching")).text;
   expect(hiddenRecipient(text)).toEqual(["Invented &lt;member&gt;", "", ""]);
   expect(invoiceTo(text)).toBe(
-    '<p class="invoice-to">Invoice to: <strong>Invented &lt;member&gt;</strong>. <a href="/account/billing">Change</a><br><span class="small">The invoice will be under Courses and invoices.</span></p>',
+    '<p class="invoice-to">Invoice to: <strong>Invented &lt;member&gt;</strong>. <a href="/account/billing">Change</a><br><span class="small">The invoice will be under Invoices.</span></p>',
   );
   // A draft with no name and no email takes the saved name.
   f.service.coachingOverview.mockResolvedValue(
@@ -1194,9 +1190,7 @@ it("NOEMAIL-01 falls back to the account name, then Student", async () => {
   );
   text = (await f.get("/account/coaching")).text;
   expect(hiddenRecipient(text)).toEqual(["Student", "", ""]);
-  expect(invoiceTo(text)).toContain(
-    "The invoice will be under Courses and invoices.",
-  );
+  expect(invoiceTo(text)).toContain("The invoice will be under Invoices.");
 });
 it("NOEMAIL-02 a month submitted without an email reads its recipient with no email and no gap", async () => {
   const f = fixture();
@@ -2441,7 +2435,7 @@ it("SIMPLE-02 moves the package, its invoice and agreed changes off the student 
   expect(pkg).toContain("Invoice these coaching terms");
   expect(pkg).toContain("Record agreed change");
   expect(pkg).toContain(
-    `<a class="button secondary" href="/operator/coaching/${id}">Back to hours and rate</a>`,
+    `<p class="page-kind">Student: <a href="/operator/coaching/${id}">`,
   );
   // Saves come back to the package page.
   const saved = await f.post(`/operator/coaching/${id}/terms`, {
@@ -2607,16 +2601,16 @@ it("#844 NAMES-01 coaching pages say student, and the dashboard keeps one table 
   expect(html).toContain(
     `<h2 id="awaiting-review">Awaiting review</h2><ul class="portal-list"><li><a href="/operator/coaching/${id}?month=${month}">Ada Invented · October 2026</a></li></ul>`,
   );
-  expectPortalActions(html, [["/operator/invoices", "Courses and invoices"]]);
+  expect(html).toContain('<a href="/operator/invoices">Invoices</a>');
   f.service.coachingOverview.mockResolvedValueOnce(
     ready({ ...value, entry: { ...entry, name: "Ada Invented" } }),
   );
   const student = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
-  expect(student).toContain("<p>Student: <strong>Name needed</strong></p>");
+  expect(student).toContain(
+    '<h1>Name needed</h1><p class="page-kind">Student</p>',
+  );
   expect(visible(student)).not.toMatch(/member|learner/i);
-  expectPortalActions(student, [
-    ["/operator/coaching", "Choose another student"],
-  ]);
+  expect(student).toContain('<a href="/operator">All students</a>');
   f.service.adminOverview.mockResolvedValue(
     ready({ members: [], coachingPending: [] }),
   );
@@ -2826,4 +2820,186 @@ it("#844 TABLE-01 saved periods and the dashboard table carry a caption and a la
     "Balance",
   ])
     expect(board).toContain(`<td role="cell" data-label="${label}">`);
+});
+
+// #850: the three UI-review changes read as one system.
+const MENU = (current: string) =>
+  new RegExp(
+    `<nav class="admin-menu" aria-label="Administration">.*<a href="[^"]+" aria-current="page">${current}</a>`,
+  );
+it("MENUALL-01 the coaching dashboard, a student's page and the package page carry the administrator menu", async () => {
+  const f = fixture();
+  const dashboardPage = (await f.get("/operator/coaching")).text;
+  expect(dashboardPage).toMatch(MENU("More"));
+  expect((await f.get(`/operator/coaching/${id}`)).text).toMatch(
+    MENU("Students"),
+  );
+  expect((await f.get(`/operator/coaching/${id}/package`)).text).toMatch(
+    MENU("Students"),
+  );
+  f.service.coachingOverview.mockResolvedValueOnce({ kind: "not-found" });
+  expect((await f.get(`/operator/coaching/${id}`)).text).toMatch(
+    MENU("Students"),
+  );
+  // The student's own page is not an administrator page.
+  expect((await f.get("/account/coaching")).text).not.toContain("admin-menu");
+});
+it("NAMES-02 names each page by its destination: Coaching for the student, the student's name for the administrator", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, displayName: "Mei <Tanaka>" }),
+  );
+  const own = (await f.get("/account/coaching")).text;
+  expect(own).toContain("<title>Coaching · Deep Native Engine</title>");
+  expect(own).toContain("<h1>Coaching</h1>");
+  const admin = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(admin).toContain("<title>Mei &lt;Tanaka&gt; · Deep Native Engine");
+  expect(admin).toContain(
+    '<h1>Mei &lt;Tanaka&gt;</h1><p class="page-kind">Student</p>',
+  );
+  const packagePage = (await f.get(`/operator/coaching/${id}/package`)).text;
+  expect(packagePage).toContain(
+    '<h1>Coaching package</h1><p class="page-kind">Student: <a href="/operator/coaching/' +
+      id +
+      '">Mei &lt;Tanaka&gt;</a></p>',
+  );
+  f.service.coachingOverview.mockResolvedValue(ready(value));
+  expect((await f.get(`/operator/coaching/${id}`)).text).toContain(
+    "<h1>Name needed</h1>",
+  );
+  const dashboardPage = (await f.get("/operator/coaching")).text;
+  expect(dashboardPage).toContain("<h1>Coaching hours by month</h1>");
+  for (const text of [own, admin, packagePage, dashboardPage])
+    for (const old of [
+      "Administration console",
+      "Courses and invoices",
+      "Coaching administration",
+      "Review coaching hours",
+      "<h1>Coaching hours</h1>",
+    ])
+      expect(text).not.toContain(old);
+});
+it("BACK-01 an administrator's student page keeps one All students link and the student's page one Invoices link", async () => {
+  const f = fixture();
+  const admin = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  expect(admin).not.toContain("portal-actions");
+  expect(admin).not.toContain("Choose another student");
+  expect(admin.match(/<a href="\/operator">All students<\/a>/g)).toHaveLength(
+    1,
+  );
+  expect(admin).not.toContain('class="button secondary"');
+  const packagePage = mainHtml(
+    (await f.get(`/operator/coaching/${id}/package`)).text,
+  );
+  expect(packagePage).not.toContain("Back to hours and rate");
+  expect(packagePage).not.toContain('class="button');
+  const dashboardPage = mainHtml((await f.get("/operator/coaching")).text);
+  expect(dashboardPage).not.toContain("portal-actions");
+  const own = mainHtml((await f.get("/account/coaching")).text);
+  expect(own).not.toContain("account-links");
+  expect(own).not.toContain('class="button secondary" href="/account"');
+  expect(
+    own.match(/<a href="\/account\/purchases">Invoices<\/a>/g),
+  ).toHaveLength(1);
+  const gone = fixture();
+  gone.service.coachingOverview.mockResolvedValueOnce({ kind: "not-found" });
+  const missing = mainHtml((await gone.get(`/operator/coaching/${id}`)).text);
+  expect(missing).not.toContain("portal-actions");
+  expect(missing).toContain('<a href="/operator">All students</a>');
+  expect(missing).toContain("stay listed under Invoices");
+});
+it("SEAM-01 the student's coaches and course records sit folded on the student's page", async () => {
+  const learnerCoaches = vi.fn().mockResolvedValue(
+    ready({
+      assigned: ["h1", "h3"],
+      coaches: [
+        { emailHash: "h1", label: "Ada <Coach>" },
+        { emailHash: "h2", label: "Ben Coach" },
+        { emailHash: "h3", label: "sh…@example.test (not signed up yet)" },
+      ],
+    }),
+  );
+  const consoleRead = vi.fn().mockResolvedValue(
+    ready({
+      selected: {
+        member: { id },
+        enrollments: [{ id: "course-1", title: "Course <one>" }],
+        plans: [{ id, state: "offered" }],
+        invoices: [
+          {
+            id,
+            number: `DN-${id}`,
+            totalCents: "12345",
+            delivery: "sent",
+          },
+          { id, number: "DN-7", totalCents: "100", delivery: "not_sent" },
+        ],
+      },
+    }),
+  );
+  const f = fixture(false, {
+    roleAdmin: { learnerCoaches },
+    administratorEntry: { console: consoleRead },
+  });
+  const text = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(learnerCoaches).toHaveBeenCalledWith(token, id);
+  expect(consoleRead).toHaveBeenCalledWith(token, id);
+  expect(text).toContain(
+    '<details class="coaching-details" id="student-coaches"><summary>Coaches: Ada &lt;Coach&gt;, sh…@example.test (not signed up yet)</summary>',
+  );
+  expect(text).toContain(
+    '<form class="coach-choices" method="post" action="/operator/coach-assignments">',
+  );
+  expect(text).toContain(`name="learnerId" value="${id}"`);
+  expect(text).toContain(
+    '<details class="coaching-details" id="student-courses"><summary>Courses: 1 enrollment, 1 bundle, 2 invoices</summary>',
+  );
+  expect(text).toContain("Course &lt;one&gt; · course-1");
+  expect(text).toContain("Course bundle · offered");
+  expect(text).toContain(
+    `<a href="/operator/invoices/${id}">DN-11111111</a> · CAD 123.45 · Sent`,
+  );
+  expect(text).toContain("DN-7</a> · CAD 1.00 · Not sent");
+  expect(text).toContain(
+    `<a href="/operator/invoices?ownerId=${id}">Prepare course billing for this student</a>`,
+  );
+  // Nobody assigned, nothing recorded: the summaries say so.
+  learnerCoaches.mockResolvedValueOnce(
+    ready({ assigned: [], coaches: [{ emailHash: "h1", label: "Ada" }] }),
+  );
+  consoleRead.mockResolvedValueOnce(
+    ready({
+      selected: { member: { id }, enrollments: [], plans: [], invoices: [] },
+    }),
+  );
+  const empty = (await f.get(`/operator/coaching/${id}`)).text;
+  expect(empty).toContain("<summary>Coaches: none</summary>");
+  expect(empty).toContain("<summary>Courses: none</summary>");
+  expect(empty).toContain(
+    "No course enrollment, bundle or course invoice yet.",
+  );
+  // A failed read folds to a plain line; the hours page still renders.
+  learnerCoaches.mockResolvedValueOnce({ kind: "unavailable" });
+  consoleRead.mockResolvedValueOnce({ kind: "unavailable" });
+  const failed = await f.get(`/operator/coaching/${id}`);
+  expect(failed.status).toBe(200);
+  expect(failed.text).toContain("<summary>Coaches: unavailable</summary>");
+  expect(failed.text).toContain("Coach assignment is unavailable right now.");
+  expect(failed.text).not.toContain('id="student-courses"');
+  consoleRead.mockResolvedValueOnce(ready({}));
+  expect((await f.get(`/operator/coaching/${id}`)).text).not.toContain(
+    'id="student-courses"',
+  );
+  // A site without these areas shows neither; the student never sees them.
+  const plain = (await fixture().get(`/operator/coaching/${id}`)).text;
+  expect(plain).not.toContain("student-coaches");
+  expect(plain).not.toContain("student-courses");
+  expect((await f.get("/account/coaching")).text).not.toContain(
+    "student-coaches",
+  );
+  // An entry store without a console lists no courses.
+  const noConsole = fixture(false, { administratorEntry: {} });
+  expect((await noConsole.get(`/operator/coaching/${id}`)).text).not.toContain(
+    "student-courses",
+  );
 });

@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { adminMenuFor } from "./administration-presentation.ts";
 import type { ApplicationMode } from "./adapters.ts";
 import type { InvoiceReconciliationStore } from "./invoice-reconciliation.ts";
 import {
@@ -22,7 +23,9 @@ export function registerInvoiceReconciliationRoutes(
         .send(invoiceReconciliationUnavailablePage("query"));
     const result = await store.snapshot(res.locals.token as string);
     if (result.kind === "ready")
-      return res.send(invoiceReconciliationPage(result.value));
+      return res.send(
+        invoiceReconciliationPage(result.value, adminMenuFor(res, "more")),
+      );
     if (result.kind === "denied")
       return res
         .status(403)

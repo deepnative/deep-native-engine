@@ -192,7 +192,7 @@ it("ROLE-LABEL-03 #844 NAMES-01 a coach with no assigned students is told so and
   });
   const r = await (await f.http()).get("/coach").set("Cookie", member);
   expect(r.text).toContain(
-    "No students are assigned to you yet. Ask an administrator to assign students to you in the Administration console.",
+    "No students are assigned to you yet. Ask an administrator to add you as a coach on each student&#39;s page.",
   );
   expect(r.text).not.toContain("No coaching hours saved for this month.");
 });

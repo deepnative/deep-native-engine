@@ -40,7 +40,7 @@ async function offer(f: Fixture, member: Page, cadence = "one_time") {
       "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS day",
     )
   ).rows[0]!.day;
-  await admin.page.getByLabel("Starts on (UTC date)").fill(date);
+  await admin.page.getByLabel("Starts on", { exact: true }).fill(date);
   await admin.page
     .getByLabel("Configured tax amount per invoice (CAD)")
     .fill("0.00");
@@ -133,7 +133,7 @@ test("[L266] registered student accepts two courses on one printable individual 
       fullPage: true,
     });
     await member
-      .getByRole("link", { name: "Courses and invoices", exact: true })
+      .getByRole("link", { name: "All invoices", exact: true })
       .click();
     await expect(member.getByText(/CAD 30.00 — Paid/)).toBeVisible();
     expect(
@@ -162,7 +162,7 @@ test("[L267] monthly course agreement requires explicit acceptance and cancellat
       member.getByText(/Recurring billing · Period starts/),
     ).toBeVisible();
     await member
-      .getByRole("link", { name: "Courses and invoices", exact: true })
+      .getByRole("link", { name: "All invoices", exact: true })
       .click();
     await member
       .getByRole("checkbox", {

@@ -583,7 +583,7 @@ export function adminTermsInvoiceSection(
   if (v.invoiceId)
     return `${head}<p>Terms version ${v.terms.version} is invoiced. <a href="/operator/invoices/${escape(v.invoiceId)}">View invoice</a>. Record the offline payment on the invoice when it arrives. To issue it again, void that invoice first.</p></section>`;
   if (!v.recipient)
-    return `${head}<p role="status">This student hasn't saved a billing recipient yet. Ask them to save one on their Billing recipient page before you issue an invoice for these terms.</p></section>`;
+    return `${head}<p role="status">This student hasn't saved a billing recipient yet. Ask them to save one under Billing details on My account before you issue an invoice for these terms.</p></section>`;
   const to = `${escape(v.recipient.name)}${v.recipient.company ? ` · ${escape(v.recipient.company)}` : ""} · ${escape(v.recipient.email)}`;
   const amount = tax
     ? `${money(v.terms.priceCents)} plus ${escape(tax.label)} (${taxRate(tax)}) ${money(salesTaxCents(v.terms.priceCents, tax))}, total ${money(v.terms.priceCents + salesTaxCents(v.terms.priceCents, tax))}`

@@ -71,7 +71,7 @@ export function mountInvoiceSelection(
       .send(
         page(
           "Return to your course proposal",
-          '<section class="reading"><h1>Return to your course proposal</h1><p>Sign in to the account for which this proposal was prepared. Only that account can review or accept it. Registering a different account never transfers a proposal, creates a charge or grants paid access.</p><p><a href="/email/sign-in">Email sign-in</a> · <a href="/">Register or return to learning</a></p><p>This browser remembers the selection for 15 minutes. If it expires or you use another browser, reopen the proposal link after signing in, or inspect Courses and invoices in My account.</p></section>',
+          '<section class="reading"><h1>Return to your course proposal</h1><p>Sign in to the account for which this proposal was prepared. Only that account can review or accept it. Registering a different account never transfers a proposal, creates a charge or grants paid access.</p><p><a href="/email/sign-in">Email sign-in</a> · <a href="/">Register or return to learning</a></p><p>This browser remembers the selection for 15 minutes. If it expires or you use another browser, reopen the proposal link after signing in, or open Invoices from My account.</p></section>',
         ),
       );
   });

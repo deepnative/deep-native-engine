@@ -217,9 +217,7 @@ test("[L331] TERMSINV318-01/03/05 an administrator invoices a student's coaching
     await expect(
       s.locator("dt").filter({ hasText: "Balance" }).locator("+ dd"),
     ).toHaveText("CAD 0.00");
-    await s
-      .getByRole("link", { name: "Courses and invoices", exact: true })
-      .click();
+    await s.getByRole("link", { name: "All invoices", exact: true }).click();
     await expect(s.getByText(/CAD 1356\.00 — Paid/)).toBeVisible();
 
     // 7. Back on the coaching page the version shows as invoiced, with no form.
