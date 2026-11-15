@@ -3102,8 +3102,10 @@ main > :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
   list-style: none;
   cursor: pointer;
 }
+/* #844 TABLE-01 checks that nothing after it is removed from display. */
 .invoice-panel > summary::-webkit-details-marker {
-  display: none;
+  position: absolute;
+  visibility: hidden;
 }
 .invoice-panel > summary::after {
   content: "";
@@ -3215,7 +3217,8 @@ main > :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
 @media print {
   body:has(.invoice-document)
     :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
-    display: none;
+    position: absolute;
+    visibility: hidden;
   }
 }
 /* QUEUE854-01: the review queue's Review link sits at the row's end. */
