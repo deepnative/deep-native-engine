@@ -61,6 +61,41 @@ export interface AdminInvoiceRow {
   terms: boolean;
   firstLine: string | null;
   lineCount: number;
+  /** #854: the issued date and whether it is a sample, from the snapshot. */
+  issuedOn: string;
+  sample: boolean;
+}
+/** #854: the administrator's invoice list views, in the order they appear. */
+export type InvoiceView = "all" | "unpaid" | "not-sent" | "paid" | "void";
+export const INVOICE_VIEWS: readonly InvoiceView[] = [
+  "all",
+  "unpaid",
+  "not-sent",
+  "paid",
+  "void",
+];
+// Fixed SQL conditions per view; request input only chooses among them.
+const UNPAID_SQL = "i.voided_at IS NULL AND i.total_cents-i.paid_cents>0",
+  NOT_SENT_SQL =
+    "i.voided_at IS NULL AND i.delivery IN ('not_sent','sending','unconfirmed')",
+  PAID_SQL = "i.voided_at IS NULL AND i.total_cents-i.paid_cents<=0",
+  VOID_SQL = "i.voided_at IS NOT NULL";
+const VIEW_SQL: Record<InvoiceView, string> = {
+  all: "true",
+  unpaid: UNPAID_SQL,
+  "not-sent": NOT_SENT_SQL,
+  paid: PAID_SQL,
+  void: VOID_SQL,
+};
+/** #854: totals across every matching invoice, not only the listed 100. */
+export interface InvoiceSummary {
+  outstandingCents: number;
+  all: number;
+  unpaid: number;
+  notSent: number;
+  paid: number;
+  void: number;
+  hoursToReview: number;
 }
 export interface InvoicePlan {
   id: string;
@@ -1477,8 +1512,15 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         };
       });
     },
-    async adminOverview(token: string, ownerId?: string) {
-      if (ownerId !== undefined && !invoiceUuid(ownerId))
+    async adminOverview(
+      token: string,
+      ownerId?: string,
+      view: InvoiceView = "all",
+    ) {
+      if (
+        (ownerId !== undefined && !invoiceUuid(ownerId)) ||
+        !INVOICE_VIEWS.includes(view)
+      )
         return fail("invalid");
       return run(token, true, async (tx) => {
         if (ownerId) await owner(tx, ownerId);
@@ -1502,12 +1544,28 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
                i.refunded_cents::text AS "refundedCents",i.voided_at IS NOT NULL AS voided,
                i.document->'coaching' AS coaching,i.document->'coachingTerms' IS NOT NULL AS terms,
                i.document->'lines'->0->>'description' AS "firstLine",
-               jsonb_array_length(i.document->'lines') AS "lineCount"
+               jsonb_array_length(i.document->'lines') AS "lineCount",
+               i.document->>'issuedOn' AS "issuedOn",
+               COALESCE((i.document->>'sample')::boolean,false) AS sample
              FROM simple_invoices i LEFT JOIN learners l ON l.id=i.owner_id
-             WHERE ($1::uuid IS NULL OR i.owner_id=$1) ORDER BY i.created_at DESC LIMIT 100`,
+             WHERE ($1::uuid IS NULL OR i.owner_id=$1) AND ${VIEW_SQL[view]} ORDER BY i.created_at DESC LIMIT 100`,
             [ownerId ?? null],
           )
         ).rows;
+        const summary = (
+          await tx.query<InvoiceSummary>(
+            `SELECT
+               COALESCE(sum(i.total_cents-i.paid_cents) FILTER (WHERE ${UNPAID_SQL}),0)::float8 AS "outstandingCents",
+               count(*)::integer AS "all",
+               count(*) FILTER (WHERE ${UNPAID_SQL})::integer AS unpaid,
+               count(*) FILTER (WHERE ${NOT_SENT_SQL})::integer AS "notSent",
+               count(*) FILTER (WHERE ${PAID_SQL})::integer AS paid,
+               count(*) FILTER (WHERE ${VOID_SQL})::integer AS void,
+               (SELECT count(*)::integer FROM coaching_months WHERE state='submitted' AND ($1::uuid IS NULL OR owner_id=$1)) AS "hoursToReview"
+             FROM simple_invoices i WHERE ($1::uuid IS NULL OR i.owner_id=$1)`,
+            [ownerId ?? null],
+          )
+        ).rows[0]!;
         const coachingPending = (
           await tx.query<{
             ownerId: string;
@@ -1522,7 +1580,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         ).rows;
         return {
           kind: "ready",
-          value: { members, courses, invoices, coachingPending },
+          value: { members, courses, invoices, coachingPending, summary },
         };
       });
     },

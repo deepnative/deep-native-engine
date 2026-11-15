@@ -64,6 +64,18 @@ const listed = {
   terms: false,
   firstLine: "Claim checking",
   lineCount: 1,
+  issuedOn: "2026-10-31",
+  sample: true,
+};
+// #854: the totals the Invoices page cards and views read.
+const summary = {
+  outstandingCents: 1200,
+  all: 1,
+  unpaid: 1,
+  notSent: 1,
+  paid: 0,
+  void: 0,
+  hoursToReview: 0,
 };
 const invoice: StoredInvoice = {
   id: invoiceId,
@@ -233,6 +245,7 @@ function fixture(
       return result([{ id: ownerId }]);
     if (sql.includes("FROM simple_invoices i LEFT JOIN learners l"))
       return result([listed]);
+    if (sql.includes("FROM simple_invoices i WHERE")) return result([summary]);
     if (
       sql.includes(
         "FROM coaching_months JOIN learners l ON l.id=owner_id WHERE state",
@@ -754,6 +767,38 @@ it("INVOICELIST-01 reads each issued invoice with who it is for, its money and i
         v?.[0] === ownerId,
     ),
   ).toBe(true);
+});
+it("SUMMARY854-02 filters the list by a fixed view condition and refuses any other view", async () => {
+  const f = fixture();
+  const r = await f.service.adminOverview(admin);
+  if (r.kind !== "ready") throw Error("Expected overview");
+  expect(r.value.summary).toEqual(summary);
+  const listSql = () =>
+    f.query.mock.calls
+      .filter(([text]) =>
+        text.includes("FROM simple_invoices i LEFT JOIN learners l"),
+      )
+      .at(-1)![0];
+  expect(listSql()).toContain("AND true ORDER BY");
+  for (const [view, condition] of [
+    ["unpaid", "i.voided_at IS NULL AND i.total_cents-i.paid_cents>0"],
+    [
+      "not-sent",
+      "i.voided_at IS NULL AND i.delivery IN ('not_sent','sending','unconfirmed')",
+    ],
+    ["paid", "i.voided_at IS NULL AND i.total_cents-i.paid_cents<=0"],
+    ["void", "i.voided_at IS NOT NULL"],
+  ] as const) {
+    expect((await f.service.adminOverview(admin, undefined, view)).kind).toBe(
+      "ready",
+    );
+    expect(listSql()).toContain(`AND ${condition} ORDER BY`);
+  }
+  const calls = f.query.mock.calls.length;
+  expect(
+    (await f.service.adminOverview(admin, undefined, "bogus" as "all")).kind,
+  ).toBe("invalid");
+  expect(f.query.mock.calls.length).toBe(calls);
 });
 it("ADMINCON02 restricts the proposal account picker to the exact valid learner", async () => {
   const f = fixture();
