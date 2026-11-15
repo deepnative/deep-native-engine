@@ -341,7 +341,15 @@ test("[F-BUILD-05-D] a deliberately missing payment event is flagged on its invo
       await expect(admin).toHaveURL(
         new RegExp(`/operator/invoices/${invoiceId}$`),
       );
-      await expect(admin.getByText("Test event not applied")).toBeVisible();
+      // #854: the payment record and the timeline both name the held event.
+      await expect(
+        admin
+          .getByRole("table", { name: "Recorded receipts and refunds" })
+          .getByText("Test event not applied"),
+      ).toBeVisible();
+      await expect(admin.locator(".invoice-timeline")).toContainText(
+        "Test event not applied",
+      );
 
       // Once the missing payment arrives, the held refund applies once and the
       // invoice is no longer waiting.
