@@ -43,15 +43,23 @@ const WORK_QUEUES = [
 const cad = (cents: number) => `CAD ${(cents / 100).toFixed(2)}`;
 const named = (name?: string | null) => escape(name ?? "Name needed");
 
-/** ADMINHOME-01: submitted hours first, each opening that student's month. */
+/**
+ * ADMINHOME-01: submitted hours first, each opening that student's month.
+ * #854 QUEUE854-01: a work list in a table. The queue holds no amount or
+ * submitted date, so it shows Student, Month and Hours only.
+ */
 function awaitingReview(v: AdministratorConsole) {
-  const items = v.awaiting
-    .map(
-      (m) =>
-        `<li><a href="/operator/coaching/${escape(m.id)}?month=${escape(m.month)}">${named(m.displayName)}</a><span>${periodLabel({ key: m.month, start: m.periodStart, end: m.periodEnd })} · ${hours(m.minutes)}</span></li>`,
-    )
+  const rows = v.awaiting
+    .map((m) => {
+      const period = periodLabel({
+        key: m.month,
+        start: m.periodStart,
+        end: m.periodEnd,
+      });
+      return `<tr><td data-label="Student">${named(m.displayName)}</td><td data-label="Month">${period}</td><td data-label="Hours">${hours(m.minutes)}</td><td data-label="Action"><a href="/operator/coaching/${escape(m.id)}?month=${escape(m.month)}" aria-label="Review ${named(m.displayName)} ${period}">Review</a></td></tr>`;
+    })
     .join("");
-  return `<section class="admin-section" aria-labelledby="awaiting-review"><h2 id="awaiting-review">Awaiting review</h2>${items ? `<ul class="admin-list">${items}</ul>` : '<p role="status">No hours are waiting for review.</p>'}</section>`;
+  return `<section class="admin-section" aria-labelledby="awaiting-review"><h2 id="awaiting-review">Awaiting review</h2>${rows ? `<div class="table-scroll" tabindex="0" role="region" aria-label="Hours awaiting review"><table class="member-table stack-table review-queue"><thead><tr><th scope="col">Student</th><th scope="col">Month</th><th scope="col">Hours</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p role="status">No hours are waiting for review.</p>'}</section>`;
 }
 
 /** ADMINHOME-01: one row per student; the name opens the student's page. */

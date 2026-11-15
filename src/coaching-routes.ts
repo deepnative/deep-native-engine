@@ -578,11 +578,26 @@ export function mountCoachingRoutes(
             : `<h2>${label}</h2>${studentNextStep({ e, rate: v.rate, amount, label, unit, periodEnd: defined && period.end >= v.date ? period.end : null })}`
           : `<h2>No billing period has started</h2><p role="status">${admin ? "This student’s" : "Your"} first billing period starts on ${dayLabel(v.billing.schedules[0]!.startsOn)}. Hours can be reported from that day.</p>`
       }`;
-      if (admin) body += hoursChangesSection(v.overrides, admin);
       // #844 PLAIN-01: what was saved and what was submitted, one line each,
       // for the administrator only. The student reads theirs in Next step.
       if (admin && e)
         body += `${snapshot && e.state !== "draft" ? "" : `<p>Saved hours: ${hours(e.minutes)}</p>`}${snapshot ? `<p>Submitted: ${hours(snapshot.minutes)} at ${money(snapshot.rate.cents)} per hour = ${money(snapshot.subtotalCents)}</p>` : ""}<p>Invoice to: ${escape(e.name)}${e.company ? ` · ${escape(e.company)}` : ""}${e.email ? ` · ${escape(e.email)}` : ""}</p>`;
+      // #854 QUEUE854-02: the issue panel comes first, after the month, its
+      // status and the submitted figure.
+      if (admin && e?.state === "submitted") {
+        // PERIOD832-03: a defined period is invoiced only after its last day.
+        if (defined && period!.end >= v.date)
+          body += `<p role="status">This period ends on ${dayLabel(period!.end)}. Its invoice can be issued from ${dayLabel(addDays(period!.end, 1))}; until then you can change the hours or return them for correction.</p>`;
+        else if (
+          snapshot &&
+          snapshot.subtotalCents > 0 &&
+          snapshot.sample === v.sample
+        )
+          body += `<h2>Issue the reviewed invoice</h2><form method="post" action="${base}/issue">${form("issue", e.revision)}${hst ? `<p>${escape(hst.label)} at ${taxRate(hst)} (${money(salesTaxCents(snapshot.subtotalCents, hst))}) is added to the subtotal.</p>` : `<label>${v.sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${v.sample ? 'value="0.00"' : ""} required></label>`}<label class="check"><input type="checkbox" name="confirm" value="issue" required><span>I reviewed these submitted hours and the ${hst ? `computed ${escape(hst.label)}` : "separately supplied tax"}.</span></label><button>Issue coaching invoice</button></form>`;
+        else
+          body += `<p role="status">${snapshot?.sample !== v.sample ? "The submitted billing mode differs from current configuration. Return it and ask the student to confirm the current mode." : "This zero-total submission is retained. No invoice can be issued."}</p>`;
+      }
+      if (admin) body += hoursChangesSection(v.overrides, admin);
       if (!admin && period && (!e || e.state === "draft")) {
         // #838 ONEPAGE-01..03: hours, recipient and the invoice request are
         // one form. Save draft comes first, so Enter never requests.
@@ -615,18 +630,6 @@ export function mountCoachingRoutes(
       if (e?.previousInvoiceId)
         body += `<p><a href="${admin ? "/operator/invoices/" : "/account/purchases/invoices/"}${e.previousInvoiceId}">View preserved original invoice</a></p>`;
       if (admin && e && e.state !== "draft") {
-        // PERIOD832-03: a defined period is invoiced only after its last day.
-        if (e.state === "submitted" && defined && period!.end >= v.date)
-          body += `<p role="status">This period ends on ${dayLabel(period!.end)}. Its invoice can be issued from ${dayLabel(addDays(period!.end, 1))}; until then you can change the hours or return them for correction.</p>`;
-        else if (
-          e.state === "submitted" &&
-          snapshot &&
-          snapshot.subtotalCents > 0 &&
-          snapshot.sample === v.sample
-        )
-          body += `<h2>Issue the reviewed invoice</h2><form method="post" action="${base}/issue">${form("issue", e.revision)}${hst ? `<p>${escape(hst.label)} at ${taxRate(hst)} (${money(salesTaxCents(snapshot.subtotalCents, hst))}) is added to the subtotal.</p>` : `<label>${v.sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${v.sample ? 'value="0.00"' : ""} required></label>`}<label class="check"><input type="checkbox" name="confirm" value="issue" required><span>I reviewed these submitted hours and the ${hst ? `computed ${escape(hst.label)}` : "separately supplied tax"}.</span></label><button>Issue coaching invoice</button></form>`;
-        else if (e.state === "submitted")
-          body += `<p role="status">${snapshot?.sample !== v.sample ? "The submitted billing mode differs from current configuration. Return it and ask the student to confirm the current mode." : "This zero-total submission is retained. No invoice can be issued."}</p>`;
         body += `<details class="coaching-details"><summary>Return for correction</summary><p>An issued ${unit} can only be returned after its invoice is void and unpaid, with no delivery in progress or unconfirmed. Other financial corrections require administrator review outside this action.</p><form method="post" action="${base}/return">${form("return", e.revision)}<label>Correction reason<input name="reason" maxlength="500" required></label><button class="secondary">Return ${unit} for correction</button></form></details>`;
       }
       // #832 OVR832-01..03/06: change hours the student saved or submitted.

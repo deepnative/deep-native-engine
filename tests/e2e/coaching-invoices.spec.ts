@@ -21,6 +21,7 @@ import { administratorEntry } from "../../src/administrator-entry.ts";
 import { memberEmailAccess } from "../../src/member-email-access.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
+import { openInvoicePanel } from "../support/invoice-panels.ts";
 // Verified synthetic staff credentials stay out of traces; screenshots and resource reports contain only invented display data.
 test.use({ trace: "off" });
 async function fixture(
@@ -544,9 +545,12 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
       })
       .check();
     await o.getByRole("button", { name: "Simulate invoice email" }).click();
-    await expect(
-      o.getByText("Email status: Simulated; no email sent"),
-    ).toBeVisible();
+    // #854: the delivery word beside the badge; What's next moves on.
+    await expect(o.locator(".invoice-delivery")).toHaveText("Simulated");
+    await expect(o.locator(".whats-next")).toContainText(
+      "Record a payment when it arrives.",
+    );
+    await expect(o.locator("section#payment")).toBeVisible();
     await friendly(o, "owner-invoice");
 
     // 7. The student opens the invoice and sees what is due and how to pay.
@@ -569,6 +573,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await friendly(s, "student-invoice-due");
 
     // 8. The owner records the offline payment; the student sees it paid.
+    await openInvoicePanel(o, "payment");
     await o.getByLabel("Amount received (CAD)").fill("213.75");
     await o
       .getByLabel("Received on", { exact: true })
@@ -646,6 +651,7 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
     await expect(
       m.page.getByRole("heading", { name: "Saved periods" }),
     ).toHaveCount(0);
+    await openInvoicePanel(admin, "void");
     await admin
       .getByLabel("Reason", { exact: true })
       .fill("Wrong original duration");
@@ -670,6 +676,7 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
       ),
     ).toBeVisible();
     expect(second).not.toBe(first);
+    await openInvoicePanel(admin, "payment");
     await admin.getByLabel("Amount received (CAD)").fill("1.00");
     await admin
       .getByLabel("Received on")

@@ -1080,11 +1080,11 @@ it("NOEMAIL-01/02/03 a coaching month with no invoice email is requested, issued
     (await get(`/account/purchases/invoices/${issued.invoiceId}`, m.token))
       .status,
   ).toBe(200);
-  // NOEMAIL-03: the administrator gets a note, not a send form.
+  // NOEMAIL-03, #854: What's next says so; there is no send form.
   const control = (await get(`/operator/invoices/${issued.invoiceId}`, admin))
     .text;
   expect(control).toContain(
-    "This invoice has no email address, so it is not sent by email. The student can open it under Invoices.",
+    "No email on file; the student sees it under Invoices.",
   );
   expect(control).not.toContain(
     `action="/operator/invoices/${issued.invoiceId}/email"`,

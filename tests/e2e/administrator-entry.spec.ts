@@ -261,7 +261,7 @@ test("[L269] both verified owner identities explicitly enter finite billing admi
       await expect(
         page.getByRole("heading", { name: "Invoices", level: 1 }),
       ).toBeVisible();
-      await page.getByText("Prepare course billing", { exact: true }).click();
+      await page.getByText("More actions", { exact: true }).click();
       await page.getByLabel("Student", { exact: true }).selectOption(f.id);
       await page
         .getByRole("checkbox", { name: /Invented owner-entry course/ })
@@ -468,7 +468,9 @@ test("[L277] ADMINSTUDENT-01/ADMINCON01–04 opens an exact student, composes ex
     ).toBeVisible();
     await page.getByLabel("Search by name").fill(f.id);
     await page.getByRole("button", { name: "Search", exact: true }).click();
-    const found = page.locator(".member-table tbody tr");
+    const found = page
+      .getByRole("region", { name: "Students", exact: true })
+      .locator(".member-table tbody tr");
     await expect(found).toHaveCount(1);
     // ADMINSTUDENT-01: the name opens the one student page.
     await expect(found.getByRole("link").first()).toHaveAttribute(
@@ -777,21 +779,30 @@ test("[L287] ADMINHOME-01/ADMINTABLE-01..05 an administrator reads hours awaitin
     await f.verify();
     await page.goto(f.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
-    const table = page.locator(".member-table");
+    const table = page
+      .getByRole("region", { name: "Students", exact: true })
+      .locator(".member-table");
     const rows = table.locator("tbody tr");
     const pager = page.getByRole("navigation", { name: "Student pages" });
     await expect(rows).toHaveCount(25);
     await expect(page.getByText("Showing 1–25 of 60")).toBeVisible();
     await expect(rows.first()).toContainText("Invented learner 01");
     // ADMINHOME-01: hours awaiting review come first and open that month.
+    // #854 QUEUE854-01: a table, Student · Month · Hours, with Review.
     const awaiting = page
-      .getByRole("region", { name: "Awaiting review" })
-      .getByRole("listitem");
-    await expect(awaiting).toHaveText([
-      /^Invented learner 01January 2020 · 172h$/,
-      new RegExp(`^Invented learner 01${label(previous)} · 10h$`),
-    ]);
-    await expect(awaiting.first().getByRole("link")).toHaveAttribute(
+      .getByRole("region", { name: "Awaiting review", exact: true })
+      .locator("tbody tr");
+    await expect(awaiting).toHaveCount(2);
+    for (const [index, cells] of [
+      ["Invented learner 01", "January 2020", "172h", "Review"],
+      ["Invented learner 01", label(previous), "10h", "Review"],
+    ].entries())
+      await expect(awaiting.nth(index).getByRole("cell")).toHaveText(cells);
+    await expect(
+      awaiting.first().getByRole("link", {
+        name: "Review Invented learner 01 January 2020",
+      }),
+    ).toHaveAttribute(
       "href",
       /\/operator\/coaching\/[0-9a-f-]+\?month=2020-01$/,
     );
@@ -1429,7 +1440,9 @@ test("[L282] required names identify learners while legacy work and administrato
     await f.verify();
     await page.goto(f.origin + "/admin");
     await page.getByRole("button", { name: "Enter administration" }).click();
-    const directory = page.locator(".member-table");
+    const directory = page
+      .getByRole("region", { name: "Students", exact: true })
+      .locator(".member-table");
     await expect(
       directory.getByRole("link", { name: "李明 <Sam>", exact: true }),
     ).toHaveCount(2);

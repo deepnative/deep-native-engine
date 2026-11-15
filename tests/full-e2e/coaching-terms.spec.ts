@@ -106,6 +106,8 @@ const left = (n: number, unit = "") =>
 
 async function generateDueInvoices(j: Journey) {
   await j.admin.goto(j.f.origin + "/operator/invoices");
+  // #854: recurring invoices sit in More actions.
+  await j.admin.getByText("More actions", { exact: true }).click();
   // The run was accepted and finished (303 back to the invoice list) before
   // any caller looks for what it created.
   const [run] = await Promise.all([

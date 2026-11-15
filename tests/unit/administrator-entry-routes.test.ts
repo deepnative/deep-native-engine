@@ -300,7 +300,7 @@ it("ADMINHOME-01/ADMINNAV-01 lands on one Students page with the menu and no hub
     '<h2 id="courses">Courses</h2><p>Published lessons that can be put on a course invoice.</p><ul class="admin-list"><li>&lt;Invented lesson&gt;<span>FND-001 version 2</span></li></ul>',
   );
 });
-it("ADMINHOME-01 lists submitted hours first, each opening that student's month", async () => {
+it("ADMINHOME-01/QUEUE854-01 lists submitted hours first as a review queue, each row opening that student's month", async () => {
   const f = fixture();
   const id = "11111111-1111-4111-8111-111111111111",
     other = "22222222-2222-4222-8222-222222222222";
@@ -339,8 +339,10 @@ it("ADMINHOME-01 lists submitted hours first, each opening that student's month"
         .set("Cookie", `dne_staff=${credential}`)
     ).text,
   );
+  // #854 QUEUE854-01: a table, Student · Month · Hours, with a Review link.
+  // The queue carries no amount or submitted date, so neither is shown.
   expect(main).toContain(
-    `<h2 id="awaiting-review">Awaiting review</h2><ul class="admin-list"><li><a href="/operator/coaching/${id}?month=2026-10">Mei &lt;Tanaka&gt;</a><span>October 2026 · 4h 30m</span></li><li><a href="/operator/coaching/${other}?month=2026-10-16">Name needed</a><span>16 Oct 2026 to 29 Oct 2026 · 1h</span></li></ul>`,
+    `<h2 id="awaiting-review">Awaiting review</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Hours awaiting review"><table class="member-table stack-table review-queue"><thead><tr><th scope="col">Student</th><th scope="col">Month</th><th scope="col">Hours</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead><tbody><tr><td data-label="Student">Mei &lt;Tanaka&gt;</td><td data-label="Month">October 2026</td><td data-label="Hours">4h 30m</td><td data-label="Action"><a href="/operator/coaching/${id}?month=2026-10" aria-label="Review Mei &lt;Tanaka&gt; October 2026">Review</a></td></tr><tr><td data-label="Student">Name needed</td><td data-label="Month">16 Oct 2026 to 29 Oct 2026</td><td data-label="Hours">1h</td><td data-label="Action"><a href="/operator/coaching/${other}?month=2026-10-16" aria-label="Review Name needed 16 Oct 2026 to 29 Oct 2026">Review</a></td></tr></tbody></table></div></section>`,
   );
   expect(main).not.toContain("No hours are waiting for review.");
 });

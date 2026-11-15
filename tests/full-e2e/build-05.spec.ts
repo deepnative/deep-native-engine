@@ -31,8 +31,8 @@ async function sampleInvoice(f: Fixture) {
     .getByRole("navigation", { name: "Administration", exact: true })
     .getByRole("link", { name: "Invoices", exact: true })
     .click();
-  // INVOICELIST-01: course billing sits closed below the invoice table.
-  await admin.page.getByText("Prepare course billing", { exact: true }).click();
+  // INVOICELIST-01/#854: course billing sits closed in More actions below the table.
+  await admin.page.getByText("More actions", { exact: true }).click();
   await admin.page
     .getByLabel("Student", { exact: true })
     .selectOption(reference);
@@ -341,7 +341,15 @@ test("[F-BUILD-05-D] a deliberately missing payment event is flagged on its invo
       await expect(admin).toHaveURL(
         new RegExp(`/operator/invoices/${invoiceId}$`),
       );
-      await expect(admin.getByText("Test event not applied")).toBeVisible();
+      // #854: the payment record and the timeline both name the held event.
+      await expect(
+        admin
+          .getByRole("table", { name: "Recorded receipts and refunds" })
+          .getByText("Test event not applied"),
+      ).toBeVisible();
+      await expect(admin.locator(".invoice-timeline")).toContainText(
+        "Test event not applied",
+      );
 
       // Once the missing payment arrives, the held refund applies once and the
       // invoice is no longer waiting.

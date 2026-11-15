@@ -3015,3 +3015,37 @@ it("SEAM-01 the student's coaches and course records sit folded on the student's
     "student-courses",
   );
 });
+
+it("QUEUE854-02 on a submitted month the issue panel comes first, after the month, its status and the submitted figure", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      overrides: [change],
+      entry: {
+        ...entry,
+        state: "submitted",
+        snapshot,
+        submittedRevision: 2,
+      },
+      months: [{ month, state: "submitted", minutes: 480, overridden: true }],
+    }),
+  );
+  const html = mainHtml((await f.get(`/operator/coaching/${id}`)).text);
+  const main = html.slice(
+    html.indexOf('<div class="coaching-main">'),
+    html.indexOf('<aside class="coaching-side">'),
+  );
+  const order = [
+    "<h2>October 2026</h2>",
+    "<p>Status: Awaiting review</p>",
+    "<p>Submitted: ",
+    "<h2>Issue the reviewed invoice</h2>",
+    '<h2 id="hours-changes">Hours changed by an administrator</h2>',
+    "<summary>Return for correction</summary>",
+    "<summary>Change this student’s hours</summary>",
+    '<h2 id="saved-months">Saved periods</h2>',
+  ].map((text) => main.indexOf(text));
+  expect(order.every((at) => at >= 0)).toBe(true);
+  expect(order).toEqual([...order].sort((a, b) => a - b));
+});
