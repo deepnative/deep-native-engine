@@ -115,6 +115,8 @@ test("[F-BUILD-04-C] a monthly offer accepted after its start date cannot activa
 
       // The monthly run bills none of the missed months.
       await admin.goto(f.origin + "/operator/invoices");
+      // #854: recurring invoices sit in More actions.
+      await admin.getByText("More actions", { exact: true }).click();
       await admin
         .getByRole("button", { name: "Generate due recurring invoices" })
         .click();
@@ -145,6 +147,8 @@ test("[F-BUILD-04-C] a monthly offer accepted after its start date cannot activa
       );
       await acceptBundle(member, "monthly");
       await admin.goto(f.origin + "/operator/invoices");
+      // #854: recurring invoices sit in More actions.
+      await admin.getByText("More actions", { exact: true }).click();
       await admin
         .getByRole("button", { name: "Generate due recurring invoices" })
         .click();

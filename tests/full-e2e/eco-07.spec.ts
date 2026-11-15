@@ -245,6 +245,8 @@ test("[F-ECO-07-C] cancelling a monthly bundle stops future invoices, the agreem
       // did not cancel is invoiced.
       await oneMonthLater(f.pool, [plan!.id, otherPlan!.id]);
       await admin.goto(f.origin + "/operator/invoices");
+      // #854: recurring invoices sit in More actions.
+      await admin.getByText("More actions", { exact: true }).click();
       await admin
         .getByRole("button", { name: "Generate due recurring invoices" })
         .click();

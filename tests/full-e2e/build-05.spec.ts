@@ -31,8 +31,8 @@ async function sampleInvoice(f: Fixture) {
     .getByRole("navigation", { name: "Administration", exact: true })
     .getByRole("link", { name: "Invoices", exact: true })
     .click();
-  // INVOICELIST-01: course billing sits closed below the invoice table.
-  await admin.page.getByText("Prepare course billing", { exact: true }).click();
+  // INVOICELIST-01/#854: course billing sits closed in More actions below the table.
+  await admin.page.getByText("More actions", { exact: true }).click();
   await admin.page
     .getByLabel("Student", { exact: true })
     .selectOption(reference);

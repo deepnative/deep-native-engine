@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Express, PostgreSQL (pg), Vitest (unit, integration), Playwright (e2e).
 
-**Spec:** `docs/superpowers/specs/2026-11-15-admin-invoicing-layout-design.md`
+**Spec:** `assets/docs/ADMIN-INVOICING-LAYOUT.md`
 
 ## Global Constraints
 

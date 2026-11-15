@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import request from "supertest";
 import { expect, it, vi } from "vitest";
-import { mountSimpleInvoiceRoutes } from "../../src/simple-invoice-routes.ts";
+import {
+  deliveryLabel,
+  mountSimpleInvoiceRoutes,
+  paymentLabel,
+} from "../../src/simple-invoice-routes.ts";
 import type { SimpleInvoiceStore } from "../../src/simple-invoice-store.ts";
 import { csrf } from "../../src/session.ts";
 import { mainHtml } from "../support/portal-layout.ts";
@@ -66,6 +70,15 @@ function fixture(disabled = false, noSender = false) {
         members: [{ id }],
         courses: [{ id: "FND-001", version: 2, title: "Claim checking" }],
         invoices: [],
+        summary: {
+          outstandingCents: 0,
+          all: 0,
+          unpaid: 0,
+          notSent: 0,
+          paid: 0,
+          void: 0,
+          hoursToReview: 0,
+        },
       }),
     ),
     invoice: vi.fn().mockResolvedValue(ready(invoice)),
@@ -621,7 +634,7 @@ it("HOUR08 #844 LINK-01 coaching invoice controls link an unpaid correction to t
 it("ADMINCON02 preserves exact learner selection and rejects forged selection queries", async () => {
   const f = fixture();
   expect((await f.get("/operator/invoices?ownerId=" + id)).status).toBe(200);
-  expect(f.service.adminOverview).toHaveBeenLastCalledWith(token, id);
+  expect(f.service.adminOverview).toHaveBeenLastCalledWith(token, id, "all");
   expect((await f.get("/operator/invoices?ownerId=wrong")).status).toBe(422);
   expect((await f.get("/operator/invoices?ownerId=a&ownerId=b")).status).toBe(
     422,
@@ -785,36 +798,66 @@ it("BILLPROFILE02 an empty billing form is refused without saving", async () => 
   expect(r.headers.location).toBe("/account?billing=email#billing");
   expect(f.profiles.save).not.toHaveBeenCalled();
 });
+// #854: the totals every Invoices test reads unless it sets its own.
+const zero = {
+  outstandingCents: 0,
+  all: 0,
+  unpaid: 0,
+  notSent: 0,
+  paid: 0,
+  void: 0,
+  hoursToReview: 0,
+};
+const listRow = {
+  id,
+  revision: 1,
+  delivery: "not_sent",
+  number: "INV-<7>",
+  student: "Mei <Tanaka>",
+  totalCents: "72000",
+  paidCents: "0",
+  refundedCents: "0",
+  voided: false,
+  coaching: { month: "2026-09" },
+  terms: false,
+  firstLine: "Coaching",
+  lineCount: 1,
+  issuedOn: "2026-11-14",
+  sample: false,
+};
+const another = (n: number, extra: object) => ({
+  ...listRow,
+  id: `${n}${id.slice(1)}`,
+  coaching: null,
+  ...extra,
+});
+const threeSummary = {
+  outstandingCents: 72000,
+  all: 3,
+  unpaid: 1,
+  notSent: 1,
+  paid: 1,
+  void: 1,
+  hoursToReview: 1,
+};
+function listed(invoices: object[], summary: object = threeSummary) {
+  return ready({
+    members: [{ id, displayName: "Mei <Tanaka>" }],
+    courses: [{ id: "FND-001", version: 2, title: "Claim checking" }],
+    invoices,
+    coachingPending: [],
+    summary,
+  });
+}
 it("INVOICELIST-01/ADMINNAV-01 the Invoices page leads with a table in words and keeps course billing closed below", async () => {
   const f = fixture();
-  const row = {
-    id,
-    revision: 1,
-    delivery: "not_sent",
-    number: "INV-<7>",
-    student: "Mei <Tanaka>",
-    totalCents: "72000",
-    paidCents: "0",
-    refundedCents: "0",
-    voided: false,
-    coaching: { month: "2026-09" },
-    terms: false,
-    firstLine: "Coaching",
-    lineCount: 1,
-  };
-  const other = (n: number, extra: object) => ({
-    ...row,
-    id: `${n}${id.slice(1)}`,
-    coaching: null,
-    ...extra,
-  });
   f.service.adminOverview.mockResolvedValue(
     ready({
-      members: [{ id, displayName: "Mei <Tanaka>" }, { id: other(2, {}).id }],
+      members: [{ id, displayName: "Mei <Tanaka>" }, { id: another(2, {}).id }],
       courses: [{ id: "FND-001", version: 2, title: "Claim checking" }],
       invoices: [
-        row,
-        other(2, {
+        listRow,
+        another(2, {
           delivery: "sent",
           paidCents: "72000",
           coaching: {
@@ -823,14 +866,14 @@ it("INVOICELIST-01/ADMINNAV-01 the Invoices page leads with a table in words and
             periodEnd: "2026-10-29",
           },
         }),
-        other(3, {
+        another(3, {
           delivery: "sending",
           paidCents: "1000",
           firstLine: "Claim <checking>",
           lineCount: 3,
         }),
-        other(4, { delivery: "unconfirmed", voided: true, terms: true }),
-        other(5, {
+        another(4, { delivery: "unconfirmed", voided: true, terms: true }),
+        another(5, {
           delivery: "sent",
           paidCents: "72000",
           refundedCents: "72000",
@@ -838,60 +881,55 @@ it("INVOICELIST-01/ADMINNAV-01 the Invoices page leads with a table in words and
           number: null,
           firstLine: null,
         }),
-        other(6, {
+        another(6, {
           delivery: "unconfirmed",
           paidCents: "72000",
           refundedCents: "100",
         }),
-        other(7, { number: "DN-80d5695a-5ef7-459e-bd78-63fc26a5491d" }),
+        another(7, { number: "DN-80d5695a-5ef7-459e-bd78-63fc26a5491d" }),
+        another(8, { delivery: "sent", sample: true }),
       ],
+      summary: threeSummary,
     }),
   );
   const html = (await f.get("/operator/invoices")).text;
   expect(html).toContain("<title>Invoices ·");
   const main = mainHtml(html);
   expect(main).toContain(
-    '<section class="invoice-workspace portal-workspace"><nav class="admin-menu" aria-label="Administration"><a href="/operator">Students</a><a href="/operator/invoices" aria-current="page">Invoices</a><a href="/operator/roles">Roles</a><a href="/operator/changes">History</a><a href="/staff">More</a></nav><h1>Invoices</h1><div class="table-scroll" tabindex="0" role="region" aria-label="Invoices"><table class="member-table stack-table invoice-list"><thead><tr><th scope="col">Student</th><th scope="col">For</th><th scope="col">Total</th><th scope="col">Balance</th><th scope="col">Status</th><th scope="col">Invoice</th></tr></thead>',
+    '<section class="invoice-workspace portal-workspace"><nav class="admin-menu" aria-label="Administration"><a href="/operator">Students</a><a href="/operator/invoices" aria-current="page">Invoices</a><a href="/operator/roles">Roles</a><a href="/operator/changes">History</a><a href="/staff">More</a></nav><h1>Invoices</h1><section class="invoice-summary"',
   );
-  // The id is never the link text; the invoice number is beside "Open".
+  // The id is never the link text; the invoice number is the link.
   expect(main).toContain(
-    `<tr><td data-label="Student">Mei &lt;Tanaka&gt;</td><td data-label="For">Coaching · September 2026</td><td data-label="Total">CAD 720.00</td><td data-label="Balance">CAD 720.00</td><td data-label="Status">Not sent · Unpaid</td><td data-label="Invoice"><a href="/operator/invoices/${id}" aria-label="Open invoice INV-&lt;7&gt;">Open</a><span>INV-&lt;7&gt;</span></td></tr>`,
+    `<tr><td data-label="Issued">14 Nov 2026</td><td data-label="Number"><a href="/operator/invoices/${id}">INV-&lt;7&gt;</a></td><td data-label="Student">Mei &lt;Tanaka&gt;</td><td data-label="For">Coaching · September 2026</td><td data-label="Amount">CAD 720.00</td><td data-label="Balance">CAD 720.00</td><td data-label="Status"><div class="invoice-status"><span class="badge badge-unpaid">Unpaid</span> Not sent</div></td></tr>`,
   );
   expect(main).not.toContain(`>${id}<`);
+  expect(main).not.toContain(">Open<");
+  expect(main).not.toContain("Open invoice");
   const cells = [...main.matchAll(/<tr><td.*?<\/tr>/g)].map((m) =>
     [...m[0].matchAll(/<td data-label="(?:For|Balance|Status)">(.*?)<\/td>/g)]
-      .map((c) => c[1])
+      .map((c) =>
+        c[1]!
+          .replace(/<span class="badge badge-([a-z-]+)">/g, "[$1] ")
+          .replace(/<[^>]+>/g, ""),
+      )
       .join(" | "),
   );
   expect(cells.slice(1)).toEqual([
-    "Coaching · 16 Oct 2026 to 29 Oct 2026 | CAD 0.00 | Sent · Paid",
-    "Claim &lt;checking&gt; and 2 more | CAD 710.00 | Sending · Partly paid",
-    "Coaching package | — | Void",
-    "Courses | CAD 0.00 | Sent · Refunded",
-    "Coaching | CAD 0.00 | Sending unconfirmed · Partly refunded",
-    "Coaching | CAD 720.00 | Not sent · Unpaid",
+    "Coaching · 16 Oct 2026 to 29 Oct 2026 | CAD 0.00 | [paid] Paid Sent",
+    "Claim &lt;checking&gt; and 2 more | CAD 710.00 | [partly-paid] Partly paid Sending",
+    "Coaching package | — | [void] Void",
+    "Courses | CAD 0.00 | [refunded] Refunded Sent",
+    "Coaching | CAD 0.00 | [partly-refunded] Partly refunded Unconfirmed: check the recipient's inbox before sending again",
+    "Coaching | CAD 720.00 | [unpaid] Unpaid Not sent",
+    "Coaching | CAD 720.00 | [unpaid] Unpaid Simulated",
   ]);
   expect(main).toContain(
-    'aria-label="Open invoice DN-80d5695a">Open</a><span>DN-80d5695a</span>',
+    `<a href="/operator/invoices/7${id.slice(1)}">DN-80d5695a</a>`,
   );
   expect(main).not.toContain("5ef7-459e");
   // A deleted account with no number still has a name and a short reference.
   expect(main).toContain(
-    `<td data-label="Student">Name needed</td><td data-label="For">Courses</td>`,
-  );
-  expect(main).toContain(`<span>5${id.slice(1, 8)}</span>`);
-  // Course billing sits below the table, closed, and names students only.
-  expect(main.indexOf("</table>")).toBeLessThan(main.indexOf("<details"));
-  expect(main).toContain(
-    '<details class="admin-details"><summary>Prepare course billing</summary>',
-  );
-  expect(main).toContain(
-    `<label for="invoice-owner">Student</label><select id="invoice-owner" name="ownerId" required><option value="${id}">Mei &lt;Tanaka&gt;</option><option value="${other(2, {}).id}">Name needed</option></select>`,
-  );
-  expect(main).toContain('action="/operator/invoices/plans"');
-  // Generating due invoices is its own section, outside the closed form.
-  expect(main).toContain(
-    '</form></details><section class="admin-section" aria-labelledby="recurring-invoices"><h2 id="recurring-invoices">Recurring invoices</h2><form method="post" action="/operator/invoices/due">',
+    `<a href="/operator/invoices/5${id.slice(1)}">5${id.slice(1, 8)}</a></td><td data-label="Student">Name needed</td><td data-label="For">Courses</td>`,
   );
   for (const gone of [
     "portal-actions",
@@ -902,18 +940,139 @@ it("INVOICELIST-01/ADMINNAV-01 the Invoices page leads with a table in words and
     "Learner",
   ])
     expect(main).not.toContain(gone);
-  // Preparing for one student opens the form.
-  expect(
-    mainHtml((await f.get(`/operator/invoices?ownerId=${id}`)).text),
-  ).toContain('<details class="admin-details" open>');
-  f.service.adminOverview.mockResolvedValue(
-    ready({ members: [], courses: [], invoices: [] }),
+});
+it("LIST854-01 summary cards show the money outstanding and the work waiting, each a link to its view", async () => {
+  const f = fixture();
+  f.service.adminOverview.mockResolvedValue(listed([listRow]));
+  const main = mainHtml((await f.get("/operator/invoices")).text);
+  expect(main).toContain(
+    '<h1>Invoices</h1><section class="invoice-summary" aria-label="Summary"><a href="/operator/invoices?status=unpaid"><span>Outstanding</span> <strong>CAD 720.00</strong></a><a href="/operator/invoices?status=unpaid"><span>Unpaid</span> <strong>1</strong></a><a href="/operator/invoices?status=not-sent"><span>Not sent</span> <strong>1</strong></a><a href="/operator#awaiting-review"><span>Hours to review</span> <strong>1</strong></a></section>',
   );
+  // With one student chosen, the cards and views keep that student.
+  const one = mainHtml((await f.get(`/operator/invoices?ownerId=${id}`)).text);
+  expect(one).toContain(
+    `<a href="/operator/invoices?ownerId=${id}&amp;status=unpaid"><span>Outstanding</span>`,
+  );
+  expect(one).toContain(
+    `<a href="/operator/invoices?ownerId=${id}" aria-current="page">All (3)</a>`,
+  );
+  expect(one).toContain('<a href="/operator#awaiting-review">');
+});
+it("LIST854-02 status views name their counts and mark the one shown", async () => {
+  const f = fixture();
+  f.service.adminOverview.mockResolvedValue(listed([listRow]));
+  const nav = (main: string) =>
+    main.match(/<nav class="invoice-views"[^>]*>.*?<\/nav>/)![0];
+  expect(nav(mainHtml((await f.get("/operator/invoices")).text))).toBe(
+    '<nav class="invoice-views" aria-label="Invoice views"><a href="/operator/invoices" aria-current="page">All (3)</a><a href="/operator/invoices?status=unpaid">Unpaid (1)</a><a href="/operator/invoices?status=not-sent">Not sent (1)</a><a href="/operator/invoices?status=paid">Paid (1)</a><a href="/operator/invoices?status=void">Void (1)</a></nav>',
+  );
+  for (const [view, label] of [
+    ["all", "All (3)"],
+    ["unpaid", "Unpaid (1)"],
+    ["not-sent", "Not sent (1)"],
+    ["paid", "Paid (1)"],
+    ["void", "Void (1)"],
+  ] as const) {
+    const shown = nav(
+      mainHtml((await f.get(`/operator/invoices?status=${view}`)).text),
+    );
+    expect(f.service.adminOverview).toHaveBeenLastCalledWith(
+      token,
+      undefined,
+      view,
+    );
+    expect([...shown.matchAll(/aria-current="page">([^<]+)</g)]).toHaveLength(
+      1,
+    );
+    expect(shown).toContain(`aria-current="page">${label}</a>`);
+  }
+});
+it("LIST854-03 the table reads Issued, Number, Student, For, Amount, Balance, Status", async () => {
+  const f = fixture();
+  f.service.adminOverview.mockResolvedValue(listed([listRow]));
+  const main = mainHtml((await f.get("/operator/invoices")).text);
+  expect(main).toContain(
+    '</nav><div class="table-scroll" tabindex="0" role="region" aria-label="Invoices"><table class="member-table stack-table invoice-list"><thead><tr><th scope="col">Issued</th><th scope="col">Number</th><th scope="col">Student</th><th scope="col">For</th><th scope="col">Amount</th><th scope="col">Balance</th><th scope="col">Status</th></tr></thead>',
+  );
+  expect(main).toContain(
+    `<td data-label="Number"><a href="/operator/invoices/${id}">INV-&lt;7&gt;</a></td>`,
+  );
+  expect(main).toContain('<td data-label="Issued">14 Nov 2026</td>');
+  expect(main).toContain(
+    '<span class="badge badge-unpaid">Unpaid</span> Not sent',
+  );
+});
+it("LIST854-04 refuses an unknown or repeated status view like any invalid query", async () => {
+  const f = fixture();
+  for (const query of [
+    "status=bogus",
+    "status=unpaid&status=paid",
+    "status=",
+    "status=Unpaid",
+  ]) {
+    const response = await f.get(`/operator/invoices?${query}`);
+    expect(response.status).toBe(422);
+    expect(response.text).toContain("Invoice request not confirmed");
+  }
+  expect(f.service.adminOverview).not.toHaveBeenCalled();
+  expect((await f.get("/operator/invoices?view=paid")).status).toBe(403);
+});
+it("LIST854-05 an empty view says so instead of showing an empty table, and the cards read zero", async () => {
+  const f = fixture();
+  f.service.adminOverview.mockResolvedValue(listed([], zero));
   const none = mainHtml((await f.get("/operator/invoices")).text);
+  expect(none).toContain("<span>Outstanding</span> <strong>CAD 0.00</strong>");
+  expect(none).toContain("<span>Unpaid</span> <strong>0</strong>");
+  expect(none).toContain('aria-current="page">All (0)</a>');
   expect(none).toContain(
-    '<p role="status">No invoices have been issued yet.</p><details',
+    '</nav><p role="status">No invoices have been issued yet.</p><details',
   );
   expect(none).not.toContain("<table");
+  for (const [view, text] of [
+    ["unpaid", "No unpaid invoices."],
+    ["not-sent", "No invoices waiting to be sent."],
+    ["paid", "No paid invoices."],
+    ["void", "No voided invoices."],
+  ] as const) {
+    const main = mainHtml(
+      (await f.get(`/operator/invoices?status=${view}`)).text,
+    );
+    expect(main).toContain(`</nav><p role="status">${text}</p><details`);
+    expect(main).not.toContain("<table");
+  }
+});
+it("LIST854-06 course billing and recurring invoices sit in one closed More actions area below the table", async () => {
+  const f = fixture();
+  f.service.adminOverview.mockResolvedValue(
+    ready({
+      members: [{ id, displayName: "Mei <Tanaka>" }, { id: another(2, {}).id }],
+      courses: [{ id: "FND-001", version: 2, title: "Claim checking" }],
+      invoices: [listRow],
+      summary: threeSummary,
+    }),
+  );
+  const main = mainHtml((await f.get("/operator/invoices")).text);
+  expect(main.indexOf("</table>")).toBeLessThan(main.indexOf("<details"));
+  expect([...main.matchAll(/<details/g)]).toHaveLength(1);
+  const more = main.slice(main.indexOf("<details"));
+  expect(more).toMatch(
+    /^<details class="admin-details"><summary>More actions<\/summary><section class="admin-section" aria-labelledby="prepare-billing"><h2 id="prepare-billing">Prepare course billing<\/h2><p>Prepare courses for a registered student\. No invoice is issued until the student accepts the exact terms\.<\/p><form method="post" action="\/operator\/invoices\/plans">/,
+  );
+  expect(more).toContain(
+    `<label for="invoice-owner">Student</label><select id="invoice-owner" name="ownerId" required><option value="${id}">Mei &lt;Tanaka&gt;</option><option value="${another(2, {}).id}">Name needed</option></select>`,
+  );
+  expect(more).toContain(
+    '</form></section><section class="admin-section" aria-labelledby="recurring-invoices"><h2 id="recurring-invoices">Recurring invoices</h2><form method="post" action="/operator/invoices/due">',
+  );
+  expect(more).toContain(
+    '<button class="secondary">Generate due recurring invoices</button></form></section></details></section>',
+  );
+  // Preparing for one student opens it, as before.
+  expect(
+    mainHtml((await f.get(`/operator/invoices?ownerId=${id}`)).text),
+  ).toContain(
+    '<details class="admin-details" open><summary>More actions</summary>',
+  );
 });
 it("AUDIT-01/02/03 shows readable delivery states, month names and button navigation", async () => {
   const f = fixture();
@@ -1722,5 +1881,27 @@ it("PAGE854-05 the student's invoice page is unchanged: no action bar, What's ne
   expect(member).toContain("<h1>Invoice</h1>");
   expect(member).toContain(
     '<aside class="invoice-controls"><p>Use your browser’s Print command to print this invoice or save it as a PDF.</p><p class="back-link">',
+  );
+});
+it("LIST854-07 the status words read the same from a list row or a stored invoice", () => {
+  // A stored invoice carries numbers and may have no refund field.
+  expect(
+    paymentLabel({ voided: false, totalCents: 1000, paidCents: 400 }),
+  ).toBe("Partly paid");
+  expect(
+    paymentLabel({
+      voided: false,
+      totalCents: 1000,
+      paidCents: 1000,
+      refundedCents: 1000,
+    }),
+  ).toBe("Refunded");
+  expect(
+    paymentLabel({ voided: true, totalCents: "1000", paidCents: "0" }),
+  ).toBe("Void");
+  expect(deliveryLabel({ delivery: "sent", sample: true })).toBe("Simulated");
+  expect(deliveryLabel({ delivery: "sent" })).toBe("Sent");
+  expect(deliveryLabel({ delivery: "unconfirmed", sample: true })).toBe(
+    "Unconfirmed: check the recipient's inbox before sending again",
   );
 });

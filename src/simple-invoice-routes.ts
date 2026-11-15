@@ -15,12 +15,15 @@ import {
   simpleInvoiceDocument,
   type SimpleInvoiceDocument,
 } from "./simple-invoice-views.ts";
-import type {
-  AdminInvoiceRow,
-  InvoiceFailure,
-  InvoicePaymentEvent,
-  SimpleInvoiceStore,
-  StoredInvoice,
+import {
+  INVOICE_VIEWS,
+  type AdminInvoiceRow,
+  type InvoiceFailure,
+  type InvoicePaymentEvent,
+  type InvoiceSummary,
+  type InvoiceView,
+  type SimpleInvoiceStore,
+  type StoredInvoice,
 } from "./simple-invoice-store.ts";
 import {
   adminMenuFor,
@@ -78,18 +81,24 @@ function invoiceLine(i: {
   const status = invoicePaymentStatus(i);
   return `${escape(what)}</a> — CAD ${(i.totalCents / 100).toFixed(2)} — ${status === UNPAID ? "Unpaid" : status}`;
 }
-/** INVOICELIST-01: one issued invoice as a row an administrator can scan. */
-function invoiceRow(i: AdminInvoiceRow) {
-  const cad = (cents: number) => `CAD ${(cents / 100).toFixed(2)}`;
+// Delivery states as administrators read them.
+const DELIVERY = {
+  not_sent: "Not sent",
+  sending: "Sending",
+  sent: "Sent",
+  unconfirmed: "Unconfirmed: check the recipient's inbox before sending again",
+} as const;
+/** #854: an invoice's money state, the word its status badge shows. */
+export function paymentLabel(i: {
+  voided: boolean;
+  totalCents: number | string;
+  paidCents: number | string;
+  refundedCents?: number | string;
+}) {
   const total = Number(i.totalCents),
     paid = Number(i.paidCents),
-    refunded = Number(i.refundedCents);
-  const what = i.coaching
-    ? `Coaching · ${periodLabel({ key: i.coaching.month, start: i.coaching.periodStart, end: i.coaching.periodEnd })}`
-    : i.terms
-      ? "Coaching package"
-      : `${escape(i.firstLine ?? "Courses")}${i.lineCount > 1 ? ` and ${i.lineCount - 1} more` : ""}`;
-  const payment = i.voided
+    refunded = Number(i.refundedCents ?? 0);
+  return i.voided
     ? "Void"
     : refunded > 0
       ? refunded === paid
@@ -100,36 +109,39 @@ function invoiceRow(i: AdminInvoiceRow) {
         : paid > 0
           ? "Partly paid"
           : "Unpaid";
-  const status = i.voided
-    ? payment
-    : `${i.delivery === "sent" ? "Sent" : i.delivery === "not_sent" ? "Not sent" : i.delivery === "sending" ? "Sending" : "Sending unconfirmed"} · ${payment}`;
+}
+/** #854: the delivery word beside the badge; a sent sample was simulated. */
+export function deliveryLabel(i: { delivery: string; sample?: boolean }) {
+  return i.sample && i.delivery === "sent"
+    ? "Simulated"
+    : DELIVERY[i.delivery as keyof typeof DELIVERY];
+}
+const cad = (cents: number) => `CAD ${(cents / 100).toFixed(2)}`;
+/** INVOICELIST-01/#854: one issued invoice as a row an administrator can scan. */
+function invoiceRow(i: AdminInvoiceRow) {
+  const total = Number(i.totalCents),
+    paid = Number(i.paidCents);
+  const what = i.coaching
+    ? `Coaching · ${periodLabel({ key: i.coaching.month, start: i.coaching.periodStart, end: i.coaching.periodEnd })}`
+    : i.terms
+      ? "Coaching package"
+      : `${escape(i.firstLine ?? "Courses")}${i.lineCount > 1 ? ` and ${i.lineCount - 1} more` : ""}`;
+  const payment = paymentLabel(i);
+  // Status is always a word; the badge colour only repeats it.
+  const status = `<span class="badge badge-${payment.toLowerCase().replace(" ", "-")}">${payment}</span>${i.voided ? "" : ` ${deliveryLabel(i)}`}`;
   const number = shortInvoiceNumber(i.number ?? i.id);
-  return `<tr><td data-label="Student">${escape(i.student ?? "Name needed")}</td><td data-label="For">${what}</td><td data-label="Total">${cad(total)}</td><td data-label="Balance">${i.voided ? "—" : cad(total - paid)}</td><td data-label="Status">${status}</td><td data-label="Invoice"><a href="${adminPath}/${i.id}" aria-label="Open invoice ${escape(number)}">Open</a><span>${escape(number)}</span></td></tr>`;
+  return `<tr><td data-label="Issued">${dayLabel(i.issuedOn)}</td><td data-label="Number"><a href="${adminPath}/${i.id}">${escape(number)}</a></td><td data-label="Student">${escape(i.student ?? "Name needed")}</td><td data-label="For">${what}</td><td data-label="Amount">${cad(total)}</td><td data-label="Balance">${i.voided ? "—" : cad(total - paid)}</td><td data-label="Status"><div class="invoice-status">${status}</div></td></tr>`;
 }
-// #854 PAGE854-01: payment state as a badge (text, colour only reinforces).
-function paymentState(i: StoredInvoice) {
-  const refunded = i.refundedCents ?? 0;
-  return i.voidReason !== null
-    ? "Void"
-    : refunded > 0
-      ? refunded === i.paidCents
-        ? "Refunded"
-        : "Partly refunded"
-      : i.paidCents >= i.totalCents
-        ? "Paid"
-        : i.paidCents > 0
-          ? "Partly paid"
-          : "Unpaid";
-}
-// Delivery as one quiet word beside the badge, and as a timeline line.
-const sampleSent = (i: StoredInvoice) =>
-  i.document.sample && i.delivery === "sent";
-const DELIVERY_WORD = {
-  not_sent: "Not sent",
-  sending: "Sending",
-  sent: "Sent",
-  unconfirmed: "Unconfirmed",
-} as const;
+// #854: what each view is called, and what it says when it is empty.
+const VIEW_NAMES: Record<InvoiceView, [string, keyof InvoiceSummary, string]> =
+  {
+    all: ["All", "all", "No invoices have been issued yet."],
+    unpaid: ["Unpaid", "unpaid", "No unpaid invoices."],
+    "not-sent": ["Not sent", "notSent", "No invoices waiting to be sent."],
+    paid: ["Paid", "paid", "No paid invoices."],
+    void: ["Void", "void", "No voided invoices."],
+  };
+// #854 PAGE854-04: delivery as a timeline line.
 const DELIVERY_EVENT = {
   not_sent: "Not sent",
   sending: "Sending",
@@ -148,7 +160,6 @@ const eventLabel = (p: InvoicePaymentEvent) =>
     : p.kind === "refund"
       ? "Refund"
       : "Payment received";
-const cadAmount = (cents: number) => `CAD ${(cents / 100).toFixed(2)}`;
 const issuedDay = (on: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(on) ? dayLabel(on) : on;
 
@@ -318,27 +329,45 @@ export function mountSimpleInvoiceRoutes(
     );
   });
   app.get(adminPath, async (req, res) => {
-    if (!valid(req, res, [], ["ownerId", "prepared"])) return;
+    if (!valid(req, res, [], ["ownerId", "prepared", "status"])) return;
     const selected = req.query.ownerId,
-      prepared = req.query.prepared;
+      prepared = req.query.prepared,
+      status = req.query.status ?? "all";
     if (
       (selected !== undefined && !invoiceUuid(selected)) ||
-      (prepared !== undefined && (prepared !== "1" || selected === undefined))
+      (prepared !== undefined &&
+        (prepared !== "1" || selected === undefined)) ||
+      !INVOICE_VIEWS.includes(status as InvoiceView)
     )
       return error(res, "invalid", undefined, true);
+    const view = status as InvoiceView;
     if (!store) return error(res, "unavailable", undefined, true);
-    const r = await store.adminOverview(token(res), selected);
+    const r = await store.adminOverview(token(res), selected, view);
     if (r.kind !== "ready") return error(res, r.kind, undefined, true);
     const anti = csrf(token(res), options.secret);
-    const invoices = r.value.invoices.map(invoiceRow).join("");
+    const invoices = r.value.invoices.map(invoiceRow).join(""),
+      summary = r.value.summary;
+    // Views and cards keep the chosen student.
+    const href = (to: InvoiceView) =>
+      `${adminPath}${
+        selected
+          ? `?ownerId=${selected}${to === "all" ? "" : `&amp;status=${to}`}`
+          : to === "all"
+            ? ""
+            : `?status=${to}`
+      }`;
+    const card = (link: string, name: string, value: string) =>
+      `<a href="${link}"><span>${name}</span> <strong>${value}</strong></a>`;
+    const cards = `<section class="invoice-summary" aria-label="Summary">${card(href("unpaid"), "Outstanding", cad(summary.outstandingCents))}${card(href("unpaid"), "Unpaid", String(summary.unpaid))}${card(href("not-sent"), "Not sent", String(summary.notSent))}${card("/operator#awaiting-review", "Hours to review", String(summary.hoursToReview))}</section>`;
+    const views = `<nav class="invoice-views" aria-label="Invoice views">${INVOICE_VIEWS.map((v) => `<a href="${href(v)}"${v === view ? ' aria-current="page"' : ""}>${VIEW_NAMES[v][0]} (${summary[VIEW_NAMES[v][1]]})</a>`).join("")}</nav>`;
     return res.send(
       page(
         "Invoices",
-        `<section class="invoice-workspace portal-workspace">${adminMenuFor(res, "invoices")}<h1>Invoices</h1>${prepared ? '<p role="status">Proposal prepared. The student can now review and accept it under Invoices.</p>' : ""}${
+        `<section class="invoice-workspace portal-workspace">${adminMenuFor(res, "invoices")}<h1>Invoices</h1>${prepared ? '<p role="status">Proposal prepared. The student can now review and accept it under Invoices.</p>' : ""}${cards}${views}${
           invoices
-            ? `<div class="table-scroll" tabindex="0" role="region" aria-label="Invoices"><table class="member-table stack-table invoice-list"><thead><tr><th scope="col">Student</th><th scope="col">For</th><th scope="col">Total</th><th scope="col">Balance</th><th scope="col">Status</th><th scope="col">Invoice</th></tr></thead><tbody>${invoices}</tbody></table></div>`
-            : '<p role="status">No invoices have been issued yet.</p>'
-        }<details class="admin-details"${selected ? " open" : ""}><summary>Prepare course billing</summary><p>Prepare courses for a registered student. No invoice is issued until the student accepts the exact terms.</p><form method="post" action="${adminPath}/plans">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}<label for="invoice-owner">Student</label><select id="invoice-owner" name="ownerId" required>${r.value.members.map((m) => `<option value="${m.id}">${escape(m.displayName ?? "Name needed")}</option>`).join("")}</select><fieldset><legend>Courses</legend>${r.value.courses.map((c) => `<label class="check"><input type="checkbox" name="courses" value="${escape(JSON.stringify([c.id, c.version]))}"><span>${escape(c.title)} · ${escape(c.id)} version ${c.version}</span></label><label>Amount for ${escape(c.title)} (CAD)<input name="amount_${escape(c.id)}_${c.version}" inputmode="decimal" value="0.00"></label>`).join("")}</fieldset><label for="invoice-cadence">Billing</label><select id="invoice-cadence" name="cadence"><option value="one_time">One-time</option><option value="monthly">Recurring monthly</option></select><label>Starts on<input type="date" name="startsOn" required></label>${store.tax ? `<p>${escape(store.tax.label)} at ${taxRate(store.tax)} is added to each invoice from its course subtotal.</p>` : '<label>Configured tax amount per invoice (CAD)<input name="tax" inputmode="decimal" value="0.00" required></label>'}<button>Prepare course billing proposal</button></form></details><section class="admin-section" aria-labelledby="recurring-invoices"><h2 id="recurring-invoices">Recurring invoices</h2><form method="post" action="${adminPath}/due">${hidden("csrf", anti)}<button class="secondary">Generate due recurring invoices</button></form></section></section>`,
+            ? `<div class="table-scroll" tabindex="0" role="region" aria-label="Invoices"><table class="member-table stack-table invoice-list"><thead><tr><th scope="col">Issued</th><th scope="col">Number</th><th scope="col">Student</th><th scope="col">For</th><th scope="col">Amount</th><th scope="col">Balance</th><th scope="col">Status</th></tr></thead><tbody>${invoices}</tbody></table></div>`
+            : `<p role="status">${VIEW_NAMES[view][2]}</p>`
+        }<details class="admin-details"${selected ? " open" : ""}><summary>More actions</summary><section class="admin-section" aria-labelledby="prepare-billing"><h2 id="prepare-billing">Prepare course billing</h2><p>Prepare courses for a registered student. No invoice is issued until the student accepts the exact terms.</p><form method="post" action="${adminPath}/plans">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}<label for="invoice-owner">Student</label><select id="invoice-owner" name="ownerId" required>${r.value.members.map((m) => `<option value="${m.id}">${escape(m.displayName ?? "Name needed")}</option>`).join("")}</select><fieldset><legend>Courses</legend>${r.value.courses.map((c) => `<label class="check"><input type="checkbox" name="courses" value="${escape(JSON.stringify([c.id, c.version]))}"><span>${escape(c.title)} · ${escape(c.id)} version ${c.version}</span></label><label>Amount for ${escape(c.title)} (CAD)<input name="amount_${escape(c.id)}_${c.version}" inputmode="decimal" value="0.00"></label>`).join("")}</fieldset><label for="invoice-cadence">Billing</label><select id="invoice-cadence" name="cadence"><option value="one_time">One-time</option><option value="monthly">Recurring monthly</option></select><label>Starts on<input type="date" name="startsOn" required></label>${store.tax ? `<p>${escape(store.tax.label)} at ${taxRate(store.tax)} is added to each invoice from its course subtotal.</p>` : '<label>Configured tax amount per invoice (CAD)<input name="tax" inputmode="decimal" value="0.00" required></label>'}<button>Prepare course billing proposal</button></form></section><section class="admin-section" aria-labelledby="recurring-invoices"><h2 id="recurring-invoices">Recurring invoices</h2><form method="post" action="${adminPath}/due">${hidden("csrf", anti)}<button class="secondary">Generate due recurring invoices</button></form></section></details></section>`,
       ),
     );
   });
@@ -427,8 +456,11 @@ export function mountSimpleInvoiceRoutes(
           refund || voiding
             ? `<details class="action-menu"><summary>More</summary><ul>${refund ? `<li>${link("refund", "Record refund")}</li>` : ""}${voiding ? `<li>${link("void", "Void")}</li>` : ""}</ul></details>`
             : "",
-        state = paymentState(i),
-        header = `<div class="invoice-header"><h1>Invoice ${escape(shortInvoiceNumber(i.document.number))}</h1><p class="invoice-state"><span class="badge badge-${state.toLowerCase().replace(" ", "-")}">${state}</span>${live ? ` <span class="invoice-delivery${i.delivery === "unconfirmed" ? " warning" : ""}">${sampleSent(i) ? "Simulated" : DELIVERY_WORD[i.delivery]}</span>` : ""}</p></div>`,
+        state = paymentLabel({ ...i, voided: !live }),
+        simulated = i.document.sample && i.delivery === "sent",
+        // The page keeps a short Unconfirmed word; What's next carries the
+        // warning in full.
+        header = `<div class="invoice-header"><h1>Invoice ${escape(shortInvoiceNumber(i.document.number))}</h1><p class="invoice-state"><span class="badge badge-${state.toLowerCase().replace(" ", "-")}">${state}</span>${live ? ` <span class="invoice-delivery${i.delivery === "unconfirmed" ? " warning" : ""}">${i.delivery === "unconfirmed" ? "Unconfirmed" : deliveryLabel({ delivery: i.delivery, sample: i.document.sample })}</span>` : ""}</p></div>`,
         actions = `<div class="invoice-actions" role="group" aria-label="Invoice actions">${send ? link("send", "Send") : ""}${payment ? link("payment", "Record payment") : ""}<button type="button" class="secondary" data-print hidden>Print</button>${more}</div>`,
         panels =
           send || payment || more
@@ -436,7 +468,7 @@ export function mountSimpleInvoiceRoutes(
             : "",
         whats = `<section class="whats-next" aria-labelledby="whats-next"><h2 id="whats-next">What’s next</h2><p>${escape(next.text)}</p>${next.open === "send" ? '<a class="button" href="#send">Send</a>' : next.open === "payment" ? '<a class="button" href="#payment">Record payment</a>' : ""}</section>`,
         // PAGE854-04: only what the page already loads; delivery has no date.
-        timeline = `<section class="invoice-timeline" aria-labelledby="invoice-timeline"><h2 id="invoice-timeline">Timeline</h2><ol><li>Issued ${escape(issuedDay(i.document.issuedOn))}</li><li>${sampleSent(i) ? "Delivery simulated; no email sent" : DELIVERY_EVENT[i.delivery]}</li>${(i.payments ?? []).map((p) => `<li>${dayLabel(p.on)} · ${eventLabel(p)} · ${cadAmount(p.amountCents)}</li>`).join("")}${live ? "" : `<li>Voided: ${escape(i.voidReason!)}</li>`}</ol></section>`;
+        timeline = `<section class="invoice-timeline" aria-labelledby="invoice-timeline"><h2 id="invoice-timeline">Timeline</h2><ol><li>Issued ${escape(issuedDay(i.document.issuedOn))}</li><li>${simulated ? "Delivery simulated; no email sent" : DELIVERY_EVENT[i.delivery]}</li>${(i.payments ?? []).map((p) => `<li>${dayLabel(p.on)} · ${eventLabel(p)} · ${cad(p.amountCents)}</li>`).join("")}${live ? "" : `<li>Voided: ${escape(i.voidReason!)}</li>`}</ol></section>`;
       const html = simpleInvoiceDocument(
         i.document,
         true,

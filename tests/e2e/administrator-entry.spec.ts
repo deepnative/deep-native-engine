@@ -261,7 +261,7 @@ test("[L269] both verified owner identities explicitly enter finite billing admi
       await expect(
         page.getByRole("heading", { name: "Invoices", level: 1 }),
       ).toBeVisible();
-      await page.getByText("Prepare course billing", { exact: true }).click();
+      await page.getByText("More actions", { exact: true }).click();
       await page.getByLabel("Student", { exact: true }).selectOption(f.id);
       await page
         .getByRole("checkbox", { name: /Invented owner-entry course/ })

@@ -21,8 +21,8 @@ async function offer(f: Fixture, member: Page, cadence = "one_time") {
     .getByRole("navigation", { name: "Administration", exact: true })
     .getByRole("link", { name: "Invoices", exact: true })
     .click();
-  // INVOICELIST-01: course billing sits closed below the invoice table.
-  await admin.page.getByText("Prepare course billing", { exact: true }).click();
+  // INVOICELIST-01/#854: course billing sits closed in More actions below the table.
+  await admin.page.getByText("More actions", { exact: true }).click();
   await admin.page
     .getByLabel("Student", { exact: true })
     .selectOption(reference);
@@ -200,6 +200,39 @@ test("[L266] registered student accepts two courses on one printable individual 
       await expect(staff.locator(hidden)).toBeHidden();
     await expect(staff.locator(".invoice-document")).toBeVisible();
     await staff.emulateMedia({ media: "screen" });
+    // #854 LIST854: totals and status views; the number opens the invoice.
+    await admin.page.goto(f.origin + "/operator/invoices");
+    await expect(
+      admin.page.getByRole("link", { name: /^Outstanding CAD \d+\.\d{2}$/ }),
+    ).toBeVisible();
+    const views = admin.page.getByRole("navigation", { name: "Invoice views" });
+    await views.getByRole("link", { name: /^Paid \(\d+\)$/ }).click();
+    await expect(admin.page).toHaveURL(/\/operator\/invoices\?status=paid$/);
+    await expect(
+      views.getByRole("link", { name: /^Paid \(\d+\)$/ }),
+    ).toHaveAttribute("aria-current", "page");
+    const number = admin.page.locator(
+      `a[href$="/operator/invoices/${invoiceId}"]`,
+    );
+    const row = admin.page.locator("tr").filter({ has: number });
+    await expect(row.locator(".badge")).toHaveText("Paid");
+    await expect(row).toContainText("Simulated");
+    expect(
+      await admin.page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await admin.page.screenshot({
+      path: info.outputPath("invoice-list.png"),
+      fullPage: true,
+    });
+    await number.click();
+    await expect(admin.page).toHaveURL(
+      new RegExp(`/operator/invoices/${invoiceId}$`),
+    );
+    // The number opens the same invoice page, paid and with nothing to do.
+    await expect(staff.locator(".invoice-state .badge")).toHaveText("Paid");
+    await expect(staff.locator(".action-panel.suggested")).toHaveCount(0);
     await member.screenshot({
       path: info.outputPath("individual-invoice.png"),
       fullPage: true,
