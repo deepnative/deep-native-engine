@@ -3015,3 +3015,109 @@ main > .admin-menu + .invoice-document {
     margin-top: -6px;
   }
 }
+/* #854 */
+/* Invoices: four summary cards in a wrapping row, each a link to its view. */
+.invoice-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 12px;
+  max-width: 60rem;
+  margin: 16px 0 20px;
+}
+.invoice-summary a {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 48px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  text-decoration: none;
+}
+.invoice-summary a:hover {
+  border-color: var(--accent);
+}
+.invoice-summary span {
+  color: var(--muted);
+  font-size: 15px;
+}
+.invoice-summary strong {
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+/* The view switch: one line of links, the current one underlined in ink. */
+.invoice-views {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.invoice-views a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 3px solid transparent;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.invoice-views a[aria-current] {
+  border-bottom-color: var(--ink);
+  color: var(--ink);
+  font-weight: 700;
+}
+.invoice-workspace > .invoice-views ~ .table-scroll {
+  margin-top: 16px;
+}
+/* Issued and Number stay on one line; Student and For may wrap. */
+.invoice-list td:nth-child(-n + 2) {
+  white-space: nowrap;
+}
+.invoice-list td:nth-child(3),
+.invoice-list td:nth-child(4) {
+  white-space: normal;
+}
+/* Status badge: the word is always there; colour only repeats it. Each
+   pair is dark text on a pale fill, above 4.5:1. */
+.invoice-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  white-space: normal;
+}
+.stack-table td .badge,
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.badge-unpaid {
+  background: #fff1d6;
+  color: #7a4100;
+}
+.badge-partly-paid {
+  background: #e3ecff;
+  color: #1d3f9e;
+}
+.badge-paid {
+  background: #dcf2e3;
+  color: #1b5631;
+}
+.badge-void {
+  background: #eceef2;
+  color: #444f60;
+}
+.badge-refunded,
+.badge-partly-refunded {
+  background: #f1e8fb;
+  color: #5b2d8e;
+}
+.admin-details > .admin-section:first-of-type {
+  margin-top: 12px;
+}

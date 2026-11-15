@@ -127,6 +127,8 @@ test("[F-ROADMAP-07-D] after training a goal change updates next actions, only a
         .getByRole("button", { name: "Save my profile", exact: true })
         .click();
       await admin.goto(f.origin + "/operator/invoices");
+      // #854: recurring invoices sit in More actions.
+      await admin.getByText("More actions", { exact: true }).click();
       await admin
         .getByRole("button", { name: "Generate due recurring invoices" })
         .click();
