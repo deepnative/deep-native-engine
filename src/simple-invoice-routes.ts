@@ -380,14 +380,22 @@ export function mountSimpleInvoiceRoutes(
           Boolean((i.document as { recipientEmail?: string }).recipientEmail),
         next = whatsNext(i, { canEmail, emailOff }),
         fields = `${hidden("csrf", anti)}${hidden("revision", i.revision)}${hidden("operationId", randomUUID())}`,
-        // #854 PAGE854-02: each action is a panel holding its unchanged form.
-        panel = (id: "send" | "payment", label: string, body: string) =>
-          `<details id="${id}" class="invoice-panel"${next.open === id ? " open" : ""}><summary>${label}</summary>${body}</details>`,
+        // #854 PAGE854-02: the bar is one row of links; each opens its panel
+        // below the bar (CSS :target). The panel What's next suggests shows
+        // until another is chosen. Every panel holds its unchanged form.
+        panel = (
+          id: "send" | "payment" | "refund" | "void",
+          title: string,
+          body: string,
+        ) =>
+          `<section id="${id}" class="action-panel${next.open === id ? " suggested" : ""}" aria-labelledby="${id}-title"><h2 id="${id}-title">${title}</h2>${body}</section>`,
+        link = (id: string, label: string) =>
+          `<a class="action" href="#${id}">${label}</a>`,
         send =
           live && canEmail
             ? panel(
                 "send",
-                "Send",
+                "Send the invoice",
                 `<form method="post" action="${adminPath}/${i.id}/email">${fields}<label class="check"><input type="checkbox" name="confirm" value="send" required><span>${i.document.sample ? "Simulate delivery only; no email will be sent." : "Send this individual invoice to its accepted billing recipient."}</span></label><button>${i.document.sample ? "Simulate invoice email" : "Send invoice email"}</button></form>`,
               )
             : "",
@@ -395,25 +403,37 @@ export function mountSimpleInvoiceRoutes(
           live && due > 0
             ? panel(
                 "payment",
-                "Record payment",
+                "Record a payment",
                 `<p>Balance still due: CAD ${(due / 100).toFixed(2)}. A receipt can't be more than this.</p><p>This is a manual record of an offline payment. The student can read the reference, so never enter card numbers, CVV or bank credentials.</p><form method="post" action="${adminPath}/${i.id}/payment">${fields}<label>Amount received (CAD)<input name="amount" inputmode="decimal" required></label><label>Received on<input type="date" name="receivedOn" required></label><label>Evidence reference<input name="evidence" maxlength="200" required></label><label class="check"><input type="checkbox" name="confirm" value="received" required><span>I verified these funds were received for this exact invoice.</span></label><button>Record offline payment</button></form>`,
               )
             : "",
         refund =
           i.paidCents - (i.refundedCents ?? 0) > 0
-            ? `<section id="refund" aria-labelledby="refund-title"><h2 id="refund-title">Record a refund</h2><p>Use this after the money has actually gone back. It moves no money, cancels no agreement and does not reopen the balance.</p><form method="post" action="${adminPath}/${i.id}/refund">${fields}<label>Amount refunded (CAD)<input name="amount" inputmode="decimal" required></label><label>Refunded on<input type="date" name="refundedOn" required></label><label>Evidence reference<input name="evidence" maxlength="200" required></label><label class="check"><input type="checkbox" name="confirm" value="refunded" required><span>I confirm this refund was sent for this exact invoice.</span></label><button>Record offline refund</button></form></section>`
+            ? panel(
+                "refund",
+                "Record a refund",
+                `<p>Use this after the money has actually gone back. It moves no money, cancels no agreement and does not reopen the balance.</p><form method="post" action="${adminPath}/${i.id}/refund">${fields}<label>Amount refunded (CAD)<input name="amount" inputmode="decimal" required></label><label>Refunded on<input type="date" name="refundedOn" required></label><label>Evidence reference<input name="evidence" maxlength="200" required></label><label class="check"><input type="checkbox" name="confirm" value="refunded" required><span>I confirm this refund was sent for this exact invoice.</span></label><button>Record offline refund</button></form>`,
+              )
             : "",
         voiding =
           live && i.paidCents === 0
-            ? `<section id="void" aria-labelledby="void-title"><h2 id="void-title">Void this invoice</h2><p>${i.document.coaching ? `Void the incorrect invoice, then <a href="/operator/coaching${i.ownerId ? `/${escape(i.ownerId)}?month=${escape(i.document.coaching.month)}` : ""}">return its coaching month for correction</a>. Paid or partially paid corrections are unavailable here and require financial review.` : "Void the incorrect invoice, then prepare a new proposal."} Issued details and recorded funds cannot be edited.</p><form method="post" action="${adminPath}/${i.id}/void">${fields}<label>Reason<input name="reason" maxlength="500" required></label><label class="check"><input type="checkbox" name="confirm" value="void" required><span>Void this unpaid invoice. This does not cancel its course agreement or refund any funds.</span></label><button class="secondary">Void unpaid invoice</button></form></section>`
+            ? panel(
+                "void",
+                "Void this invoice",
+                `<p>${i.document.coaching ? `Void the incorrect invoice, then <a href="/operator/coaching${i.ownerId ? `/${escape(i.ownerId)}?month=${escape(i.document.coaching.month)}` : ""}">return its coaching month for correction</a>. Paid or partially paid corrections are unavailable here and require financial review.` : "Void the incorrect invoice, then prepare a new proposal."} Issued details and recorded funds cannot be edited.</p><form method="post" action="${adminPath}/${i.id}/void">${fields}<label>Reason<input name="reason" maxlength="500" required></label><label class="check"><input type="checkbox" name="confirm" value="void" required><span>Void this unpaid invoice. This does not cancel its course agreement or refund any funds.</span></label><button class="secondary">Void unpaid invoice</button></form>`,
+              )
             : "",
         more =
           refund || voiding
-            ? `<details class="invoice-panel more"><summary>More</summary>${refund}${voiding}</details>`
+            ? `<details class="action-menu"><summary>More</summary><ul>${refund ? `<li>${link("refund", "Record refund")}</li>` : ""}${voiding ? `<li>${link("void", "Void")}</li>` : ""}</ul></details>`
             : "",
         state = paymentState(i),
         header = `<div class="invoice-header"><h1>Invoice ${escape(shortInvoiceNumber(i.document.number))}</h1><p class="invoice-state"><span class="badge badge-${state.toLowerCase().replace(" ", "-")}">${state}</span>${live ? ` <span class="invoice-delivery${i.delivery === "unconfirmed" ? " warning" : ""}">${sampleSent(i) ? "Simulated" : DELIVERY_WORD[i.delivery]}</span>` : ""}</p></div>`,
-        actions = `<div class="invoice-actions" role="group" aria-label="Invoice actions">${send}${payment}<button type="button" class="secondary" data-print hidden>Print</button>${more}</div>`,
+        actions = `<div class="invoice-actions" role="group" aria-label="Invoice actions">${send ? link("send", "Send") : ""}${payment ? link("payment", "Record payment") : ""}<button type="button" class="secondary" data-print hidden>Print</button>${more}</div>`,
+        panels =
+          send || payment || more
+            ? `<div class="action-panels">${send}${payment}${refund}${voiding}</div>`
+            : "",
         whats = `<section class="whats-next" aria-labelledby="whats-next"><h2 id="whats-next">What’s next</h2><p>${escape(next.text)}</p>${next.open === "send" ? '<a class="button" href="#send">Send</a>' : next.open === "payment" ? '<a class="button" href="#payment">Record payment</a>' : ""}</section>`,
         // PAGE854-04: only what the page already loads; delivery has no date.
         timeline = `<section class="invoice-timeline" aria-labelledby="invoice-timeline"><h2 id="invoice-timeline">Timeline</h2><ol><li>Issued ${escape(issuedDay(i.document.issuedOn))}</li><li>${sampleSent(i) ? "Delivery simulated; no email sent" : DELIVERY_EVENT[i.delivery]}</li>${(i.payments ?? []).map((p) => `<li>${dayLabel(p.on)} · ${eventLabel(p)} · ${cadAmount(p.amountCents)}</li>`).join("")}${live ? "" : `<li>Voided: ${escape(i.voidReason!)}</li>`}</ol></section>`;
@@ -422,7 +442,7 @@ export function mountSimpleInvoiceRoutes(
         true,
         i.payments,
         i.service,
-        `${adminMenuFor(res, "invoices")}${header}${actions}${whats}`,
+        `${adminMenuFor(res, "invoices")}${header}${actions}${whats}${panels}`,
       ).replace(
         '<aside class="invoice-controls">',
         `${timeline}<script type="module" src="/assets/invoice-print.js"></script><aside class="invoice-controls">`,

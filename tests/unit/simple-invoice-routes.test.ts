@@ -1457,13 +1457,21 @@ it("PAGE854-01 the administrator's invoice opens with its number, a payment badg
     expect(state(await adminPage(value))).toBe(expected);
 });
 
-it("PAGE854-02 one action bar holds the unchanged forms as panels, each only where the page offered it before", async () => {
+it("PAGE854-02 one row of actions opens panels below it holding the unchanged forms, each only where the page offered it before", async () => {
   const unpaid = await adminPage(invoice);
+  // The bar is one row of links and buttons; no form sits inside it.
+  expect(unpaid).toContain(
+    '<div class="invoice-actions" role="group" aria-label="Invoice actions"><a class="action" href="#send">Send</a><a class="action" href="#payment">Record payment</a><button type="button" class="secondary" data-print hidden>Print</button><details class="action-menu"><summary>More</summary><ul><li><a class="action" href="#void">Void</a></li></ul></details></div>',
+  );
   const bar = unpaid.match(
-    /<div class="invoice-actions"[\s\S]*?<\/details><\/div>/,
+    /<div class="action-panels">[\s\S]*?<\/section><\/div>/,
   )![0];
+  // The panels follow the bar and What's next, one after another.
+  expect(unpaid.indexOf('class="whats-next"')).toBeLessThan(
+    unpaid.indexOf('<div class="action-panels">'),
+  );
   expect(bar).toMatch(
-    /^<div class="invoice-actions" role="group" aria-label="Invoice actions"><details id="send" class="invoice-panel" open><summary>Send<\/summary>[\s\S]*<\/details><details id="payment" class="invoice-panel"><summary>Record payment<\/summary>[\s\S]*<\/details><button type="button" class="secondary" data-print hidden>Print<\/button><details class="invoice-panel more"><summary>More<\/summary><section id="void" aria-labelledby="void-title"><h2 id="void-title">Void this invoice<\/h2>/,
+    /^<div class="action-panels"><section id="send" class="action-panel suggested" aria-labelledby="send-title"><h2 id="send-title">Send the invoice<\/h2><form[\s\S]*<\/section><section id="payment" class="action-panel" aria-labelledby="payment-title"><h2 id="payment-title">Record a payment<\/h2>[\s\S]*<\/section><section id="void" class="action-panel" aria-labelledby="void-title"><h2 id="void-title">Void this invoice<\/h2>/,
   );
   expect(bar).toContain(
     "<p>Balance still due: CAD 11.00. A receipt can't be more than this.</p>",
@@ -1486,7 +1494,10 @@ it("PAGE854-02 one action bar holds the unchanged forms as panels, each only whe
   expect(paid).not.toContain('id="payment"');
   expect(paid).not.toContain('id="void"');
   expect(paid).toContain(
-    '<details class="invoice-panel more"><summary>More</summary><section id="refund" aria-labelledby="refund-title"><h2 id="refund-title">Record a refund</h2><p>Use this after the money has actually gone back.',
+    '<details class="action-menu"><summary>More</summary><ul><li><a class="action" href="#refund">Record refund</a></li></ul></details></div>',
+  );
+  expect(paid).toContain(
+    '<section id="refund" class="action-panel" aria-labelledby="refund-title"><h2 id="refund-title">Record a refund</h2><p>Use this after the money has actually gone back.',
   );
 
   // Fully refunded: nothing under More, so no More.
@@ -1502,9 +1513,10 @@ it("PAGE854-02 one action bar holds the unchanged forms as panels, each only whe
   });
   expect(formsOf(part)).toEqual([SEND_FORM, PAYMENT_FORM, REFUND_FORM]);
 
-  // Void: Print only.
+  // Void: Print only, and no panels.
   const voided = await adminPage(voidInvoice);
   expect(formsOf(voided)).toEqual([]);
+  expect(voided).not.toContain("action-panels");
   expect(voided).toContain(
     '<div class="invoice-actions" role="group" aria-label="Invoice actions"><button type="button" class="secondary" data-print hidden>Print</button></div>',
   );
@@ -1531,8 +1543,11 @@ it("PAGE854-02 one action bar holds the unchanged forms as panels, each only whe
 it("PAGE854-03 What's next names the one usual next step and opens its panel", async () => {
   const next = (page: string) =>
     page.match(/<section class="whats-next"[\s\S]*?<\/section>/)![0];
+  // The suggested panel shows until another action is chosen.
   const open = (page: string) =>
-    [...page.matchAll(/<details id="(\w+)"[^>]* open>/g)].map((m) => m[1]);
+    [
+      ...page.matchAll(/<section id="(\w+)" class="action-panel suggested"/g),
+    ].map((m) => m[1]);
 
   const unsent = await adminPage(invoice);
   expect(next(unsent)).toBe(
@@ -1588,7 +1603,9 @@ it("PAGE854-03 What's next names the one usual next step and opens its panel", a
     "<p>Delivery unconfirmed: check the recipient&#39;s inbox before sending again.</p></section>",
   );
   expect(open(unconfirmed)).toEqual([]);
-  expect(unconfirmed).toContain('<details id="send" class="invoice-panel">');
+  expect(unconfirmed).toContain(
+    '<section id="send" class="action-panel" aria-labelledby="send-title">',
+  );
 
   const noEmail = await adminPage({
     ...invoice,

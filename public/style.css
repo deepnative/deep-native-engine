@@ -3020,7 +3020,14 @@ main > .admin-menu + .invoice-document {
    the number and status first, one action bar whose actions open as panels,
    What's next, the document, then a short timeline. Status is always text;
    colour only reinforces it. */
-main > :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
+main
+  > :is(
+    .invoice-header,
+    .invoice-actions,
+    .whats-next,
+    .action-panels,
+    .invoice-timeline
+  ) {
   max-width: 760px;
 }
 .invoice-header {
@@ -3083,31 +3090,56 @@ main > :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
 }
 .invoice-actions {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 10px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px;
   margin-top: 24px;
 }
-.invoice-panel > summary {
+.invoice-actions > .action,
+.action-menu > summary {
   display: inline-flex;
+  flex: 0 1 auto;
   align-items: center;
+  justify-content: center;
   min-height: 46px;
-  padding: 0 19px;
+  padding: 0 16px;
   border: 1px solid #9caecf;
   border-radius: 9px;
   background: #fff;
   color: var(--accent);
   font-size: 14px;
   font-weight: 650;
-  list-style: none;
+  text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
 }
+.invoice-actions > button {
+  flex: 0 1 auto;
+  padding: 0 16px;
+}
+.invoice-actions > .action:hover,
+.action-menu > summary:hover {
+  background: #eef3ff;
+}
+/* The action whose panel is open reads as pressed. */
+main:has(#send:target) .invoice-actions a[href="#send"],
+main:has(#payment:target) .invoice-actions a[href="#payment"],
+main:has(:is(#refund, #void):target) .action-menu > summary {
+  border-color: var(--accent);
+  background: #eef3ff;
+}
+.action-menu {
+  position: relative;
+}
+.action-menu > summary {
+  list-style: none;
+}
 /* #844 TABLE-01 checks that nothing after it is removed from display. */
-.invoice-panel > summary::-webkit-details-marker {
+.action-menu > summary::-webkit-details-marker {
   position: absolute;
   visibility: hidden;
 }
-.invoice-panel > summary::after {
+.action-menu > summary::after {
   content: "";
   width: 7px;
   height: 7px;
@@ -3116,26 +3148,79 @@ main > :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
   border-bottom: 2px solid currentColor;
   transform: translateY(-2px) rotate(45deg);
 }
-.invoice-panel[open] > summary::after {
+.action-menu[open] > summary::after {
   transform: translateY(2px) rotate(-135deg);
 }
-.invoice-panel > summary:hover {
+.action-menu > ul {
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: 0 8px 24px rgb(24 44 73 / 12%);
+}
+.action-menu a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-weight: 650;
+  text-decoration: none;
+}
+.action-menu a:hover {
   background: #eef3ff;
 }
-.invoice-panel[open] {
-  flex: 1 1 100%;
-  min-width: 0;
-  padding: 0 0 20px;
-  border-bottom: 1px solid var(--line);
+/* PAGE854-02: a panel shows when its action is chosen (:target). The one
+   What's next suggests shows until another is chosen. Hidden panels take no
+   space and are out of the accessibility tree (visibility: hidden). */
+.action-panels {
+  position: relative;
+  max-width: 760px;
 }
-.invoice-panel[open] > summary {
-  margin-bottom: 12px;
-  background: #eef3ff;
+.action-panel {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  scroll-margin-top: 24px;
 }
-.invoice-panel form {
+.action-panel:target,
+.action-panel.suggested {
+  position: static;
+  height: auto;
+  overflow: visible;
+  visibility: visible;
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+}
+.action-panels:has(.action-panel:target) .action-panel.suggested:not(:target) {
+  position: absolute;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.action-panel h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.action-panel form {
   max-width: 620px;
 }
-.invoice-panel input:not([type="checkbox"]):not([type="hidden"]) {
+.action-panel input:not([type="checkbox"]):not([type="hidden"]) {
   width: 100%;
   min-height: 44px;
   padding: 12px;
@@ -3145,18 +3230,6 @@ main > :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
   color: var(--ink);
   font: inherit;
   caret-color: var(--accent);
-}
-.invoice-panel.more > section + section {
-  margin-top: 28px;
-  padding-top: 20px;
-  border-top: 1px solid var(--line);
-}
-.invoice-panel.more h2 {
-  margin: 0 0 6px;
-  font-size: 20px;
-}
-.invoice-panel {
-  scroll-margin-top: 24px;
 }
 .whats-next {
   display: flex;
@@ -3204,19 +3277,29 @@ main > :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
   padding-block: 4px;
   overflow-wrap: anywhere;
 }
-@media (max-width: 560px) {
-  .invoice-actions > :is(details:not([open]), button) {
-    flex: 1 1 calc(50% - 5px);
+@media (max-width: 420px) {
+  .invoice-actions {
+    gap: 6px;
   }
-  .invoice-actions > details:not([open]) > summary,
-  .invoice-actions > button {
-    width: 100%;
-    justify-content: center;
+  .invoice-actions > .action,
+  .invoice-actions > button,
+  .action-menu > summary {
+    padding: 0 11px;
+  }
+  .action-panel:target,
+  .action-panel.suggested {
+    padding: 16px;
   }
 }
 @media print {
   body:has(.invoice-document)
-    :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
+    :is(
+      .invoice-header,
+      .invoice-actions,
+      .whats-next,
+      .action-panels,
+      .invoice-timeline
+    ) {
     position: absolute;
     visibility: hidden;
   }

@@ -550,7 +550,7 @@ test("[L284] HOUR01/03/04/07/09 a student registers, signs back in and reports a
     await expect(o.locator(".whats-next")).toContainText(
       "Record a payment when it arrives.",
     );
-    await expect(o.locator("details#payment")).toHaveAttribute("open", "");
+    await expect(o.locator("section#payment")).toBeVisible();
     await friendly(o, "owner-invoice");
 
     // 7. The student opens the invoice and sees what is due and how to pay.

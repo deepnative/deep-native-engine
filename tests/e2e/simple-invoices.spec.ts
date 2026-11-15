@@ -115,12 +115,26 @@ test("[L266] registered student accepts two courses on one printable individual 
     await expect(staff.locator(".whats-next")).toContainText(
       "Not sent yet. Send it to 陳 · Invented student.",
     );
-    await expect(staff.locator("details#send")).toHaveAttribute("open", "");
-    await expect(staff.locator("details#payment")).not.toHaveAttribute(
-      "open",
-      "",
-    );
+    await expect(staff.locator("section#send")).toBeVisible();
+    await expect(staff.locator("section#payment")).toBeHidden();
     await expect(staff.getByRole("button", { name: "Print" })).toBeVisible();
+    // The actions stay one row; a chosen panel opens below the whole bar.
+    const bar = staff.locator(".invoice-actions");
+    const tops = async () =>
+      bar
+        .locator(":scope > *")
+        .evaluateAll((items) =>
+          items.map((item) => Math.round(item.getBoundingClientRect().top)),
+        );
+    expect(new Set(await tops()).size).toBe(1);
+    await openInvoicePanel(staff, "payment");
+    await expect(staff.locator("section#send")).toBeHidden();
+    expect(new Set(await tops()).size).toBe(1);
+    expect(
+      (await staff.locator("section#payment").boundingBox())!.y,
+    ).toBeGreaterThan((await bar.boundingBox())!.y + 40);
+    await openInvoicePanel(staff, "send");
+    await expect(staff.locator("section#payment")).toBeHidden();
     await staff
       .getByRole("checkbox", {
         name: "Simulate delivery only; no email will be sent.",
@@ -131,7 +145,8 @@ test("[L266] registered student accepts two courses on one printable individual 
     await expect(staff.locator(".whats-next")).toContainText(
       "Record a payment when it arrives.",
     );
-    await expect(staff.locator("details#payment")).toHaveAttribute("open", "");
+    await expect(staff.locator("section#payment")).toBeVisible();
+    await expect(staff.locator("section#send")).toBeHidden();
     await expect(staff.locator(".invoice-timeline")).toContainText(
       "Delivery simulated; no email sent",
     );
