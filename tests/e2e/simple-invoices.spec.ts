@@ -117,7 +117,6 @@ test("[L266] registered student accepts two courses on one printable individual 
     );
     await expect(staff.locator("section#send")).toBeVisible();
     await expect(staff.locator("section#payment")).toBeHidden();
-    await expect(staff.getByRole("button", { name: "Print" })).toBeVisible();
     // The actions stay one row; a chosen panel opens below the whole bar.
     const bar = staff.locator(".invoice-actions");
     const tops = async () =>

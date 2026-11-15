@@ -461,7 +461,10 @@ export function mountSimpleInvoiceRoutes(
         // The page keeps a short Unconfirmed word; What's next carries the
         // warning in full.
         header = `<div class="invoice-header"><h1>Invoice ${escape(shortInvoiceNumber(i.document.number))}</h1><p class="invoice-state"><span class="badge badge-${state.toLowerCase().replace(" ", "-")}">${state}</span>${live ? ` <span class="invoice-delivery${i.delivery === "unconfirmed" ? " warning" : ""}">${i.delivery === "unconfirmed" ? "Unconfirmed" : deliveryLabel({ delivery: i.delivery, sample: i.document.sample })}</span>` : ""}</p></div>`,
-        actions = `<div class="invoice-actions" role="group" aria-label="Invoice actions">${send ? link("send", "Send") : ""}${payment ? link("payment", "Record payment") : ""}<button type="button" class="secondary" data-print hidden>Print</button>${more}</div>`,
+        actions =
+          send || payment || more
+            ? `<div class="invoice-actions" role="group" aria-label="Invoice actions">${send ? link("send", "Send") : ""}${payment ? link("payment", "Record payment") : ""}${more}</div>`
+            : "",
         panels =
           send || payment || more
             ? `<div class="action-panels">${send}${payment}${refund}${voiding}</div>`
@@ -477,7 +480,7 @@ export function mountSimpleInvoiceRoutes(
         `${adminMenuFor(res, "invoices")}${header}${actions}${whats}${panels}`,
       ).replace(
         '<aside class="invoice-controls">',
-        `${timeline}<script type="module" src="/assets/invoice-print.js"></script><aside class="invoice-controls">`,
+        `${timeline}<aside class="invoice-controls">`,
       );
       return res.send(html);
     });

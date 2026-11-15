@@ -1620,7 +1620,7 @@ it("PAGE854-02 one row of actions opens panels below it holding the unchanged fo
   const unpaid = await adminPage(invoice);
   // The bar is one row of links and buttons; no form sits inside it.
   expect(unpaid).toContain(
-    '<div class="invoice-actions" role="group" aria-label="Invoice actions"><a class="action" href="#send">Send</a><a class="action" href="#payment">Record payment</a><button type="button" class="secondary" data-print hidden>Print</button><details class="action-menu"><summary>More</summary><ul><li><a class="action" href="#void">Void</a></li></ul></details></div>',
+    '<div class="invoice-actions" role="group" aria-label="Invoice actions"><a class="action" href="#send">Send</a><a class="action" href="#payment">Record payment</a><details class="action-menu"><summary>More</summary><ul><li><a class="action" href="#void">Void</a></li></ul></details></div>',
   );
   const bar = unpaid.match(
     /<div class="action-panels">[\s\S]*?<\/section><\/div>/,
@@ -1672,13 +1672,11 @@ it("PAGE854-02 one row of actions opens panels below it holding the unchanged fo
   });
   expect(formsOf(part)).toEqual([SEND_FORM, PAYMENT_FORM, REFUND_FORM]);
 
-  // Void: Print only, and no panels.
+  // Void: no actions and no panels.
   const voided = await adminPage(voidInvoice);
   expect(formsOf(voided)).toEqual([]);
   expect(voided).not.toContain("action-panels");
-  expect(voided).toContain(
-    '<div class="invoice-actions" role="group" aria-label="Invoice actions"><button type="button" class="secondary" data-print hidden>Print</button></div>',
-  );
+  expect(voided).not.toContain("invoice-actions");
 
   // No email address, or no email on this service: no Send panel.
   for (const page of [
@@ -1689,13 +1687,10 @@ it("PAGE854-02 one row of actions opens panels below it holding the unchanged fo
     expect(formsOf(page)).toEqual([PAYMENT_FORM, VOID_FORM]);
   }
 
-  // The print button works only with the page's script; without it, the
-  // printing hint stays.
+  // Printing uses the browser's own command; no page script.
+  expect(unpaid).not.toContain("<script");
   expect(unpaid).toContain(
-    '<script type="module" src="/assets/invoice-print.js"></script>',
-  );
-  expect(unpaid).toContain(
-    "<noscript><p>Use your browser’s Print command to print this invoice or save it as a PDF.</p></noscript>",
+    "<p>Use your browser’s Print command to print this invoice or save it as a PDF.</p>",
   );
 });
 
@@ -1755,7 +1750,6 @@ it("PAGE854-03 What's next names the one usual next step and opens its panel", a
   ).toContain("<p>Voided: Duplicate.</p>");
   for (const gone of ['id="send"', 'id="payment"', 'id="void"'])
     expect(voided).not.toContain(gone);
-  expect(voided).toContain("data-print");
 
   const unconfirmed = await adminPage({ ...invoice, delivery: "unconfirmed" });
   expect(next(unconfirmed)).toContain(
@@ -1873,8 +1867,7 @@ it("PAGE854-05 the student's invoice page is unchanged: no action bar, What's ne
     "whats-next",
     "invoice-timeline",
     "invoice-header",
-    "invoice-print.js",
-    "<noscript>",
+    "<script",
     "<form",
   ])
     expect(member).not.toContain(gone);
