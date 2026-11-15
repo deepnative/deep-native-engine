@@ -3218,3 +3218,9 @@ main > :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
     display: none;
   }
 }
+/* QUEUE854-01: the review queue's Review link sits at the row's end. */
+@media (min-width: 641px) {
+  .review-queue td:last-child {
+    text-align: right;
+  }
+}
