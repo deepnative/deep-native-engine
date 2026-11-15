@@ -396,9 +396,12 @@ it("OFFPUR-02 opens a private printable invoice and original operation without a
   f.service.invoice.mockResolvedValueOnce(
     ready({ ...invoice, delivery: "sent" }),
   );
-  expect((await f.get(`${admin}/${id}`)).text).toContain(
-    "Simulated; no email sent",
+  // #854: the delivery word beside the badge, and the timeline line.
+  const simulated = (await f.get(`${admin}/${id}`)).text;
+  expect(simulated).toContain(
+    '<span class="invoice-delivery">Simulated</span>',
   );
+  expect(simulated).toContain("<li>Delivery simulated; no email sent</li>");
   f.service.invoice.mockResolvedValueOnce({ kind: "not-found" });
   expect((await f.get(`${base}/invoices/${id}`)).status).toBe(404);
   for (const path of [`${base}/operations/${id}`, `${admin}/operations/${id}`])
@@ -528,8 +531,9 @@ it("OFFPUR-02 offers no email action when invoice email is not configured", asyn
   expect(r.status).toBe(200);
   expect(r.text).not.toContain(`action="${admin}/${id}/email"`);
   expect(r.text).not.toContain(">Send invoice email</button>");
+  // #854: What's next says so and opens the payment panel instead.
   expect(r.text).toContain(
-    "Invoice email is not configured on this service, so nothing can be sent from here.",
+    "<p>Invoice email is not set up on this service; the student sees it under Invoices. Record a payment when it arrives.</p>",
   );
   expect(r.text).toContain(">Record offline payment</button>");
 });
@@ -556,8 +560,9 @@ it("NOEMAIL-03 an invoice with no email address offers no send form and says whe
     f.service.invoice.mockResolvedValueOnce(ready({ ...invoice, document }));
     const r = await f.get(`${admin}/${id}`);
     expect(r.status).toBe(200);
+    // #854: What's next says where the student finds it.
     expect(r.text).toContain(
-      "<p>This invoice has no email address, so it is not sent by email. The student can open it under Invoices.</p>",
+      "<p>No email on file; the student sees it under Invoices. Record a payment when it arrives.</p>",
     );
     expect(r.text).not.toContain(`action="${admin}/${id}/email"`);
     expect(r.text).not.toContain("invoice email</button>");
@@ -569,8 +574,8 @@ it("NOEMAIL-03 an invoice with no email address offers no send form and says whe
     ready({ ...invoice, document: { ...doc, recipientEmail: "" } }),
   );
   const unconfigured = (await none.get(`${admin}/${id}`)).text;
-  expect(unconfigured).toContain("Invoice email is not configured");
-  expect(unconfigured).not.toContain("This invoice has no email address");
+  expect(unconfigured).toContain("Invoice email is not set up on this service");
+  expect(unconfigured).not.toContain("No email on file");
   // A posted send the store refuses sends nothing.
   f.service.claimEmail.mockResolvedValueOnce({ kind: "invalid" });
   const refused = await f.post(`${admin}/${id}/email`, { confirm: "send" });
@@ -912,17 +917,23 @@ it("INVOICELIST-01/ADMINNAV-01 the Invoices page leads with a table in words and
 });
 it("AUDIT-01/02/03 shows readable delivery states, month names and button navigation", async () => {
   const f = fixture();
+  // #854: the delivery word beside the badge; Unconfirmed keeps its warning.
   for (const [delivery, text] of [
-    ["not_sent", "Email status: Not sent"],
-    ["sending", "Email status: Sending"],
-    ["unconfirmed", "Email status: Unconfirmed: check the recipient"],
+    ["not_sent", '<span class="invoice-delivery">Not sent</span>'],
+    ["sending", '<span class="invoice-delivery">Sending</span>'],
+    [
+      "unconfirmed",
+      '<span class="invoice-delivery warning">Unconfirmed</span>',
+    ],
   ] as const) {
     f.service.invoice.mockResolvedValueOnce(
       ready({ ...invoice, delivery, document: { ...doc, sample: false } }),
     );
     const page = (await f.get(`/operator/invoices/${id}`)).text;
     expect(page).toContain(text);
-    expect(page).not.toContain(`Email status: ${delivery}`);
+    expect(page).not.toContain(
+      delivery === "not_sent" ? ">not_sent<" : `>${delivery}<`,
+    );
   }
   f.service.invoice.mockResolvedValueOnce(
     ready({
@@ -1129,7 +1140,7 @@ it("WALK-04 offers only the invoice actions the record can still accept", async 
   });
   expect(paid).not.toContain(">Record offline payment</button>");
   expect(paid).not.toContain(">Void unpaid invoice</button>");
-  expect(paid).toContain("Nothing is left to receive on this invoice.");
+  expect(paid).toContain("<p>Paid in full.</p>");
   expect(paid).toContain(">Record offline refund</button>");
 
   const voided = await page({
@@ -1353,4 +1364,346 @@ it("RECIPIENT-01/04/05 the billing recipient and course forms suggest the member
     email: "invented@example.invalid",
     company: "Invented Co",
   });
+});
+
+// #854 Part 2: the administrator's invoice page reads like an invoicing tool.
+const adminPage = async (value: unknown, noSender = false) => {
+  const f = fixture(false, noSender);
+  f.service.invoice.mockResolvedValueOnce(ready(value));
+  return mainHtml((await f.get(`${admin}/${id}`)).text);
+};
+/** Every form on the page, with its one-time operation and CSRF values masked. */
+const formsOf = (html: string) =>
+  [...html.matchAll(/<form[\s\S]*?<\/form>/g)].map((m) =>
+    m[0]
+      .replace(
+        /name="operationId" value="[^"]+"/g,
+        'name="operationId" value="OP"',
+      )
+      .replace(/name="csrf" value="[^"]+"/g, 'name="csrf" value="CSRF"'),
+  );
+const formHead = (action: string) =>
+  `<form method="post" action="${admin}/${id}/${action}"><input type="hidden" name="csrf" value="CSRF"><input type="hidden" name="revision" value="1"><input type="hidden" name="operationId" value="OP">`;
+// The forms exactly as the page offered them before #854.
+const SEND_FORM = `${formHead("email")}<label class="check"><input type="checkbox" name="confirm" value="send" required><span>Simulate delivery only; no email will be sent.</span></label><button>Simulate invoice email</button></form>`;
+const PAYMENT_FORM = `${formHead("payment")}<label>Amount received (CAD)<input name="amount" inputmode="decimal" required></label><label>Received on<input type="date" name="receivedOn" required></label><label>Evidence reference<input name="evidence" maxlength="200" required></label><label class="check"><input type="checkbox" name="confirm" value="received" required><span>I verified these funds were received for this exact invoice.</span></label><button>Record offline payment</button></form>`;
+const VOID_FORM = `${formHead("void")}<label>Reason<input name="reason" maxlength="500" required></label><label class="check"><input type="checkbox" name="confirm" value="void" required><span>Void this unpaid invoice. This does not cancel its course agreement or refund any funds.</span></label><button class="secondary">Void unpaid invoice</button></form>`;
+const REFUND_FORM = `${formHead("refund")}<label>Amount refunded (CAD)<input name="amount" inputmode="decimal" required></label><label>Refunded on<input type="date" name="refundedOn" required></label><label>Evidence reference<input name="evidence" maxlength="200" required></label><label class="check"><input type="checkbox" name="confirm" value="refunded" required><span>I confirm this refund was sent for this exact invoice.</span></label><button>Record offline refund</button></form>`;
+const paidInvoice = {
+  ...invoice,
+  paidCents: 1100,
+  delivery: "sent" as const,
+  document: { ...doc, paidCents: 1100 },
+  payments: [
+    {
+      kind: "receipt",
+      amountCents: 1100,
+      on: "2026-11-02",
+      evidence: "Invented transfer",
+      verification: "manual_unverified",
+    },
+  ],
+};
+const voidInvoice = {
+  ...invoice,
+  voidReason: "Wrong <course> bundle",
+  document: { ...doc, voidReason: "Wrong <course> bundle" },
+};
+
+it("PAGE854-01 the administrator's invoice opens with its number, a payment badge and the delivery word, before the document", async () => {
+  const html = await adminPage(invoice);
+  expect(html).toContain(
+    '<div class="invoice-header"><h1>Invoice DN-invented</h1><p class="invoice-state"><span class="badge badge-unpaid">Unpaid</span> <span class="invoice-delivery">Not sent</span></p></div>',
+  );
+  expect(html.indexOf('class="invoice-header"')).toBeLessThan(
+    html.indexOf('<article class="invoice-document">'),
+  );
+  // One page title: the document's own title steps down a level.
+  expect(html.match(/<h1>/g)).toHaveLength(1);
+  expect(html).toContain('<h2 class="invoice-title">Invoice</h2>');
+  const state = (page: string) =>
+    page.match(/<p class="invoice-state">([\s\S]*?)<\/p>/)![1];
+  for (const [value, expected] of [
+    [
+      { ...invoice, paidCents: 500 },
+      '<span class="badge badge-partly-paid">Partly paid</span> <span class="invoice-delivery">Not sent</span>',
+    ],
+    [
+      paidInvoice,
+      '<span class="badge badge-paid">Paid</span> <span class="invoice-delivery">Simulated</span>',
+    ],
+    [
+      { ...paidInvoice, document: { ...paidInvoice.document, sample: false } },
+      '<span class="badge badge-paid">Paid</span> <span class="invoice-delivery">Sent</span>',
+    ],
+    [
+      { ...paidInvoice, refundedCents: 1100 },
+      '<span class="badge badge-refunded">Refunded</span> <span class="invoice-delivery">Simulated</span>',
+    ],
+    [
+      { ...paidInvoice, refundedCents: 100 },
+      '<span class="badge badge-partly-refunded">Partly refunded</span> <span class="invoice-delivery">Simulated</span>',
+    ],
+    [
+      { ...invoice, delivery: "sending" },
+      '<span class="badge badge-unpaid">Unpaid</span> <span class="invoice-delivery">Sending</span>',
+    ],
+    [
+      { ...invoice, delivery: "unconfirmed" },
+      '<span class="badge badge-unpaid">Unpaid</span> <span class="invoice-delivery warning">Unconfirmed</span>',
+    ],
+    [voidInvoice, '<span class="badge badge-void">Void</span>'],
+  ] as const)
+    expect(state(await adminPage(value))).toBe(expected);
+});
+
+it("PAGE854-02 one action bar holds the unchanged forms as panels, each only where the page offered it before", async () => {
+  const unpaid = await adminPage(invoice);
+  const bar = unpaid.match(
+    /<div class="invoice-actions"[\s\S]*?<\/details><\/div>/,
+  )![0];
+  expect(bar).toMatch(
+    /^<div class="invoice-actions" role="group" aria-label="Invoice actions"><details id="send" class="invoice-panel" open><summary>Send<\/summary>[\s\S]*<\/details><details id="payment" class="invoice-panel"><summary>Record payment<\/summary>[\s\S]*<\/details><button type="button" class="secondary" data-print hidden>Print<\/button><details class="invoice-panel more"><summary>More<\/summary><section id="void" aria-labelledby="void-title"><h2 id="void-title">Void this invoice<\/h2>/,
+  );
+  expect(bar).toContain(
+    "<p>Balance still due: CAD 11.00. A receipt can't be more than this.</p>",
+  );
+  expect(formsOf(bar)).toEqual([SEND_FORM, PAYMENT_FORM, VOID_FORM]);
+  // Every form is in the action bar; none is left below the document.
+  expect(formsOf(unpaid)).toEqual([SEND_FORM, PAYMENT_FORM, VOID_FORM]);
+  for (const gone of [
+    "<h2>Send the invoice</h2>",
+    "<h2>Record offline funds received</h2>",
+    "<h2>Correct an unpaid invoice</h2>",
+    "<h2>Record an offline refund</h2>",
+    '<section class="invoice-controls">',
+  ])
+    expect(unpaid).not.toContain(gone);
+
+  // Paid with funds left to refund: no payment or void, refund under More.
+  const paid = await adminPage({ ...paidInvoice, refundedCents: 100 });
+  expect(formsOf(paid)).toEqual([SEND_FORM, REFUND_FORM]);
+  expect(paid).not.toContain('id="payment"');
+  expect(paid).not.toContain('id="void"');
+  expect(paid).toContain(
+    '<details class="invoice-panel more"><summary>More</summary><section id="refund" aria-labelledby="refund-title"><h2 id="refund-title">Record a refund</h2><p>Use this after the money has actually gone back.',
+  );
+
+  // Fully refunded: nothing under More, so no More.
+  const refunded = await adminPage({ ...paidInvoice, refundedCents: 1100 });
+  expect(formsOf(refunded)).toEqual([SEND_FORM]);
+  expect(refunded).not.toContain("<summary>More</summary>");
+
+  // Partly paid: payment and refund, no void.
+  const part = await adminPage({
+    ...invoice,
+    paidCents: 500,
+    document: { ...doc, paidCents: 500 },
+  });
+  expect(formsOf(part)).toEqual([SEND_FORM, PAYMENT_FORM, REFUND_FORM]);
+
+  // Void: Print only.
+  const voided = await adminPage(voidInvoice);
+  expect(formsOf(voided)).toEqual([]);
+  expect(voided).toContain(
+    '<div class="invoice-actions" role="group" aria-label="Invoice actions"><button type="button" class="secondary" data-print hidden>Print</button></div>',
+  );
+
+  // No email address, or no email on this service: no Send panel.
+  for (const page of [
+    await adminPage({ ...invoice, document: { ...doc, recipientEmail: "" } }),
+    await adminPage(invoice, true),
+  ]) {
+    expect(page).not.toContain('id="send"');
+    expect(formsOf(page)).toEqual([PAYMENT_FORM, VOID_FORM]);
+  }
+
+  // The print button works only with the page's script; without it, the
+  // printing hint stays.
+  expect(unpaid).toContain(
+    '<script type="module" src="/assets/invoice-print.js"></script>',
+  );
+  expect(unpaid).toContain(
+    "<noscript><p>Use your browser’s Print command to print this invoice or save it as a PDF.</p></noscript>",
+  );
+});
+
+it("PAGE854-03 What's next names the one usual next step and opens its panel", async () => {
+  const next = (page: string) =>
+    page.match(/<section class="whats-next"[\s\S]*?<\/section>/)![0];
+  const open = (page: string) =>
+    [...page.matchAll(/<details id="(\w+)"[^>]* open>/g)].map((m) => m[1]);
+
+  const unsent = await adminPage(invoice);
+  expect(next(unsent)).toBe(
+    '<section class="whats-next" aria-labelledby="whats-next"><h2 id="whats-next">What’s next</h2><p>Not sent yet. Send it to 陳.</p><a class="button" href="#send">Send</a></section>',
+  );
+  expect(open(unsent)).toEqual(["send"]);
+  // What's next sits between the action bar and the document.
+  expect(unsent.indexOf('class="invoice-actions"')).toBeLessThan(
+    unsent.indexOf('class="whats-next"'),
+  );
+  expect(unsent.indexOf('class="whats-next"')).toBeLessThan(
+    unsent.indexOf('<article class="invoice-document">'),
+  );
+
+  const sent = await adminPage({ ...invoice, delivery: "sent" });
+  expect(next(sent)).toContain(
+    '<p>Record a payment when it arrives.</p><a class="button" href="#payment">Record payment</a>',
+  );
+  expect(open(sent)).toEqual(["payment"]);
+
+  const paid = await adminPage(paidInvoice);
+  expect(next(paid)).toContain("<p>Paid in full on 2 Nov 2026.</p></section>");
+  expect(open(paid)).toEqual([]);
+  // Paid without a recorded receipt date, and refunded.
+  expect(next(await adminPage({ ...paidInvoice, payments: [] }))).toContain(
+    "<p>Paid in full.</p>",
+  );
+  expect(
+    next(await adminPage({ ...paidInvoice, refundedCents: 1100 })),
+  ).toContain("<p>Refunded in full; nothing is due.</p>");
+  expect(
+    next(await adminPage({ ...paidInvoice, refundedCents: 100 })),
+  ).toContain("<p>Partly refunded; nothing is due.</p>");
+
+  const voided = await adminPage(voidInvoice);
+  expect(next(voided)).toContain(
+    "<p>Voided: Wrong &lt;course&gt; bundle.</p></section>",
+  );
+  expect(
+    next(
+      await adminPage({
+        ...voidInvoice,
+        voidReason: "Duplicate.",
+      }),
+    ),
+  ).toContain("<p>Voided: Duplicate.</p>");
+  for (const gone of ['id="send"', 'id="payment"', 'id="void"'])
+    expect(voided).not.toContain(gone);
+  expect(voided).toContain("data-print");
+
+  const unconfirmed = await adminPage({ ...invoice, delivery: "unconfirmed" });
+  expect(next(unconfirmed)).toContain(
+    "<p>Delivery unconfirmed: check the recipient&#39;s inbox before sending again.</p></section>",
+  );
+  expect(open(unconfirmed)).toEqual([]);
+  expect(unconfirmed).toContain('<details id="send" class="invoice-panel">');
+
+  const noEmail = await adminPage({
+    ...invoice,
+    document: { ...doc, recipientEmail: "" },
+  });
+  expect(next(noEmail)).toContain(
+    '<p>No email on file; the student sees it under Invoices. Record a payment when it arrives.</p><a class="button" href="#payment">Record payment</a>',
+  );
+  expect(open(noEmail)).toEqual(["payment"]);
+  const noSender = await adminPage(invoice, true);
+  expect(next(noSender)).toContain(
+    "<p>Invoice email is not set up on this service; the student sees it under Invoices. Record a payment when it arrives.</p>",
+  );
+  expect(open(noSender)).toEqual(["payment"]);
+});
+
+it("PAGE854-04 the timeline lists what happened to the invoice", async () => {
+  const timeline = (page: string) =>
+    page.match(/<section class="invoice-timeline"[\s\S]*?<\/section>/)![0];
+  expect(timeline(await adminPage(invoice))).toBe(
+    '<section class="invoice-timeline" aria-labelledby="invoice-timeline"><h2 id="invoice-timeline">Timeline</h2><ol><li>Issued 31 Oct 2026</li><li>Not sent</li></ol></section>',
+  );
+  const events = timeline(
+    await adminPage({
+      ...paidInvoice,
+      refundedCents: 100,
+      payments: [
+        ...paidInvoice.payments,
+        {
+          kind: "refund",
+          amountCents: 100,
+          on: "2026-11-03",
+          evidence: null,
+          verification: "manual_unverified",
+        },
+        {
+          kind: "receipt",
+          amountCents: 200,
+          on: "2026-11-04",
+          evidence: null,
+          verification: "signed_test_event",
+        },
+        {
+          kind: "refund",
+          amountCents: 200,
+          on: "2026-11-04",
+          evidence: null,
+          verification: "signed_test_event",
+        },
+        {
+          kind: "failure",
+          amountCents: 300,
+          on: "2026-11-05",
+          evidence: null,
+          verification: "signed_test_event",
+        },
+        {
+          kind: "held",
+          amountCents: 400,
+          on: "2026-11-05",
+          evidence: null,
+          verification: "signed_test_event",
+        },
+      ],
+    }),
+  );
+  expect(events).toContain(
+    "<ol><li>Issued 31 Oct 2026</li><li>Delivery simulated; no email sent</li><li>2 Nov 2026 · Payment received · CAD 11.00</li><li>3 Nov 2026 · Refund · CAD 1.00</li><li>4 Nov 2026 · Test receipt · CAD 2.00</li><li>4 Nov 2026 · Test refund · CAD 2.00</li><li>5 Nov 2026 · Test payment failed · CAD 3.00</li><li>5 Nov 2026 · Test event not applied · CAD 4.00</li></ol>",
+  );
+  for (const [delivery, text] of [
+    ["sending", "Sending"],
+    ["unconfirmed", "Delivery unconfirmed"],
+  ] as const)
+    expect(timeline(await adminPage({ ...invoice, delivery }))).toContain(
+      `<li>${text}</li>`,
+    );
+  expect(
+    timeline(
+      await adminPage({
+        ...paidInvoice,
+        document: { ...paidInvoice.document, sample: false },
+      }),
+    ),
+  ).toContain("<li>Sent by email</li>");
+  expect(timeline(await adminPage(voidInvoice))).toContain(
+    "<li>Issued 31 Oct 2026</li><li>Not sent</li><li>Voided: Wrong &lt;course&gt; bundle</li></ol>",
+  );
+  // An issue date that is not a calendar day is shown as written.
+  expect(
+    timeline(
+      await adminPage({ ...invoice, document: { ...doc, issuedOn: "<soon>" } }),
+    ),
+  ).toContain("<li>Issued &lt;soon&gt;</li>");
+  // The timeline follows the document.
+  const page = await adminPage(invoice);
+  expect(page.indexOf("</article>")).toBeLessThan(
+    page.indexOf('class="invoice-timeline"'),
+  );
+});
+
+it("PAGE854-05 the student's invoice page is unchanged: no action bar, What's next, timeline or print script", async () => {
+  const f = fixture();
+  const member = mainHtml((await f.get(`${base}/invoices/${id}`)).text);
+  for (const gone of [
+    "invoice-actions",
+    "whats-next",
+    "invoice-timeline",
+    "invoice-header",
+    "invoice-print.js",
+    "<noscript>",
+    "<form",
+  ])
+    expect(member).not.toContain(gone);
+  expect(member).toContain("<h1>Invoice</h1>");
+  expect(member).toContain(
+    '<aside class="invoice-controls"><p>Use your browser’s Print command to print this invoice or save it as a PDF.</p><p class="back-link">',
+  );
 });

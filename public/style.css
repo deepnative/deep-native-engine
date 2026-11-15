@@ -3015,3 +3015,206 @@ main > .admin-menu + .invoice-document {
     margin-top: -6px;
   }
 }
+/* #854 page */
+/* PAGE854-01..04: the administrator's invoice reads like an invoicing tool:
+   the number and status first, one action bar whose actions open as panels,
+   What's next, the document, then a short timeline. Status is always text;
+   colour only reinforces it. */
+main > :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
+  max-width: 760px;
+}
+.invoice-header {
+  margin-top: 8px;
+}
+.invoice-header h1 {
+  margin: 0 0 8px;
+  font-size: clamp(30px, 4vw, 40px);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+.invoice-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 2px 12px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.badge-unpaid {
+  background: #fff4e3;
+  color: #7a4100;
+}
+.badge-partly-paid {
+  background: #eaf0ff;
+  color: #1d3f9e;
+}
+.badge-paid {
+  background: #e9f5ef;
+  color: #14573f;
+}
+.badge-void {
+  background: #eef0f4;
+  color: #3d4a5c;
+}
+.badge-refunded,
+.badge-partly-refunded {
+  background: #f3eefc;
+  color: #55308f;
+}
+.invoice-delivery {
+  color: var(--muted);
+  font-size: 15px;
+}
+.invoice-delivery.warning {
+  color: #8a3b00;
+  font-weight: 700;
+}
+.invoice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 24px;
+}
+.invoice-panel > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 19px;
+  border: 1px solid #9caecf;
+  border-radius: 9px;
+  background: #fff;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 650;
+  list-style: none;
+  cursor: pointer;
+}
+.invoice-panel > summary::-webkit-details-marker {
+  display: none;
+}
+.invoice-panel > summary::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin-left: 10px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+.invoice-panel[open] > summary::after {
+  transform: translateY(2px) rotate(-135deg);
+}
+.invoice-panel > summary:hover {
+  background: #eef3ff;
+}
+.invoice-panel[open] {
+  flex: 1 1 100%;
+  min-width: 0;
+  padding: 0 0 20px;
+  border-bottom: 1px solid var(--line);
+}
+.invoice-panel[open] > summary {
+  margin-bottom: 12px;
+  background: #eef3ff;
+}
+.invoice-panel form {
+  max-width: 620px;
+}
+.invoice-panel input:not([type="checkbox"]):not([type="hidden"]) {
+  width: 100%;
+  min-height: 44px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  caret-color: var(--accent);
+}
+.invoice-panel.more > section + section {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.invoice-panel.more h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+}
+.invoice-panel {
+  scroll-margin-top: 24px;
+}
+.whats-next {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 16px;
+  margin-top: 24px;
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 9px;
+  background: var(--card);
+}
+.whats-next h2 {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 15px;
+  color: var(--muted);
+}
+.whats-next p {
+  flex: 1 1 260px;
+  margin: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.invoice-document > .invoice-title {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.15;
+}
+.invoice-timeline {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.invoice-timeline h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.invoice-timeline ol {
+  margin: 0;
+  padding-left: 22px;
+}
+.invoice-timeline li {
+  padding-block: 4px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .invoice-actions > :is(details:not([open]), button) {
+    flex: 1 1 calc(50% - 5px);
+  }
+  .invoice-actions > details:not([open]) > summary,
+  .invoice-actions > button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+@media print {
+  body:has(.invoice-document)
+    :is(.invoice-header, .invoice-actions, .whats-next, .invoice-timeline) {
+    display: none;
+  }
+}

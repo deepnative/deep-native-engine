@@ -252,7 +252,7 @@ it("MANPAY-02 records nothing when evidence is missing, oversized or looks like 
 it("MANPAY-04 keeps a refund separate: payment stays, status changes, balance and agreement do not", async () => {
   const i = await paid();
   const form = await get(`/operator/invoices/${i.invoiceId}`, admin);
-  expect(form.text).toContain("Record an offline refund");
+  expect(form.text).toContain('<h2 id="refund-title">Record a refund</h2>');
   const partly = await post(`/operator/invoices/${i.invoiceId}/refund`, admin, {
     revision: "2",
     operationId: randomUUID(),
@@ -297,7 +297,7 @@ it("MANPAY-04 keeps a refund separate: payment stays, status changes, balance an
     "refund",
   ]);
   const staffPage = await get(`/operator/invoices/${i.invoiceId}`, admin);
-  expect(staffPage.text).not.toContain("Record an offline refund");
+  expect(staffPage.text).not.toContain('id="refund"');
 });
 
 it("MANPAY-05 refuses over-refunds, bad dates and stale revisions and applies one operation exactly once", async () => {

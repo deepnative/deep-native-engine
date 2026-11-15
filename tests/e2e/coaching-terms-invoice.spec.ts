@@ -18,6 +18,7 @@ import { authorizationStore } from "../support/administrator-fixture.ts";
 import { staffEntryStore } from "../../src/staff-entry.ts";
 import { listenLoopback, closeLoopback } from "../support/loopback-server.ts";
 import { dropAttendanceBrowserDatabase } from "../support/attendance-browser-database.ts";
+import { openInvoicePanel } from "../support/invoice-panels.ts";
 
 // #318 under the owner's 9 Nov 2026 decisions. Synthetic staff credentials stay
 // out of traces; every person, amount and reference is invented.
@@ -199,6 +200,7 @@ test("[L331] TERMSINV318-01/03/05 an administrator invoices a student's coaching
     ).toBeVisible();
 
     // 6. The administrator records the offline payment; the student sees it paid.
+    await openInvoicePanel(a, "payment");
     await a.getByLabel("Amount received (CAD)").fill("1356.00");
     await a
       .getByLabel("Received on", { exact: true })

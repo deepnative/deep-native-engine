@@ -6,6 +6,7 @@ import {
   TEST_PROVIDER_PATH,
   TEST_PROVIDER_SIGNATURE,
 } from "../../src/test-provider-events.ts";
+import { openInvoicePanel } from "../support/invoice-panels.ts";
 // Staff credentials remain outside browser traces and captures.
 test.use({ trace: "off" });
 type Fixture = Awaited<ReturnType<typeof reviewedContentFixture>>;
@@ -104,7 +105,38 @@ test("[L266] registered student accepts two courses on one printable individual 
     await expect(member.locator(".invoice-document")).toBeVisible();
     await member.emulateMedia({ media: "screen" });
     await admin.page.goto(f.origin + "/operator/invoices/" + invoiceId);
+    // #854 PAGE854-01..04: number and status first, What's next opens Send.
+    const staff = admin.page;
+    await expect(staff.getByRole("heading", { level: 1 })).toHaveText(
+      /^Invoice DN-/,
+    );
+    await expect(staff.locator(".invoice-state .badge")).toHaveText("Unpaid");
+    await expect(staff.locator(".invoice-delivery")).toHaveText("Not sent");
+    await expect(staff.locator(".whats-next")).toContainText(
+      "Not sent yet. Send it to 陳 · Invented student.",
+    );
+    await expect(staff.locator("details#send")).toHaveAttribute("open", "");
+    await expect(staff.locator("details#payment")).not.toHaveAttribute(
+      "open",
+      "",
+    );
+    await expect(staff.getByRole("button", { name: "Print" })).toBeVisible();
+    await staff
+      .getByRole("checkbox", {
+        name: "Simulate delivery only; no email will be sent.",
+      })
+      .check();
+    await staff.getByRole("button", { name: "Simulate invoice email" }).click();
+    await expect(staff.locator(".invoice-delivery")).toHaveText("Simulated");
+    await expect(staff.locator(".whats-next")).toContainText(
+      "Record a payment when it arrives.",
+    );
+    await expect(staff.locator("details#payment")).toHaveAttribute("open", "");
+    await expect(staff.locator(".invoice-timeline")).toContainText(
+      "Delivery simulated; no email sent",
+    );
     for (const amount of ["10.00", "20.00"]) {
+      await openInvoicePanel(admin.page, "payment");
       await admin.page.getByLabel("Amount received (CAD)").fill(amount);
       await admin.page.getByLabel("Received on", { exact: true }).fill(date);
       await admin.page
@@ -128,6 +160,31 @@ test("[L266] registered student accepts two courses on one printable individual 
         amount === "10.00" ? "CAD 10.00" : "CAD 30.00",
       );
     }
+    await expect(staff.locator(".invoice-state .badge")).toHaveText("Paid");
+    await expect(staff.locator(".whats-next")).toContainText(
+      "Paid in full on ",
+    );
+    await expect(staff.locator(".invoice-timeline li")).toHaveCount(4);
+    await expect(staff.locator(".invoice-timeline")).toContainText(
+      "Payment received · CAD 20.00",
+    );
+    expect(
+      await staff.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    // Print shows the document alone.
+    await staff.emulateMedia({ media: "print" });
+    for (const hidden of [
+      ".invoice-header",
+      ".invoice-actions",
+      ".whats-next",
+      ".invoice-timeline",
+      ".admin-menu",
+    ])
+      await expect(staff.locator(hidden)).toBeHidden();
+    await expect(staff.locator(".invoice-document")).toBeVisible();
+    await staff.emulateMedia({ media: "screen" });
     await member.screenshot({
       path: info.outputPath("individual-invoice.png"),
       fullPage: true,
@@ -204,6 +261,7 @@ test("[L268] private invoices deny outsiders and unpaid corrections retain the o
     await member.goto(f.origin + "/operator/invoices/" + invoiceId);
     await expect(member.locator(".invoice-document")).toHaveCount(0);
     await admin.page.goto(f.origin + "/operator/invoices/" + invoiceId);
+    await openInvoicePanel(admin.page, "void");
     await admin.page
       .getByLabel("Reason", { exact: true })
       .fill("Wrong course bundle");
@@ -240,6 +298,7 @@ test("[L304] staff records offline funds and refunds that the member sees as man
     await expect(
       staffPage.getByRole("button", { name: "Record offline refund" }),
     ).toHaveCount(0);
+    await openInvoicePanel(staffPage, "payment");
     await staffPage.getByLabel("Amount received (CAD)").fill("30.00");
     await staffPage.getByLabel("Received on", { exact: true }).fill(date);
     await staffPage
@@ -271,6 +330,7 @@ test("[L304] staff records offline funds and refunds that the member sees as man
       ["10.00", "Partly refunded"],
       ["20.00", "Refunded"],
     ] as const) {
+      await openInvoicePanel(staffPage, "refund");
       await staffPage.getByLabel("Amount refunded (CAD)").fill(amount);
       await staffPage.getByLabel("Refunded on").fill(date);
       await staffPage
@@ -346,6 +406,7 @@ test("[L308] administrator reconciles an invoice against recorded cash and a rev
     const invoiceId = await accept(member);
     const staffPage = admin.page;
     await staffPage.goto(f.origin + "/operator/invoices/" + invoiceId);
+    await openInvoicePanel(staffPage, "payment");
     await staffPage.getByLabel("Amount received (CAD)").fill("20.00");
     await staffPage.getByLabel("Received on", { exact: true }).fill(date);
     await staffPage
@@ -358,6 +419,7 @@ test("[L308] administrator reconciles an invoice against recorded cash and a rev
     await staffPage
       .getByRole("button", { name: "Record offline payment" })
       .click();
+    await openInvoicePanel(staffPage, "refund");
     await staffPage.getByLabel("Amount refunded (CAD)").fill("5.00");
     await staffPage.getByLabel("Refunded on").fill(date);
     await staffPage

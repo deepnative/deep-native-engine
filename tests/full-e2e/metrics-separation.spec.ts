@@ -9,6 +9,7 @@ import {
 import { staffTrace } from "../support/staff-trace.ts";
 import { randomBytes } from "node:crypto";
 import { store } from "../../src/store.ts";
+import { openInvoicePanel } from "../support/invoice-panels.ts";
 
 // Staff measures and their demo separation (ECO-08-A/B, BUILD-09-A). Each case
 // runs on its own database. The main listener issues sample (demo) course
@@ -68,6 +69,7 @@ async function recordPayment(
   date: string,
 ) {
   await admin.goto(origin + "/operator/invoices/" + invoiceId);
+  await openInvoicePanel(admin, "payment");
   await admin.getByLabel("Amount received (CAD)").fill(amount);
   await admin.getByLabel("Received on", { exact: true }).fill(date);
   await admin

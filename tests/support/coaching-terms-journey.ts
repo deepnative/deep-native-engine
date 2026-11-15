@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { expect, type Page } from "@playwright/test";
 import type { Pool } from "pg";
+import { openInvoicePanel } from "./invoice-panels.ts";
 
 // Shared steps for the full-MVP per-student coaching cases (the owner's 9 and
 // 10 November 2026 decisions): an administrator saves one student's price,
@@ -358,6 +359,7 @@ export async function recordOfflinePayment(
   amount: string,
 ) {
   await admin.goto(`${origin}/operator/invoices/${invoiceId}`);
+  await openInvoicePanel(admin, "payment");
   const form = admin.locator('form[action$="/payment"]');
   await form.getByLabel("Amount received (CAD)").fill(amount);
   await form
@@ -381,6 +383,7 @@ export async function recordOfflineRefund(
   amount: string,
 ) {
   await admin.goto(`${origin}/operator/invoices/${invoiceId}`);
+  await openInvoicePanel(admin, "refund");
   const form = admin.locator('form[action$="/refund"]');
   await form.getByLabel("Amount refunded (CAD)").fill(amount);
   await form

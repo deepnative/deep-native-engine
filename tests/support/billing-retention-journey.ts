@@ -6,6 +6,7 @@ import {
   prepareBundle,
   utcToday,
 } from "./course-bundle-journey.ts";
+import { openInvoicePanel } from "./invoice-panels.ts";
 
 // #12 D08 (owner, 10 Nov 2026): issued invoices and their payment records are
 // kept six years after deletion under CRA rules; backups expire in 30 days.
@@ -57,6 +58,7 @@ export async function issuedInvoiceWithPayment(
   await member.goto(realOrigin + "/account/purchases");
   const invoiceId = await acceptBundle(member, "one_time");
   await admin.goto(realOrigin + "/operator/invoices/" + invoiceId);
+  await openInvoicePanel(admin, "payment");
   await admin.getByLabel("Amount received (CAD)").fill("40.00");
   await admin
     .getByLabel("Received on", { exact: true })
