@@ -19,6 +19,7 @@ const token = "a".repeat(64),
   path = "/operator/invoice-reconciliation",
   fact: InvoiceFact = {
     id: "00000000-0000-4000-8000-000000000001",
+    number: "DN-00000000-0000-4000-8000-000000000001",
     sample: true,
     linked: true,
     voided: false,

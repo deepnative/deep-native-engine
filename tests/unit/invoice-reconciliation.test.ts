@@ -29,6 +29,7 @@ const asOf = new Date("2026-11-06T12:00:00Z"),
   };
 const fact = (change: Partial<InvoiceFact> = {}): InvoiceFact => ({
   id: "00000000-0000-4000-8000-000000000001",
+  number: "DN-00000000-0000-4000-8000-000000000001",
   sample: true,
   linked: true,
   voided: false,
@@ -325,6 +326,7 @@ it.each([
 
 const factRow = {
   id: "00000000-0000-4000-8000-000000000001",
+  number: "DN-00000000-0000-4000-8000-000000000001",
   sample: true,
   linked: true,
   voided: false,
@@ -488,4 +490,45 @@ it("RECON-12 a failed connection or rollback shows no figures", async () => {
     kind: "unavailable",
   });
   expect(release.mock.calls[0]?.[0]).toBeInstanceOf(Error);
+});
+
+it("TERMS856-50 a flagged invoice shows its INV-/SAMPLE- number, and an older one keeps the short DN reference", async () => {
+  const id = (n: number) =>
+    `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const snapshot = reconcileInvoices(
+    [
+      fact({ id: id(1), voided: true, number: "INV-0042" }),
+      fact({ id: id(2), voided: true, number: "SAMPLE-0007" }),
+      fact({ id: id(3), voided: true, number: `DN-${id(3)}` }),
+      fact({ id: id(4), voided: true, number: "INVOICE-<x>" }),
+    ],
+    manual,
+    asOf,
+  );
+  expect(snapshot.flagged.map((row) => row.number)).toEqual([
+    "INV-0042",
+    "SAMPLE-0007",
+    `DN-${id(3)}`,
+    "INVOICE-<x>",
+  ]);
+  const html = invoiceReconciliationPage(snapshot);
+  for (const [n, shown] of [
+    [1, "INV-0042"],
+    [2, "SAMPLE-0007"],
+    [3, "DN-00000000"],
+    [4, "DN-00000000"],
+  ] as const)
+    expect(html).toContain(
+      `<a href="/operator/invoices/${id(n)}">${shown}</a>`,
+    );
+  // The store reads the printed number from the issued document.
+  const f = pool(
+    respond({ facts: [{ ...factRow, voided: true, number: "INV-0042" }] }),
+  );
+  const result = await invoiceReconciliationStore(f.fake).snapshot(token);
+  if (result.kind !== "ready") throw Error("Expected snapshot");
+  expect(result.value.flagged[0]!.number).toBe("INV-0042");
+  expect(
+    f.queries.find((sql) => sql.includes("FROM simple_invoices i\n")),
+  ).toContain(`COALESCE(i.document->>'number','') AS number`);
 });

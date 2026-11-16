@@ -24,6 +24,8 @@ export type InvoiceFlag =
 /** One retained invoice with its events, compared before any totals exist. */
 export interface InvoiceFact {
   id: string;
+  /** #856: the printed number, or "" when the document has none. */
+  number: string;
   sample: boolean;
   linked: boolean;
   voided: boolean;
@@ -75,6 +77,7 @@ export interface InvoiceCashGroup {
 }
 export interface FlaggedInvoice {
   id: string;
+  number: string;
   group: InvoiceGroupName;
   gapCents: number;
   flags: InvoiceFlag[];
@@ -232,6 +235,7 @@ export function reconcileInvoices(
   const flagged = facts
     .map((fact) => ({
       id: fact.id,
+      number: fact.number,
       group: (fact.sample ? "sample" : "configured") as InvoiceGroupName,
       gapCents: invoiceGap(fact),
       flags: invoiceFlags(fact),
@@ -257,7 +261,7 @@ const digits = (expression: string) =>
   `CASE WHEN ${expression} ~ '^[0-9]{1,15}$' THEN (${expression})::bigint ELSE -1 END`;
 // shortcut: Every retained invoice is read and compared here; move the totals
 // into SQL before retained invoices reach the tens of thousands.
-const factsSql = `SELECT i.id,i.sample,i.owner_id IS NOT NULL AS linked,i.voided_at IS NOT NULL AS voided,
+const factsSql = `SELECT i.id,COALESCE(i.document->>'number','') AS number,i.sample,i.owner_id IS NOT NULL AS linked,i.voided_at IS NOT NULL AS voided,
    i.total_cents::text AS "totalCents",i.paid_cents::text AS "paidCents",i.refunded_cents::text AS "refundedCents",
    (d.lines+${digits("i.document->>'taxCents'")})::text AS "documentTotalCents",
    COALESCE(i.document->>'sample','')='true' AS "documentSample",
@@ -322,6 +326,7 @@ const whole = (value: unknown) => {
 };
 const decodeFact = (row: Record<string, unknown>): InvoiceFact => ({
   id: String(row.id),
+  number: String(row.number),
   sample: row.sample === true,
   linked: row.linked === true,
   voided: row.voided === true,

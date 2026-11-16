@@ -215,6 +215,14 @@ function aiRequestSection(row: AiRequestSummary) {
     ],
   ])}</section>`;
 }
+/**
+ * #856: an invoice numbered INV-/SAMPLE- is listed by that number; an older
+ * one keeps its short DN reference.
+ */
+const listNumber = (row: { id: string; number: string }) =>
+  /^(INV|SAMPLE)-\d{4,}$/.test(row.number)
+    ? row.number
+    : `DN-${row.id.slice(0, 8)}`;
 export function invoiceReconciliationPage(
   snapshot: InvoiceReconciliationSnapshot,
   /** MENUALL-01 (#850): the administrator menu replaces the button row. */
@@ -225,7 +233,7 @@ export function invoiceReconciliationPage(
     ? `<div class="table-scroll" role="region" aria-label="Flagged invoices" tabindex="0"><table><caption>Flagged invoices, mismatches first</caption><thead><tr><th scope="col">Invoice</th><th scope="col">Group</th><th scope="col">Flags</th><th scope="col">Gap</th></tr></thead><tbody>${flagged
         .map(
           (row) =>
-            `<tr data-flagged-invoice="${escape(row.id)}"><td><a href="/operator/invoices/${escape(row.id)}">DN-${escape(row.id.slice(0, 8))}</a></td><td>${row.group === "sample" ? "Sample" : "Not sample"}</td><td>${row.flags.map((flag) => flagText[flag]).join("<br>")}</td><td>${money(row.gapCents)}</td></tr>`,
+            `<tr data-flagged-invoice="${escape(row.id)}"><td><a href="/operator/invoices/${escape(row.id)}">${escape(listNumber(row))}</a></td><td>${row.group === "sample" ? "Sample" : "Not sample"}</td><td>${row.flags.map((flag) => flagText[flag]).join("<br>")}</td><td>${money(row.gapCents)}</td></tr>`,
         )
         .join(
           "",
