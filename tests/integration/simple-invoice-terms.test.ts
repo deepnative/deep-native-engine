@@ -268,6 +268,19 @@ it("TERMS856-05 retried operationId returns the same number; counter unchanged",
   ).toBe(1);
 });
 
+it("TERMS856-09 a retry without the terms field matches the same issue at Net 15", async () => {
+  const m = await submitted(),
+    input = issueInput(m);
+  const first = ready(
+    await samples.issueCoaching(admin, { ...input, terms: "net_15" }),
+  );
+  const { terms: _omitted, ...plain } = { ...input, terms: undefined };
+  expect(ready(await samples.issueCoaching(admin, plain))).toEqual(first);
+  expect(
+    (await samples.issueCoaching(admin, { ...input, terms: "net_30" })).kind,
+  ).toBe("conflict");
+});
+
 it("TERMS856-06 failed issue leaves the counter unchanged", async () => {
   const start = await counter("sample");
   const m = await submitted();

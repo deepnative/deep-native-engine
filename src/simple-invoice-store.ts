@@ -306,6 +306,14 @@ export function shiftMonth(month: string, by: number) {
   d.setUTCMonth(d.getUTCMonth() + by);
   return d.toISOString().slice(0, 7);
 }
+/** #856: a form without a terms field is the same request as Net 15, so a
+ * retry from either replays the same invoice. */
+function withoutDefaultTerms<T extends { terms?: PaymentTerms }>(input: T) {
+  return input.terms === DEFAULT_PAYMENT_TERMS
+    ? { ...input, terms: undefined }
+    : input;
+}
+
 export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
   async function run<T>(
     token: string,
@@ -1405,7 +1413,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         return fail("invalid");
       return run(token, true, async (tx, actor) => {
         await owner(tx, input.ownerId, true);
-        const digest = invoiceDigest({ action: "coaching-issue", input }),
+        const digest = invoiceDigest({
+            action: "coaching-issue",
+            input: withoutDefaultTerms(input),
+          }),
           previous = await replay<{ invoiceId: string }>(
             tx,
             actor,
@@ -1475,7 +1486,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         return fail("invalid");
       return run(token, true, async (tx, actor) => {
         await owner(tx, input.ownerId, true);
-        const digest = invoiceDigest({ action: "coaching-issue-draft", input }),
+        const digest = invoiceDigest({
+            action: "coaching-issue-draft",
+            input: withoutDefaultTerms(input),
+          }),
           previous = await replay<{ invoiceId: string }>(
             tx,
             actor,
@@ -1616,7 +1630,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         return fail("invalid");
       return run(token, true, async (tx, actor) => {
         await owner(tx, input.ownerId, true);
-        const digest = invoiceDigest({ action: "terms-invoice", input }),
+        const digest = invoiceDigest({
+            action: "terms-invoice",
+            input: withoutDefaultTerms(input),
+          }),
           previous = await replay<{ invoiceId: string }>(
             tx,
             actor,
