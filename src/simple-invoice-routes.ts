@@ -117,6 +117,11 @@ export function deliveryLabel(i: { delivery: string; sample?: boolean }) {
     : DELIVERY[i.delivery as keyof typeof DELIVERY];
 }
 const cad = (cents: number) => `CAD ${(cents / 100).toFixed(2)}`;
+const badge = (word: string) =>
+  `<span class="badge badge-${word.toLowerCase().replace(" ", "-")}">${word}</span>`;
+/** #856: "1 day overdue", "12 days overdue". */
+const daysOverdue = (days: number) =>
+  `${days} ${days === 1 ? "day" : "days"} overdue`;
 /** INVOICELIST-01/#854: one issued invoice as a row an administrator can scan. */
 function invoiceRow(i: AdminInvoiceRow) {
   const total = Number(i.totalCents),
@@ -127,16 +132,21 @@ function invoiceRow(i: AdminInvoiceRow) {
       ? "Coaching package"
       : `${escape(i.firstLine ?? "Courses")}${i.lineCount > 1 ? ` and ${i.lineCount - 1} more` : ""}`;
   const payment = paymentLabel(i);
-  // Status is always a word; the badge colour only repeats it.
-  const status = `<span class="badge badge-${payment.toLowerCase().replace(" ", "-")}">${payment}</span>${i.voided ? "" : ` ${deliveryLabel(i)}`}`;
+  // Status is always a word; the badge colour only repeats it. #856: an
+  // overdue invoice says Overdue and by how long instead.
+  const status =
+    i.overdueDays !== null
+      ? `${badge("Overdue")} ${daysOverdue(i.overdueDays)}`
+      : `${badge(payment)}${i.voided ? "" : ` ${deliveryLabel(i)}`}`;
   const number = shortInvoiceNumber(i.number ?? i.id);
-  return `<tr><td data-label="Issued">${dayLabel(i.issuedOn)}</td><td data-label="Number"><a href="${adminPath}/${i.id}">${escape(number)}</a></td><td data-label="Student">${escape(i.student ?? "Name needed")}</td><td data-label="For">${what}</td><td data-label="Amount">${cad(total)}</td><td data-label="Balance">${i.voided ? "—" : cad(total - paid)}</td><td data-label="Status"><div class="invoice-status">${status}</div></td></tr>`;
+  return `<tr><td data-label="Issued">${dayLabel(i.issuedOn)}</td><td data-label="Number"><a href="${adminPath}/${i.id}">${escape(number)}</a></td><td data-label="Student">${escape(i.student ?? "Name needed")}</td><td data-label="For">${what}</td><td data-label="Due">${i.dueOn ? dayLabel(i.dueOn) : "—"}</td><td data-label="Amount">${cad(total)}</td><td data-label="Balance">${i.voided ? "—" : cad(total - paid)}</td><td data-label="Status"><div class="invoice-status">${status}</div></td></tr>`;
 }
 // #854: what each view is called, and what it says when it is empty.
 const VIEW_NAMES: Record<InvoiceView, [string, keyof InvoiceSummary, string]> =
   {
     all: ["All", "all", "No invoices have been issued yet."],
     unpaid: ["Unpaid", "unpaid", "No unpaid invoices."],
+    overdue: ["Overdue", "overdue", "No overdue invoices."],
     "not-sent": ["Not sent", "notSent", "No invoices waiting to be sent."],
     paid: ["Paid", "paid", "No paid invoices."],
     void: ["Void", "void", "No voided invoices."],
@@ -201,6 +211,12 @@ export function whatsNext(
       open: "send",
     };
   const pay = "Record a payment when it arrives.";
+  // #856: only a sent invoice is ever overdue.
+  if (i.overdueDays)
+    return {
+      text: `Overdue by ${i.overdueDays} ${i.overdueDays === 1 ? "day" : "days"}. ${pay}`,
+      open: "payment",
+    };
   if (i.delivery === "not_sent")
     return {
       text: `${opts.emailOff ? "Invoice email is not set up on this service" : "No email on file"}; the student sees it under Invoices. ${pay}`,
@@ -356,16 +372,18 @@ export function mountSimpleInvoiceRoutes(
             ? ""
             : `?status=${to}`
       }`;
-    const card = (link: string, name: string, value: string) =>
-      `<a href="${link}"><span>${name}</span> <strong>${value}</strong></a>`;
-    const cards = `<section class="invoice-summary" aria-label="Summary">${card(href("unpaid"), "Outstanding", cad(summary.outstandingCents))}${card(href("unpaid"), "Unpaid", String(summary.unpaid))}${card(href("not-sent"), "Not sent", String(summary.notSent))}${card("/operator#awaiting-review", "Hours to review", String(summary.hoursToReview))}</section>`;
+    const card = (link: string, name: string, value: string, more = "") =>
+      `<a href="${link}"><span>${name}</span> <strong>${value}</strong>${more}</a>`;
+    // #856: the Outstanding card splits real money by how late it is.
+    const aging = `<span class="invoice-aging">Not yet due ${cad(summary.notYetDueCents)}</span><span class="invoice-aging">1–30 days overdue ${cad(summary.overdue1to30Cents)}</span><span class="invoice-aging">Over 30 days overdue ${cad(summary.overdueOver30Cents)}</span>`;
+    const cards = `<section class="invoice-summary" aria-label="Summary">${card(href("unpaid"), "Outstanding", cad(summary.outstandingCents), aging)}${card(href("unpaid"), "Unpaid", String(summary.unpaid))}${card(href("not-sent"), "Not sent", String(summary.notSent))}${card("/operator#awaiting-review", "Hours to review", String(summary.hoursToReview))}</section>`;
     const views = `<nav class="invoice-views" aria-label="Invoice views">${INVOICE_VIEWS.map((v) => `<a href="${href(v)}"${v === view ? ' aria-current="page"' : ""}>${VIEW_NAMES[v][0]} (${summary[VIEW_NAMES[v][1]]})</a>`).join("")}</nav>`;
     return res.send(
       page(
         "Invoices",
         `<section class="invoice-workspace portal-workspace">${adminMenuFor(res, "invoices")}<h1>Invoices</h1>${prepared ? '<p role="status">Proposal prepared. The student can now review and accept it under Invoices.</p>' : ""}${cards}${views}${
           invoices
-            ? `<div class="table-scroll" tabindex="0" role="region" aria-label="Invoices"><table class="member-table stack-table invoice-list"><thead><tr><th scope="col">Issued</th><th scope="col">Number</th><th scope="col">Student</th><th scope="col">For</th><th scope="col">Amount</th><th scope="col">Balance</th><th scope="col">Status</th></tr></thead><tbody>${invoices}</tbody></table></div>`
+            ? `<div class="table-scroll" tabindex="0" role="region" aria-label="Invoices"><table class="member-table stack-table invoice-list"><thead><tr><th scope="col">Issued</th><th scope="col">Number</th><th scope="col">Student</th><th scope="col">For</th><th scope="col">Due</th><th scope="col">Amount</th><th scope="col">Balance</th><th scope="col">Status</th></tr></thead><tbody>${invoices}</tbody></table></div>`
             : `<p role="status">${VIEW_NAMES[view][2]}</p>`
         }<details class="admin-details"${selected ? " open" : ""}><summary>More actions</summary><section class="admin-section" aria-labelledby="prepare-billing"><h2 id="prepare-billing">Prepare course billing</h2><p>Prepare courses for a registered student. No invoice is issued until the student accepts the exact terms.</p><form method="post" action="${adminPath}/plans">${hidden("csrf", anti)}${hidden("operationId", randomUUID())}<label for="invoice-owner">Student</label><select id="invoice-owner" name="ownerId" required>${r.value.members.map((m) => `<option value="${m.id}">${escape(m.displayName ?? "Name needed")}</option>`).join("")}</select><fieldset><legend>Courses</legend>${r.value.courses.map((c) => `<label class="check"><input type="checkbox" name="courses" value="${escape(JSON.stringify([c.id, c.version]))}"><span>${escape(c.title)} · ${escape(c.id)} version ${c.version}</span></label><label>Amount for ${escape(c.title)} (CAD)<input name="amount_${escape(c.id)}_${c.version}" inputmode="decimal" value="0.00"></label>`).join("")}</fieldset><label for="invoice-cadence">Billing</label><select id="invoice-cadence" name="cadence"><option value="one_time">One-time</option><option value="monthly">Recurring monthly</option></select><label>Starts on<input type="date" name="startsOn" required></label>${store.tax ? `<p>${escape(store.tax.label)} at ${taxRate(store.tax)} is added to each invoice from its course subtotal.</p>` : '<label>Configured tax amount per invoice (CAD)<input name="tax" inputmode="decimal" value="0.00" required></label>'}<button>Prepare course billing proposal</button></form></section><section class="admin-section" aria-labelledby="recurring-invoices"><h2 id="recurring-invoices">Recurring invoices</h2><form method="post" action="${adminPath}/due">${hidden("csrf", anti)}<button class="secondary">Generate due recurring invoices</button></form></section></details></section>`,
       ),
@@ -456,11 +474,13 @@ export function mountSimpleInvoiceRoutes(
           refund || voiding
             ? `<details class="action-menu"><summary>More</summary><ul>${refund ? `<li>${link("refund", "Record refund")}</li>` : ""}${voiding ? `<li>${link("void", "Void")}</li>` : ""}</ul></details>`
             : "",
-        state = paymentLabel({ ...i, voided: !live }),
+        state = i.overdueDays
+          ? "Overdue"
+          : paymentLabel({ ...i, voided: !live }),
         simulated = i.document.sample && i.delivery === "sent",
         // The page keeps a short Unconfirmed word; What's next carries the
         // warning in full.
-        header = `<div class="invoice-header"><h1>Invoice ${escape(shortInvoiceNumber(i.document.number))}</h1><p class="invoice-state"><span class="badge badge-${state.toLowerCase().replace(" ", "-")}">${state}</span>${live ? ` <span class="invoice-delivery${i.delivery === "unconfirmed" ? " warning" : ""}">${i.delivery === "unconfirmed" ? "Unconfirmed" : deliveryLabel({ delivery: i.delivery, sample: i.document.sample })}</span>` : ""}</p></div>`,
+        header = `<div class="invoice-header"><h1>Invoice ${escape(shortInvoiceNumber(i.document.number))}</h1><p class="invoice-state">${badge(state)}${live ? ` <span class="invoice-delivery${i.delivery === "unconfirmed" ? " warning" : ""}">${i.delivery === "unconfirmed" ? "Unconfirmed" : deliveryLabel({ delivery: i.delivery, sample: i.document.sample })}</span>` : ""}</p><p class="invoice-due">${i.document.dueOn ? `Due ${dayLabel(i.document.dueOn)}` : "No due date"}</p></div>`,
         actions =
           send || payment || more
             ? `<div class="invoice-actions" role="group" aria-label="Invoice actions">${send ? link("send", "Send") : ""}${payment ? link("payment", "Record payment") : ""}${more}</div>`

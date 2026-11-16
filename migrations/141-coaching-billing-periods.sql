@@ -86,8 +86,13 @@ CREATE TRIGGER coaching_invoice_after_period BEFORE INSERT ON simple_invoices
 ALTER TABLE billing_change_events DROP CONSTRAINT IF EXISTS billing_change_events_month_check;
 ALTER TABLE billing_change_events ADD CONSTRAINT billing_change_events_month_check
  CHECK(month ~ '^[0-9]{4}-[0-9]{2}(-[0-9]{2})?$');
+-- Every migration re-runs at each start; 142 widens this, and its rows must survive a restart.
+DO $$ BEGIN
+IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE version=142) THEN
 ALTER TABLE billing_change_events DROP CONSTRAINT IF EXISTS billing_change_events_action_check;
 ALTER TABLE billing_change_events ADD CONSTRAINT billing_change_events_action_check
  CHECK(action IN ('plan_offered','rate_set','hours_returned','hours_overridden','billing_period_set','coaching_invoice_issued','monthly_invoice_issued','payment_recorded','payment_refunded','invoice_voided','test_payment_received','test_payment_failed','test_refund_recorded'));
+END IF;
+END $$;
 INSERT INTO schema_migrations(version) VALUES(141) ON CONFLICT DO NOTHING;
 COMMIT;

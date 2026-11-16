@@ -22,7 +22,13 @@ import {
   type InvoiceTerms,
 } from "./simple-invoice-values.ts";
 import { normalizedEmail } from "./member-email-access.ts";
-import type { SimpleInvoiceDocument } from "./simple-invoice-views.ts";
+import {
+  DEFAULT_PAYMENT_TERMS,
+  PAYMENT_TERMS,
+  paymentTerms,
+  type PaymentTerms,
+  type SimpleInvoiceDocument,
+} from "./simple-invoice-views.ts";
 
 import {
   addDays,
@@ -64,17 +70,33 @@ export interface AdminInvoiceRow {
   /** #854: the issued date and whether it is a sample, from the snapshot. */
   issuedOn: string;
   sample: boolean;
+  /** #856: null on invoices issued before payment terms. */
+  dueOn: string | null;
+  /** #856: whole days past the due date while overdue; otherwise null. */
+  overdueDays: number | null;
 }
 /** #854: the administrator's invoice list views, in the order they appear. */
-export type InvoiceView = "all" | "unpaid" | "not-sent" | "paid" | "void";
+export type InvoiceView =
+  "all" | "unpaid" | "overdue" | "not-sent" | "paid" | "void";
 export const INVOICE_VIEWS: readonly InvoiceView[] = [
   "all",
   "unpaid",
+  "overdue",
   "not-sent",
   "paid",
   "void",
 ];
+/**
+ * #856: a sent, unpaid, real invoice past its due date (Toronto). An invoice
+ * with no due date, a sample, or one not yet sent is never overdue.
+ */
+const overdueSql = (t: string) =>
+  `(${t}voided_at IS NULL AND NOT ${t}sample AND ${t}total_cents-${t}paid_cents>0 AND ${t}delivery='sent' AND COALESCE((${t}document->>'dueOn')::date<toronto_today(),false))`;
+const overdueDaysSql = (t: string) =>
+  `CASE WHEN ${overdueSql(t)} THEN toronto_today()-(${t}document->>'dueOn')::date END`;
 // Fixed SQL conditions per view; request input only chooses among them.
+const OVERDUE_SQL = overdueSql("i."),
+  OVERDUE_DAYS_SQL = overdueDaysSql("i.");
 const UNPAID_SQL = "i.voided_at IS NULL AND i.total_cents-i.paid_cents>0",
   NOT_SENT_SQL =
     "i.voided_at IS NULL AND i.delivery IN ('not_sent','sending','unconfirmed')",
@@ -83,6 +105,7 @@ const UNPAID_SQL = "i.voided_at IS NULL AND i.total_cents-i.paid_cents>0",
 const VIEW_SQL: Record<InvoiceView, string> = {
   all: "true",
   unpaid: UNPAID_SQL,
+  overdue: OVERDUE_SQL,
   "not-sent": NOT_SENT_SQL,
   paid: PAID_SQL,
   void: VOID_SQL,
@@ -96,6 +119,11 @@ export interface InvoiceSummary {
   paid: number;
   void: number;
   hoursToReview: number;
+  /** #856: overdue invoices, and unpaid real money by age. */
+  overdue: number;
+  notYetDueCents: number;
+  overdue1to30Cents: number;
+  overdueOver30Cents: number;
 }
 export interface InvoicePlan {
   id: string;
@@ -112,6 +140,7 @@ type BillingChangeAction =
   | "hours_overridden"
   | "billing_period_set"
   | "coaching_invoice_issued"
+  | "issued_from_draft"
   | "monthly_invoice_issued"
   | "payment_recorded"
   | "payment_refunded"
@@ -130,6 +159,8 @@ export interface StoredInvoice {
   payments?: InvoicePaymentEvent[];
   /** SVC: present only on a sample invoice that signed test events reached. */
   service?: SampleService;
+  /** #856: whole days past the due date while overdue; read by `invoice`. */
+  overdueDays?: number | null;
 }
 export type SampleService =
   | { state: "awaiting_payment" }
@@ -165,6 +196,37 @@ async function utcToday(tx: PracticeTransaction) {
       "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS today",
     )
   ).rows[0]!.today;
+}
+/** #856: new invoices are dated in Toronto, so an evening issue is not tomorrow. */
+async function torontoToday(tx: PracticeTransaction) {
+  return (
+    await tx.query<{ today: string }>(
+      "SELECT to_char(toronto_today(),'YYYY-MM-DD') AS today",
+    )
+  ).rows[0]!.today;
+}
+/**
+ * #856: the next number in the real or sample series. The row stays locked
+ * until the issuing transaction ends, so concurrent issues queue for it and a
+ * rolled-back issue leaves no gap. Call it only once nothing else can refuse.
+ */
+async function nextNumber(tx: PracticeTransaction, sample: boolean) {
+  const n = (
+    await tx.query<{ issued: number }>(
+      "UPDATE simple_invoice_numbers SET next=next+1 WHERE series=$1 RETURNING next-1 AS issued",
+      [sample ? "sample" : "real"],
+    )
+  ).rows[0]!.issued;
+  return `${sample ? "SAMPLE" : "INV"}-${String(n).padStart(4, "0")}`;
+}
+/** #856: the dates and terms every new invoice prints. */
+async function issueDates(tx: PracticeTransaction, terms: PaymentTerms) {
+  const issuedOn = await torontoToday(tx);
+  return {
+    issuedOn,
+    terms,
+    dueOn: addDays(issuedOn, PAYMENT_TERMS[terms].days),
+  };
 }
 const planColumns =
   'id,owner_id AS "ownerId",terms,state,revision,next_cycle AS "nextCycle"';
@@ -244,6 +306,14 @@ export function shiftMonth(month: string, by: number) {
   d.setUTCMonth(d.getUTCMonth() + by);
   return d.toISOString().slice(0, 7);
 }
+/** #856: a form without a terms field is the same request as Net 15, so a
+ * retry from either replays the same invoice. */
+function withoutDefaultTerms<T extends { terms?: PaymentTerms }>(input: T) {
+  return input.terms === DEFAULT_PAYMENT_TERMS
+    ? { ...input, terms: undefined }
+    : input;
+}
+
 export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
   async function run<T>(
     token: string,
@@ -400,12 +470,9 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
     const id = randomUUID(),
       period = invoicePeriod(plan.terms.startsOn, cycle);
     const document: SimpleInvoiceDocument & { recipientEmail: string } = {
-      number: `DN-${id}`,
-      issuedOn: (
-        await tx.query<{ today: string }>(
-          "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS today",
-        )
-      ).rows[0]!.today,
+      // #856: course billing has no form, so it takes the default terms.
+      number: await nextNumber(tx, plan.terms.sample),
+      ...(await issueDates(tx, DEFAULT_PAYMENT_TERMS)),
       issuer: plan.terms.issuer,
       billedTo: name,
       ...(company ? { billedToCompany: company } : {}),
@@ -574,6 +641,109 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         [ownerId],
       )
     ).rows[0] ?? null;
+  /**
+   * #856: what issuing coaching hours checks before anything is written, so
+   * a refusal leaves no number used and nothing half done. Shared by the
+   * reviewed path and issuing from a draft.
+   */
+  async function coachingInvoiceMoney(
+    tx: PracticeTransaction,
+    input: { ownerId: string; month: string; taxCents?: number },
+    snapshot: CoachingSnapshot,
+  ): Promise<InvoiceFailure | { taxCents: number; total: number }> {
+    const taxCents = settings.tax
+        ? salesTaxCents(snapshot.subtotalCents, settings.tax)
+        : input.taxCents!,
+      total = snapshot.subtotalCents + taxCents;
+    if (
+      snapshot.subtotalCents <= 0 ||
+      !invoiceCents(total) ||
+      !invoiceText(settings.issuer, 500) ||
+      !invoiceText(settings.instructions, 2000)
+    )
+      return fail("invalid");
+    if (
+      (
+        await tx.query(
+          "SELECT id FROM simple_invoices WHERE owner_id=$1 AND coaching_month=$2 AND void_reason IS NULL FOR UPDATE",
+          [input.ownerId, input.month],
+        )
+      ).rowCount
+    )
+      return fail("conflict");
+    return { taxCents, total };
+  }
+  /** Issues the checked coaching invoice and marks the period invoiced. */
+  async function writeCoachingInvoice(
+    tx: PracticeTransaction,
+    actor: string,
+    input: { ownerId: string; month: string; terms?: PaymentTerms },
+    entry: CoachingMonth,
+    snapshot: CoachingSnapshot,
+    money: { taxCents: number; total: number },
+    issuedFromDraft = false,
+  ) {
+    const { taxCents, total } = money,
+      invoiceId = randomUUID();
+    const document: SimpleInvoiceDocument & { recipientEmail: string } = {
+      number: await nextNumber(tx, snapshot.sample),
+      ...(await issueDates(tx, input.terms ?? DEFAULT_PAYMENT_TERMS)),
+      issuer: settings.issuer,
+      billedTo: snapshot.name,
+      ...(snapshot.company ? { billedToCompany: snapshot.company } : {}),
+      recipientEmail: snapshot.email,
+      lines: [
+        {
+          description:
+            input.month.length === 10
+              ? `Coaching · ${entry.periodStart} to ${entry.periodEnd}`
+              : `Coaching · ${snapshot.month}`,
+          amountCents: snapshot.subtotalCents,
+        },
+      ],
+      billing: { kind: "one_time" },
+      currency: "CAD",
+      taxCents,
+      paidCents: 0,
+      instructions: settings.instructions,
+      sample: snapshot.sample,
+      ...(settings.tax ? { tax: settings.tax } : {}),
+      coaching: {
+        month: snapshot.month,
+        ...(input.month.length === 10
+          ? { periodStart: entry.periodStart, periodEnd: entry.periodEnd }
+          : {}),
+        minutes: snapshot.minutes,
+        rateCents: snapshot.rate.cents,
+        rateVersion: snapshot.rate.version,
+        rateId: snapshot.rate.id,
+        submissionRevision: entry.submittedRevision!,
+        replacesInvoiceId: entry.previousInvoiceId,
+        ...(issuedFromDraft ? { issuedFromDraft: true as const } : {}),
+      },
+    };
+    await tx.query(
+      "INSERT INTO simple_invoices(id,owner_id,cycle,document,sample,total_cents,coaching_month) VALUES($1,$2,0,$3,$4,$5,$6)",
+      [
+        invoiceId,
+        input.ownerId,
+        JSON.stringify(document),
+        snapshot.sample,
+        total,
+        input.month,
+      ],
+    );
+    await tx.query(
+      "UPDATE coaching_months SET state='invoiced',revision=revision+1,invoice_id=$3 WHERE owner_id=$1 AND month=$2",
+      [input.ownerId, input.month, invoiceId],
+    );
+    await logChange(tx, actor, "coaching_invoice_issued", {
+      memberId: input.ownerId,
+      month: input.month,
+      amountCents: total,
+    });
+    return invoiceId;
+  }
   return {
     async coachingOverview(token: string, month?: string, ownerId?: string) {
       if (
@@ -655,6 +825,18 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             [memberId, selected, ownerId !== undefined],
           )
         ).rows;
+        // #856: the reason the administrator gave for issuing the invoice of
+        // this period's current submission from the saved draft.
+        const adminIssue =
+          (
+            await tx.query<{ reason: string; on: string }>(
+              `SELECT a.reason,to_char(a.created_at AT TIME ZONE 'America/Toronto','YYYY-MM-DD') AS "on"
+               FROM coaching_admin_issues a JOIN coaching_months m
+                 ON m.owner_id=a.owner_id AND m.month=a.month AND m.submitted_revision=a.revision
+               WHERE a.owner_id=$1 AND a.month=$2`,
+              [memberId, selected],
+            )
+          ).rows[0] ?? null;
         const displayName =
           (
             await tx.query<{ displayName: string | null }>(
@@ -684,6 +866,9 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
             entry,
             months,
             overrides,
+            adminIssue,
+            /** #856: today in Toronto, when a draft's period has ended. */
+            toronto: await torontoToday(tx),
             period,
             /** UTC date today. */
             date: clock.date,
@@ -1209,6 +1394,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         expectedRevision: number;
         /** Sample mode only: configured invoices compute HST. */
         taxCents?: number;
+        /** #856: Net 15 when not chosen. */
+        terms?: PaymentTerms;
         operationId: string;
       },
     ): Promise<InvoiceResult<{ invoiceId: string }>> {
@@ -1220,12 +1407,16 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         (settings.tax
           ? input.taxCents !== undefined
           : !invoiceCents(input.taxCents)) ||
+        (input.terms !== undefined && !paymentTerms(input.terms)) ||
         !invoiceUuid(input.operationId)
       )
         return fail("invalid");
       return run(token, true, async (tx, actor) => {
         await owner(tx, input.ownerId, true);
-        const digest = invoiceDigest({ action: "coaching-issue", input }),
+        const digest = invoiceDigest({
+            action: "coaching-issue",
+            input: withoutDefaultTerms(input),
+          }),
           previous = await replay<{ invoiceId: string }>(
             tx,
             actor,
@@ -1248,88 +1439,124 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           entry.periodEnd >= (await coachingClock(tx)).date
         )
           return fail("invalid");
-        const snapshot = entry.snapshot,
-          taxCents = settings.tax
-            ? salesTaxCents(snapshot.subtotalCents, settings.tax)
-            : input.taxCents!,
-          total = snapshot.subtotalCents + taxCents;
+        const money = await coachingInvoiceMoney(tx, input, entry.snapshot);
+        if ("kind" in money) return money;
+        const invoiceId = await writeCoachingInvoice(
+          tx,
+          actor,
+          input,
+          entry,
+          entry.snapshot,
+          money,
+        );
+        return remember(tx, actor, input.operationId, digest, { invoiceId });
+      });
+    },
+    /**
+     * #856: the administrator issues the invoice from the student's saved
+     * draft, once its period has ended (Toronto), with a reason the student
+     * sees. The submission is written as the student's would be, then the
+     * invoice is issued as on the reviewed path.
+     */
+    async issueCoachingFromDraft(
+      token: string,
+      input: {
+        ownerId: string;
+        month: string;
+        expectedRevision: number;
+        /** Sample mode only: configured invoices compute HST. */
+        taxCents?: number;
+        terms?: PaymentTerms;
+        reason: string;
+        operationId: string;
+      },
+    ): Promise<InvoiceResult<{ invoiceId: string }>> {
+      if (
+        !input ||
+        !invoiceUuid(input.ownerId) ||
+        !coachingPeriodKey(input.month) ||
+        !invoiceCents(input.expectedRevision) ||
+        (settings.tax
+          ? input.taxCents !== undefined
+          : !invoiceCents(input.taxCents)) ||
+        (input.terms !== undefined && !paymentTerms(input.terms)) ||
+        !invoiceText(input.reason, 500) ||
+        !invoiceUuid(input.operationId)
+      )
+        return fail("invalid");
+      return run(token, true, async (tx, actor) => {
+        await owner(tx, input.ownerId, true);
+        const digest = invoiceDigest({
+            action: "coaching-issue-draft",
+            input: withoutDefaultTerms(input),
+          }),
+          previous = await replay<{ invoiceId: string }>(
+            tx,
+            actor,
+            input.operationId,
+            digest,
+          );
+        if (previous) return previous;
+        const entry = await coachingEntry(tx, input.ownerId, input.month);
+        if (!entry) return fail("not-found");
+        // Never lock a period the student may still be filling in.
         if (
-          snapshot.subtotalCents <= 0 ||
-          !invoiceCents(total) ||
-          !invoiceText(settings.issuer, 500) ||
-          !invoiceText(settings.instructions, 2000)
-        )
-          return fail("invalid");
-        if (
-          (
-            await tx.query(
-              "SELECT id FROM simple_invoices WHERE owner_id=$1 AND coaching_month=$2 AND void_reason IS NULL FOR UPDATE",
-              [input.ownerId, input.month],
-            )
-          ).rowCount
+          entry.state !== "draft" ||
+          entry.revision !== input.expectedRevision ||
+          entry.periodEnd >= (await torontoToday(tx))
         )
           return fail("conflict");
-        const invoiceId = randomUUID();
-        const document: SimpleInvoiceDocument & { recipientEmail: string } = {
-          number: `DN-${invoiceId}`,
-          issuedOn: (
-            await tx.query<{ today: string }>(
-              "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS today",
-            )
-          ).rows[0]!.today,
-          issuer: settings.issuer,
-          billedTo: snapshot.name,
-          ...(snapshot.company ? { billedToCompany: snapshot.company } : {}),
-          recipientEmail: snapshot.email,
-          lines: [
-            {
-              description:
-                input.month.length === 10
-                  ? `Coaching · ${entry.periodStart} to ${entry.periodEnd}`
-                  : `Coaching · ${snapshot.month}`,
-              amountCents: snapshot.subtotalCents,
-            },
-          ],
-          billing: { kind: "one_time" },
-          currency: "CAD",
-          taxCents,
-          paidCents: 0,
-          instructions: settings.instructions,
-          sample: snapshot.sample,
-          ...(settings.tax ? { tax: settings.tax } : {}),
-          coaching: {
-            month: snapshot.month,
+        // PERIOD832-06: the rate in effect on the period's first day.
+        const rate = (
+          await tx.query<CoachingRate>(
+            `SELECT ${rateColumns} FROM coaching_rates WHERE owner_id=$1 AND effective_month<=$2 ORDER BY effective_month DESC,version DESC LIMIT 1`,
+            [input.ownerId, input.month.slice(0, 7)],
+          )
+        ).rows[0];
+        if (!rate) return fail("conflict");
+        const subtotalCents = coachingSubtotal(entry.minutes, rate.cents);
+        if (subtotalCents === null) return fail("invalid");
+        const revision = entry.revision + 1,
+          snapshot: CoachingSnapshot = {
+            month: input.month,
             ...(input.month.length === 10
               ? { periodStart: entry.periodStart, periodEnd: entry.periodEnd }
               : {}),
-            minutes: snapshot.minutes,
-            rateCents: snapshot.rate.cents,
-            rateVersion: snapshot.rate.version,
-            rateId: snapshot.rate.id,
-            submissionRevision: entry.submittedRevision!,
-            replacesInvoiceId: entry.previousInvoiceId,
-          },
-        };
+            minutes: entry.minutes,
+            rate,
+            subtotalCents,
+            name: entry.name,
+            email: entry.email,
+            ...(entry.company ? { company: entry.company } : {}),
+            sample: settings.sample,
+          };
+        const money = await coachingInvoiceMoney(tx, input, snapshot);
+        if ("kind" in money) return money;
         await tx.query(
-          "INSERT INTO simple_invoices(id,owner_id,cycle,document,sample,total_cents,coaching_month) VALUES($1,$2,0,$3,$4,$5,$6)",
-          [
-            invoiceId,
-            input.ownerId,
-            JSON.stringify(document),
-            snapshot.sample,
-            total,
-            input.month,
-          ],
+          "INSERT INTO coaching_submissions(owner_id,month,revision,snapshot) VALUES($1,$2,$3,$4)",
+          [input.ownerId, input.month, revision, JSON.stringify(snapshot)],
         );
         await tx.query(
-          "UPDATE coaching_months SET state='invoiced',revision=revision+1,invoice_id=$3 WHERE owner_id=$1 AND month=$2",
-          [input.ownerId, input.month, invoiceId],
+          "UPDATE coaching_months SET state='submitted',revision=$3,submitted_revision=$3,return_reason=NULL WHERE owner_id=$1 AND month=$2",
+          [input.ownerId, input.month, revision],
         );
-        await logChange(tx, actor, "coaching_invoice_issued", {
+        await tx.query(
+          "INSERT INTO coaching_admin_issues(owner_id,month,revision,reason,actor_id) VALUES($1,$2,$3,$4,$5)",
+          [input.ownerId, input.month, revision, input.reason.trim(), actor],
+        );
+        await logChange(tx, actor, "issued_from_draft", {
           memberId: input.ownerId,
           month: input.month,
-          amountCents: total,
         });
+        const invoiceId = await writeCoachingInvoice(
+          tx,
+          actor,
+          input,
+          { ...entry, submittedRevision: revision },
+          snapshot,
+          money,
+          true,
+        );
         return remember(tx, actor, input.operationId, digest, { invoiceId });
       });
     },
@@ -1384,6 +1611,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         version: number;
         /** Sample mode only: configured invoices compute HST. */
         taxCents?: number;
+        /** #856: Net 15 when not chosen. */
+        terms?: PaymentTerms;
         operationId: string;
       },
     ): Promise<InvoiceResult<{ invoiceId: string }>> {
@@ -1395,12 +1624,16 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         (settings.tax
           ? input.taxCents !== undefined
           : !invoiceCents(input.taxCents)) ||
+        (input.terms !== undefined && !paymentTerms(input.terms)) ||
         !invoiceUuid(input.operationId)
       )
         return fail("invalid");
       return run(token, true, async (tx, actor) => {
         await owner(tx, input.ownerId, true);
-        const digest = invoiceDigest({ action: "terms-invoice", input }),
+        const digest = invoiceDigest({
+            action: "terms-invoice",
+            input: withoutDefaultTerms(input),
+          }),
           previous = await replay<{ invoiceId: string }>(
             tx,
             actor,
@@ -1437,8 +1670,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           return fail("conflict");
         const invoiceId = randomUUID();
         const document: SimpleInvoiceDocument & { recipientEmail: string } = {
-          number: `DN-${invoiceId}`,
-          issuedOn: await utcToday(tx),
+          number: await nextNumber(tx, settings.sample),
+          ...(await issueDates(tx, input.terms ?? DEFAULT_PAYMENT_TERMS)),
           issuer: settings.issuer,
           billedTo: to.name,
           ...(to.company ? { billedToCompany: to.company } : {}),
@@ -1546,7 +1779,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
                i.document->'lines'->0->>'description' AS "firstLine",
                jsonb_array_length(i.document->'lines') AS "lineCount",
                i.document->>'issuedOn' AS "issuedOn",
-               COALESCE((i.document->>'sample')::boolean,false) AS sample
+               COALESCE((i.document->>'sample')::boolean,false) AS sample,
+               i.document->>'dueOn' AS "dueOn",${OVERDUE_DAYS_SQL} AS "overdueDays"
              FROM simple_invoices i LEFT JOIN learners l ON l.id=i.owner_id
              WHERE ($1::uuid IS NULL OR i.owner_id=$1) AND ${VIEW_SQL[view]} ORDER BY i.created_at DESC LIMIT 100`,
             [ownerId ?? null],
@@ -1561,6 +1795,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
                count(*) FILTER (WHERE ${NOT_SENT_SQL})::integer AS "notSent",
                count(*) FILTER (WHERE ${PAID_SQL})::integer AS paid,
                count(*) FILTER (WHERE ${VOID_SQL})::integer AS void,
+               count(*) FILTER (WHERE ${OVERDUE_SQL})::integer AS overdue,
+               COALESCE(sum(i.total_cents-i.paid_cents) FILTER (WHERE ${UNPAID_SQL} AND NOT i.sample AND NOT ${OVERDUE_SQL}),0)::float8 AS "notYetDueCents",
+               COALESCE(sum(i.total_cents-i.paid_cents) FILTER (WHERE ${OVERDUE_DAYS_SQL}<=30),0)::float8 AS "overdue1to30Cents",
+               COALESCE(sum(i.total_cents-i.paid_cents) FILTER (WHERE ${OVERDUE_DAYS_SQL}>30),0)::float8 AS "overdueOver30Cents",
                (SELECT count(*)::integer FROM coaching_months WHERE state='submitted' AND ($1::uuid IS NULL OR owner_id=$1)) AS "hoursToReview"
              FROM simple_invoices i WHERE ($1::uuid IS NULL OR i.owner_id=$1)`,
             [ownerId ?? null],
@@ -1921,7 +2159,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         if (!admin) await owner(tx, actor);
         const row = (
           await tx.query<StoredInvoice>(
-            `SELECT ${invoiceColumns},owner_id AS "ownerId" FROM simple_invoices WHERE id=$1 AND ($2::boolean OR owner_id=$3) FOR SHARE`,
+            `SELECT ${invoiceColumns},owner_id AS "ownerId",${overdueDaysSql("")} AS "overdueDays" FROM simple_invoices WHERE id=$1 AND ($2::boolean OR owner_id=$3) FOR SHARE`,
             [id, admin, actor],
           )
         ).rows[0];
@@ -1957,10 +2195,26 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
               )
             ).rows[0] ?? { state: "awaiting_payment" })
           : undefined;
+        // #856: a replacement names the voided invoice by its own number.
+        const replaces = row.document.coaching?.replacesInvoiceId,
+          replacesNumber =
+            replaces && row.ownerId
+              ? (
+                  await tx.query<{ replacesNumber: string }>(
+                    `SELECT document->>'number' AS "replacesNumber" FROM simple_invoices WHERE id=$1 AND owner_id=$2`,
+                    [replaces, row.ownerId],
+                  )
+                ).rows[0]?.replacesNumber
+              : undefined;
+        const decoded = decodeInvoice(row);
         return {
           kind: "ready",
           value: {
-            ...decodeInvoice(row),
+            ...decoded,
+            document: {
+              ...decoded.document,
+              ...(replacesNumber ? { replacesNumber } : {}),
+            },
             payments,
             ...(service ? { service } : {}),
           },

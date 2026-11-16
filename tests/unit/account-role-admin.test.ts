@@ -887,6 +887,10 @@ it("CHANGELOG-02/04 words every kind of change", () => {
   expect(said("billing_period_set", { amountCents: null, month: null })).toBe(
     "Ada set the coaching billing period for Bo.",
   );
+  // #856: issuing from a student's draft; the reason is not in this log.
+  expect(said("issued_from_draft", { amountCents: null })).toBe(
+    "Ada issued the invoice for Bo for 2026-11 from their saved draft.",
+  );
   expect(said("coaching_invoice_issued")).toBe(
     "Ada issued Bo a coaching invoice of CAD 120.00 for 2026-11.",
   );

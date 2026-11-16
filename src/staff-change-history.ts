@@ -138,6 +138,8 @@ export function changeText(entry: ChangeEntry) {
     "billing:billing_period_set": `set the coaching billing period for ${person}${entry.month ? `, starting ${escape(entry.month)}` : ""}`,
     // OVR832-08: the reason stays on the student's coaching page.
     "billing:hours_overridden": `changed the coaching hours ${person} reported for ${month}`,
+    // #856: the reason stays on the student's coaching page.
+    "billing:issued_from_draft": `issued the invoice for ${person} for ${month} from their saved draft`,
     // TERMSINV318: a coaching-terms invoice is logged with no month.
     "billing:coaching_invoice_issued": month
       ? `issued ${person} a coaching invoice${money(entry.amountCents)} for ${month}`

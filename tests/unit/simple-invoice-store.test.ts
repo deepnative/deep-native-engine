@@ -158,6 +158,7 @@ function fixture(
     payments?: unknown[];
     services?: unknown[];
     settings?: InvoiceSettings;
+    replaced?: string | null;
   } = {},
 ) {
   const result = (rows: unknown[], rowCount = rows.length) => ({
@@ -166,6 +167,10 @@ function fixture(
   });
   const query = vi.fn(async (sql: string, values?: unknown[]) => {
     if (options.fail) throw Error("Private driver detail");
+    if (sql.includes('AS "replacesNumber"'))
+      return result(
+        options.replaced ? [{ replacesNumber: options.replaced }] : [],
+      );
     if (sql.includes("FROM principals WHERE token_hash"))
       return result(
         options.actor === false
@@ -252,6 +257,8 @@ function fixture(
       )
     )
       return result([]);
+    // #856: the next number in the invoice's series.
+    if (sql.includes("simple_invoice_numbers")) return result([{ issued: 7 }]);
     if (sql.includes("interval '10 seconds'"))
       return result(options.lease === false ? [] : [{ expires: expiry }]);
     if (sql.startsWith("INSERT") || sql.startsWith("UPDATE"))
@@ -1050,4 +1057,50 @@ it("RECIPIENT-05 an accepted course keeps an optional company on its first and l
   });
   await due.service.generateScheduled();
   expect(document(due)).toMatchObject({ billedToCompany: "Invented Co" });
+});
+
+it("TERMS856-13 an invoice that replaces a void one reads that invoice's number for the page, for the same student only", async () => {
+  const replacing: StoredInvoice = {
+    ...invoice,
+    ownerId,
+    document: {
+      ...invoice.document,
+      coaching: {
+        month: "2026-10",
+        minutes: 60,
+        rateCents: 1000,
+        rateVersion: 1,
+        rateId: planId,
+        submissionRevision: 2,
+        replacesInvoiceId: invoiceId,
+      },
+    },
+  };
+  const read = async (options: Parameters<typeof fixture>[0]) => {
+    const f = fixture(options);
+    const r = await f.service.invoice(admin, invoiceId, true);
+    if (r.kind !== "ready") throw Error("Expected invoice");
+    return { document: r.value.document, f };
+  };
+  const found = await read({ invoice: replacing, replaced: "INV-0042" });
+  expect(found.document.replacesNumber).toBe("INV-0042");
+  expect(
+    found.f.query.mock.calls.find(([sql]) =>
+      sql.includes('AS "replacesNumber"'),
+    )![1],
+  ).toEqual([invoiceId, ownerId]);
+  expect(
+    (await read({ invoice: replacing, replaced: null })).document,
+  ).not.toHaveProperty("replacesNumber");
+  // A deleted student's retained invoice, and one that replaces nothing.
+  for (const options of [
+    { invoice: { ...replacing, ownerId: null }, replaced: "INV-0042" },
+    { replaced: "INV-0042" },
+  ]) {
+    const r = await read(options);
+    expect(r.document).not.toHaveProperty("replacesNumber");
+    expect(
+      r.f.query.mock.calls.some(([sql]) => sql.includes('AS "replacesNumber"')),
+    ).toBe(false);
+  }
 });

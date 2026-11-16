@@ -8,9 +8,43 @@ import type {
 import { taxRate, type InvoiceTax } from "./simple-invoice-values.ts";
 import { escape, page } from "./views.ts";
 
+/** #856: payment terms an administrator picks when issuing; Net 15 by default. */
+export type PaymentTerms = "due_on_receipt" | "net_15" | "net_30";
+export const PAYMENT_TERMS: Record<
+  PaymentTerms,
+  { days: number; label: string }
+> = {
+  due_on_receipt: { days: 0, label: "Due on receipt" },
+  net_15: { days: 15, label: "Net 15" },
+  net_30: { days: 30, label: "Net 30" },
+};
+export const DEFAULT_PAYMENT_TERMS: PaymentTerms = "net_15";
+export const paymentTerms = (value: unknown): value is PaymentTerms =>
+  typeof value === "string" && Object.hasOwn(PAYMENT_TERMS, value);
+/** #856: the Payment terms select on every administrator issue form. */
+export const paymentTermsSelect = () =>
+  `<label>Payment terms<select name="terms">${Object.entries(PAYMENT_TERMS)
+    .map(
+      ([value, { label }]) =>
+        `<option value="${value}"${value === DEFAULT_PAYMENT_TERMS ? " selected" : ""}>${label}</option>`,
+    )
+    .join("")}</select></label>`;
+/**
+ * #856: a posted terms field for the store. Absent (a form from before #856)
+ * leaves the default to the store; anything unknown is null and refused.
+ */
+export function postedTerms(value: unknown): { terms?: PaymentTerms } | null {
+  if (value === undefined) return {};
+  return paymentTerms(value) ? { terms: value } : null;
+}
+
 export interface SimpleInvoiceDocument {
   number: string;
   issuedOn: string;
+  /** #856: absent on invoices issued before payment terms existed. */
+  terms?: PaymentTerms;
+  /** #856: YYYY-MM-DD, issuedOn plus the terms' days. */
+  dueOn?: string;
   issuer: string;
   billedTo: string;
   /** RECIPIENT-05: an optional company printed under the recipient. */
@@ -39,9 +73,16 @@ export interface SimpleInvoiceDocument {
     rateId: string;
     submissionRevision: number;
     replacesInvoiceId: string | null;
+    /** #856: an administrator issued it from the student's saved draft. */
+    issuedFromDraft?: true;
   };
   /** TERMSINV318-01: issued from an administrator-set coaching-terms version. */
   coachingTerms?: { version: number; startsOn: string; endsOn: string };
+  /**
+   * #856: the replaced invoice's own number, read by the store when the page
+   * is shown. Never part of the stored document.
+   */
+  replacesNumber?: string;
 }
 
 const TEST_ENTRY = {
@@ -69,6 +110,9 @@ const serviceSection = (service?: SampleService) =>
     ? `<h2>Service (simulated)</h2><p class="invoice-service" role="status">${service.state === "awaiting_payment" ? SERVICE.awaiting_payment() : SERVICE[service.state](service.since)}</p><p>Signed test events move this sample service state. It provides nothing and grants no access. No payment provider checked it and no money moved.</p>`
     : "";
 
+// #856: printed on an invoice issued from a draft; the reason is not printed.
+const FROM_DRAFT =
+  "Issued by the administrator from the student's saved hours.";
 const PRINT_HINT =
   "<p>Use your browser’s Print command to print this invoice or save it as a PDF.</p>";
 /** Amounts come from the validated immutable invoice, never query/form values. */
@@ -101,6 +145,6 @@ export function simpleInvoiceDocument(
     : "";
   return page(
     `Invoice ${shortInvoiceNumber(invoice.number)}`,
-    `${menu}<article class="invoice-document"><p>${invoice.sample ? "SAMPLE · NOT PAYABLE" : "INVOICE"}</p>${admin ? '<h2 class="invoice-title">Invoice</h2>' : "<h1>Invoice</h1>"}<p class="invoice-reference">${escape(invoice.number)}</p><p>Issued ${escape(/^\d{4}-\d{2}-\d{2}$/.test(invoice.issuedOn) ? dayLabel(invoice.issuedOn) : invoice.issuedOn)}</p>${invoice.voidReason ? `<p role="status"><strong>VOID · No payment due</strong> — ${escape(invoice.voidReason)}</p>` : ""}<h2>From</h2><p class="invoice-instructions">${escape(invoice.issuer)}</p>${invoice.tax ? `<p>${escape(invoice.tax.label)} registration number ${escape(invoice.tax.registration)}</p>` : ""}<h2>Bill to</h2><p>${escape(invoice.billedTo)}</p>${invoice.billedToCompany ? `<p>${escape(invoice.billedToCompany)}</p>` : ""}${invoice.billing.kind === "one_time" ? "<p>One-time billing</p>" : `<p>Recurring billing · Period starts ${escape(invoice.billing.periodStart)} and ends before ${escape(invoice.billing.periodEnd)}. No automatic payment is taken.</p>`}${invoice.coaching ? `${invoice.coaching.periodStart ? `<h2>Coaching hours</h2><p>Billing period: ${escape(periodLabel({ key: invoice.coaching.month, start: invoice.coaching.periodStart, end: invoice.coaching.periodEnd }))}` : `<h2>Monthly coaching</h2><p>Month: ${escape(monthLabel(invoice.coaching.month))}`} · ${coachingDuration(invoice.coaching.minutes)} · ${money(invoice.coaching.rateCents)} per hour</p>${invoice.coaching.replacesInvoiceId ? `<p>Replaces void invoice DN-${escape(invoice.coaching.replacesInvoiceId)}. The original remains retained.</p>` : ""}` : ""}${invoice.coachingTerms ? `<h2>Coaching terms</h2><p>Coaching period ${escape(invoice.coachingTerms.startsOn)} to ${escape(invoice.coachingTerms.endsOn)}</p>` : ""}<table><caption>${invoice.coaching || invoice.coachingTerms ? "Coaching charges" : "Included courses"}</caption><thead><tr><th scope="col">Description</th><th scope="col">Amount</th></tr></thead><tbody>${invoice.lines.map((line) => `<tr><td>${escape(line.description)}</td><td>${money(line.amountCents)}</td></tr>`).join("")}</tbody></table><dl><dt>Subtotal</dt><dd>${money(subtotal)}</dd><dt>${invoice.tax ? `${escape(invoice.tax.label)} (${taxRate(invoice.tax)})` : "Tax"}</dt><dd>${money(invoice.taxCents)}</dd><dt>Total</dt><dd>${money(total)}</dd><dt>Recorded payment</dt><dd>${money(invoice.paidCents)}</dd>${refunded ? `<dt>Recorded refund</dt><dd>${money(refunded)}</dd>` : ""}<dt>Balance</dt><dd>${money(invoice.voidReason ? 0 : total - invoice.paidCents)}</dd></dl>${record}${serviceSection(service)}<h2>Offline payment</h2><p class="invoice-instructions">${escape(invoice.instructions)}</p>${invoice.sample ? "<p>This sample cannot be paid. Its issuer, amounts and tax are invented preview values.</p>" : "<p>Payment is confirmed after staff records received funds against this invoice.</p>"}</article><aside class="invoice-controls">${PRINT_HINT}${back}</aside>`,
+    `${menu}<article class="invoice-document"><p>${invoice.sample ? "SAMPLE · NOT PAYABLE" : "INVOICE"}</p>${admin ? '<h2 class="invoice-title">Invoice</h2>' : "<h1>Invoice</h1>"}<p class="invoice-reference">${escape(invoice.number)}</p><p>Issued ${escape(/^\d{4}-\d{2}-\d{2}$/.test(invoice.issuedOn) ? dayLabel(invoice.issuedOn) : invoice.issuedOn)}</p>${invoice.terms ? `<p>Payment terms: ${PAYMENT_TERMS[invoice.terms].label}</p>` : ""}${invoice.dueOn ? `<p>Due ${dayLabel(invoice.dueOn)}</p>` : ""}${invoice.voidReason ? `<p role="status"><strong>VOID · No payment due</strong> — ${escape(invoice.voidReason)}</p>` : ""}<h2>From</h2><p class="invoice-instructions">${escape(invoice.issuer)}</p>${invoice.tax ? `<p>${escape(invoice.tax.label)} registration number ${escape(invoice.tax.registration)}</p>` : ""}<h2>Bill to</h2><p>${escape(invoice.billedTo)}</p>${invoice.billedToCompany ? `<p>${escape(invoice.billedToCompany)}</p>` : ""}${invoice.billing.kind === "one_time" ? "<p>One-time billing</p>" : `<p>Recurring billing · Period starts ${escape(invoice.billing.periodStart)} and ends before ${escape(invoice.billing.periodEnd)}. No automatic payment is taken.</p>`}${invoice.coaching ? `${invoice.coaching.periodStart ? `<h2>Coaching hours</h2><p>Billing period: ${escape(periodLabel({ key: invoice.coaching.month, start: invoice.coaching.periodStart, end: invoice.coaching.periodEnd }))}` : `<h2>Monthly coaching</h2><p>Month: ${escape(monthLabel(invoice.coaching.month))}`} · ${coachingDuration(invoice.coaching.minutes)} · ${money(invoice.coaching.rateCents)} per hour</p>${invoice.coaching.issuedFromDraft ? `<p>${FROM_DRAFT}</p>` : ""}${invoice.coaching.replacesInvoiceId ? `<p>Replaces void invoice ${escape(invoice.replacesNumber ?? `DN-${invoice.coaching.replacesInvoiceId}`)}. The original remains retained.</p>` : ""}` : ""}${invoice.coachingTerms ? `<h2>Coaching terms</h2><p>Coaching period ${escape(invoice.coachingTerms.startsOn)} to ${escape(invoice.coachingTerms.endsOn)}</p>` : ""}<table><caption>${invoice.coaching || invoice.coachingTerms ? "Coaching charges" : "Included courses"}</caption><thead><tr><th scope="col">Description</th><th scope="col">Amount</th></tr></thead><tbody>${invoice.lines.map((line) => `<tr><td>${escape(line.description)}</td><td>${money(line.amountCents)}</td></tr>`).join("")}</tbody></table><dl><dt>Subtotal</dt><dd>${money(subtotal)}</dd><dt>${invoice.tax ? `${escape(invoice.tax.label)} (${taxRate(invoice.tax)})` : "Tax"}</dt><dd>${money(invoice.taxCents)}</dd><dt>Total</dt><dd>${money(total)}</dd><dt>Recorded payment</dt><dd>${money(invoice.paidCents)}</dd>${refunded ? `<dt>Recorded refund</dt><dd>${money(refunded)}</dd>` : ""}<dt>Balance</dt><dd>${money(invoice.voidReason ? 0 : total - invoice.paidCents)}</dd></dl>${record}${serviceSection(service)}<h2>Offline payment</h2><p class="invoice-instructions">${escape(invoice.instructions)}</p>${invoice.sample ? "<p>This sample cannot be paid. Its issuer, amounts and tax are invented preview values.</p>" : "<p>Payment is confirmed after staff records received funds against this invoice.</p>"}</article><aside class="invoice-controls">${PRINT_HINT}${back}</aside>`,
   );
 }

@@ -108,7 +108,7 @@ test("[L266] registered student accepts two courses on one printable individual 
     // #854 PAGE854-01..04: number and status first, What's next opens Send.
     const staff = admin.page;
     await expect(staff.getByRole("heading", { level: 1 })).toHaveText(
-      /^Invoice DN-/,
+      /^Invoice SAMPLE-\d{4,}$/,
     );
     await expect(staff.locator(".invoice-state .badge")).toHaveText("Unpaid");
     await expect(staff.locator(".invoice-delivery")).toHaveText("Not sent");
@@ -202,9 +202,18 @@ test("[L266] registered student accepts two courses on one printable individual 
     // #854 LIST854: totals and status views; the number opens the invoice.
     await admin.page.goto(f.origin + "/operator/invoices");
     await expect(
-      admin.page.getByRole("link", { name: /^Outstanding CAD \d+\.\d{2}$/ }),
+      admin.page.getByRole("link", { name: /^Outstanding CAD \d+\.\d{2}/ }),
     ).toBeVisible();
+    // #856: the Outstanding card splits real money by age.
+    await expect(admin.page.locator(".invoice-aging")).toHaveText([
+      /^Not yet due CAD \d+\.\d{2}$/,
+      /^1–30 days overdue CAD \d+\.\d{2}$/,
+      /^Over 30 days overdue CAD \d+\.\d{2}$/,
+    ]);
     const views = admin.page.getByRole("navigation", { name: "Invoice views" });
+    await expect(
+      views.getByRole("link", { name: /^Overdue \(\d+\)$/ }),
+    ).toBeVisible();
     await views.getByRole("link", { name: /^Paid \(\d+\)$/ }).click();
     await expect(admin.page).toHaveURL(/\/operator\/invoices\?status=paid$/);
     await expect(

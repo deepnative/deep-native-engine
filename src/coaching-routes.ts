@@ -56,6 +56,7 @@ import {
   parseAgreedChange,
   type CoachingAgreedChangesStore,
 } from "./coaching-agreed-changes.ts";
+import { paymentTermsSelect, postedTerms } from "./simple-invoice-views.ts";
 import type {
   CoachingHoursOverride,
   InvoiceFailure,
@@ -533,6 +534,11 @@ export function mountCoachingRoutes(
           : { kind: "ready" as const, value: null };
       if (recipient.kind !== "ready")
         return failure(res, recipient.kind, admin);
+      // The tax line of an administrator's issue form.
+      const taxField = (subtotalCents: number) =>
+        hst
+          ? `<p>${escape(hst.label)} at ${taxRate(hst)} (${money(salesTaxCents(subtotalCents, hst))}) is added to the subtotal.</p>`
+          : `<label>${v.sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${v.sample ? 'value="0.00"' : ""} required></label>`;
       const form = (action: string, revision: number) =>
         `${hidden("csrf", anti)}${hidden("operationId", randomUUID())}${hidden("revision", revision)}${hidden("month", v.month)}<input type="hidden" name="action" value="${action}">`;
       const snapshot = e?.snapshot,
@@ -593,10 +599,21 @@ export function mountCoachingRoutes(
           snapshot.subtotalCents > 0 &&
           snapshot.sample === v.sample
         )
-          body += `<h2>Issue the reviewed invoice</h2><form method="post" action="${base}/issue">${form("issue", e.revision)}${hst ? `<p>${escape(hst.label)} at ${taxRate(hst)} (${money(salesTaxCents(snapshot.subtotalCents, hst))}) is added to the subtotal.</p>` : `<label>${v.sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${v.sample ? 'value="0.00"' : ""} required></label>`}<label class="check"><input type="checkbox" name="confirm" value="issue" required><span>I reviewed these submitted hours and the ${hst ? `computed ${escape(hst.label)}` : "separately supplied tax"}.</span></label><button>Issue coaching invoice</button></form>`;
+          body += `<h2>Issue the reviewed invoice</h2><form method="post" action="${base}/issue">${form("issue", e.revision)}${taxField(snapshot.subtotalCents)}${paymentTermsSelect()}<label class="check"><input type="checkbox" name="confirm" value="issue" required><span>I reviewed these submitted hours and the ${hst ? `computed ${escape(hst.label)}` : "separately supplied tax"}.</span></label><button>Issue coaching invoice</button></form>`;
         else
           body += `<p role="status">${snapshot?.sample !== v.sample ? "The submitted billing mode differs from current configuration. Return it and ask the student to confirm the current mode." : "This zero-total submission is retained. No invoice can be issued."}</p>`;
       }
+      // #856: the administrator may issue a draft the student never
+      // requested, once its period has ended, giving the student a reason.
+      if (admin && e?.state === "draft" && period && amount) {
+        if (period.end >= v.toronto)
+          body += `<p role="status">The student hasn’t requested the invoice for this ${unit}. You can issue it from their saved hours after the ${unit} ends on ${dayLabel(period.end)}.</p>`;
+        else
+          body += `<h2>Issue invoice from this draft</h2><p>The student saved ${hours(e.minutes)} at ${money(v.rate!.cents)} per hour = ${money(amount)} but hasn’t requested the invoice.</p><form method="post" action="${base}/issue-draft">${form("issue-draft", e.revision)}${taxField(amount)}${paymentTermsSelect()}<label>Reason the student did not submit<input name="reason" maxlength="500" required></label><label class="check"><input type="checkbox" name="confirm" value="issue-draft" required><span>I issue these hours for the student. They will see the hours, the amount and this reason.</span></label><button>Issue invoice from this draft</button></form>`;
+      }
+      // #856: why the administrator issued this invoice from the draft.
+      if (v.adminIssue && e?.state === "invoiced")
+        body += `<p class="notice" role="status">${admin ? `Issued by an administrator from the student’s saved draft on ${dayLabel(v.adminIssue.on)}. The student sees this reason: ${escape(v.adminIssue.reason)}` : `Your administrator issued this invoice from your saved draft on ${dayLabel(v.adminIssue.on)}. Reason: ${escape(v.adminIssue.reason)}`}</p>`;
       if (admin) body += hoursChangesSection(v.overrides, admin);
       if (!admin && period && (!e || e.state === "draft")) {
         // #838 ONEPAGE-01..03: hours, recipient and the invoice request are
@@ -818,13 +835,22 @@ export function mountCoachingRoutes(
   // #318 TERMSINV318-01..06: one invoice for the current terms version.
   app.post(`${adminPath}/:ownerId/terms-invoice`, async (req, res) => {
     // ISSUER-03: a typed tax is refused when the server computes HST.
-    if (!valid(req, res, store?.tax ? ["confirm"] : ["tax", "confirm"])) return;
+    if (
+      !valid(
+        req,
+        res,
+        store?.tax ? ["confirm", "terms"] : ["tax", "confirm", "terms"],
+      )
+    )
+      return;
     if (!store) return failure(res, "unavailable", true);
-    const taxCents = parseInvoiceMoney(req.body.tax);
+    const taxCents = parseInvoiceMoney(req.body.tax),
+      terms = postedTerms(req.body.terms);
     if (
       req.body.confirm !== "terms-invoice" ||
       !/^[1-9]\d{0,8}$/.test(String(req.body.revision)) ||
-      (!store.tax && taxCents === null)
+      (!store.tax && taxCents === null) ||
+      !terms
     )
       return failure(res, "invalid", true);
     const r = await store.issueCoachingTerms(token(res), {
@@ -832,6 +858,7 @@ export function mountCoachingRoutes(
       version: Number(req.body.revision),
       operationId: req.body.operationId,
       ...(store.tax ? {} : { taxCents: taxCents! }),
+      ...terms,
     });
     return r.kind === "ready"
       ? res.redirect(303, `/operator/invoices/${r.value.invoiceId}`)
@@ -1019,6 +1046,40 @@ export function mountCoachingRoutes(
       `${memberPath}?month=${encodeURIComponent(month)}&done=requested`,
     );
   });
+  // #856 TERMS856-40..47: issue the invoice from a student's saved draft.
+  app.post(`${adminPath}/:ownerId/issue-draft`, async (req, res) => {
+    const fields = ["month", "action", "reason", "confirm", "terms"];
+    // ISSUER-03: a typed tax is refused when the server computes HST.
+    if (!valid(req, res, store?.tax ? fields : [...fields, "tax"])) return;
+    if (!store) return failure(res, "unavailable", true);
+    const taxCents = parseInvoiceMoney(req.body.tax),
+      terms = postedTerms(req.body.terms);
+    if (
+      req.body.action !== "issue-draft" ||
+      req.body.confirm !== "issue-draft" ||
+      (!store.tax && taxCents === null) ||
+      !terms
+    )
+      return failure(res, "invalid", true);
+    const r = await store.issueCoachingFromDraft(token(res), {
+      ownerId: (req.params as Record<string, string>).ownerId!,
+      month: req.body.month,
+      expectedRevision: Number(req.body.revision),
+      operationId: req.body.operationId,
+      reason: req.body.reason,
+      ...(store.tax ? {} : { taxCents: taxCents! }),
+      ...terms,
+    });
+    return r.kind === "ready"
+      ? res.redirect(303, `/operator/invoices/${r.value.invoiceId}`)
+      : failure(
+          res,
+          r.kind,
+          true,
+          req.body.operationId,
+          "The invoice was not issued. A draft can be issued only after its period has ended, with a reason of up to 500 characters; also check the amount and the current form.",
+        );
+  });
   for (const action of ["save", "submit", "return", "issue"] as const) {
     const admin = action === "return" || action === "issue",
       base = admin ? `${adminPath}/:ownerId` : memberPath;
@@ -1039,7 +1100,8 @@ export function mountCoachingRoutes(
         submit: ["rateId", "sample", "confirm"],
         return: ["reason"],
         // ISSUER-03: a typed tax is refused when the server computes HST.
-        issue: store?.tax ? ["confirm"] : ["tax", "confirm"],
+        // #856: the payment terms chosen on the form.
+        issue: store?.tax ? ["confirm", "terms"] : ["tax", "confirm", "terms"],
       }[action];
       if (!valid(req, res, ["month", "action", ...fields])) return;
       if (!store) return failure(res, "unavailable", admin);
@@ -1055,10 +1117,12 @@ export function mountCoachingRoutes(
         operationId: req.body.operationId,
       };
       const minutes = parseCoachingDuration(req.body.hours, req.body.minutes),
-        taxCents = parseInvoiceMoney(req.body.tax);
+        taxCents = parseInvoiceMoney(req.body.tax),
+        terms = postedTerms(req.body.terms);
       if (
         (action === "save" && minutes === null) ||
         (action === "issue" && !store?.tax && taxCents === null) ||
+        (action === "issue" && !terms) ||
         (action === "submit" && !["true", "false"].includes(req.body.sample))
       )
         return failure(res, "invalid", admin);
@@ -1087,6 +1151,7 @@ export function mountCoachingRoutes(
                   ...input,
                   ownerId: (req.params as Record<string, string>).ownerId!,
                   ...(store?.tax ? {} : { taxCents: taxCents! }),
+                  ...terms,
                 });
       if (r.kind !== "ready")
         return failure(

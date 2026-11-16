@@ -3384,3 +3384,25 @@ main:has(:is(#refund, #void):target) .action-menu > summary {
     text-align: right;
   }
 }
+/* #856 */
+/* Overdue: a red warning pill, dark text on a pale fill (above 4.5:1), and
+   pale text on a deep fill where the reader prefers a dark scheme. */
+.badge-overdue {
+  background: #fde2e1;
+  color: #8a1c1c;
+}
+@media (prefers-color-scheme: dark) {
+  .badge-overdue {
+    background: #5c1414;
+    color: #ffd9d6;
+  }
+}
+/* The Outstanding card's aging lines and the invoice page's due date. */
+.invoice-summary .invoice-aging {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.invoice-due {
+  margin: 4px 0 0;
+  color: var(--muted);
+}

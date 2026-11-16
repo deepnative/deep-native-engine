@@ -23,6 +23,9 @@ export const TOTAL_ERASURE =
 const INVOICE_FIELDS = new Set([
   "number",
   "issuedOn",
+  // #856: payment terms and the due date they give.
+  "terms",
+  "dueOn",
   "issuer",
   "billedTo",
   "billedToCompany",

@@ -244,9 +244,14 @@ async function issue(f: Fixture, p: Page, id: string) {
     path: test.info().outputPath(`coaching-review-${id}.png`),
     fullPage: true,
   });
+  // #856 TERMS856-30: Net 15 unless the administrator picks other terms.
+  await expect(p.getByLabel("Payment terms")).toHaveValue("net_15");
   await p.getByRole("button", { name: "Issue coaching invoice" }).click();
   await expect(
     p.getByRole("heading", { name: "Invoice", exact: true }),
+  ).toBeVisible();
+  await expect(
+    p.getByText("Payment terms: Net 15", { exact: true }),
   ).toBeVisible();
   return p.url().split("/").at(-1)!;
 }
@@ -643,6 +648,9 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
     await save(f, m.page, "1", "0");
     await submit(m.page);
     const first = await issue(f, admin, m.id);
+    // #856: the replacement names the voided invoice by its printed number.
+    const firstNumber = await admin.locator(".invoice-reference").textContent();
+    expect(firstNumber).toMatch(/^SAMPLE-\d{4,}$/);
     await other.page.goto(`${f.origin}/account/purchases/invoices/${first}`);
     await expect(
       other.page.getByRole("heading", { name: "Invoice", exact: true }),
@@ -672,7 +680,7 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
     const second = await issue(f, admin, m.id);
     await expect(
       admin.getByText(
-        `Replaces void invoice DN-${first}. The original remains retained.`,
+        `Replaces void invoice ${firstNumber}. The original remains retained.`,
       ),
     ).toBeVisible();
     expect(second).not.toBe(first);

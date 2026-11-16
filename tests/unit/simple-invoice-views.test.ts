@@ -234,3 +234,74 @@ it("RECIPIENT-05 shows an optional company under Bill to only when it is set", (
     `<h2>Bill to</h2><p>${invoice.billedTo}</p>${invoice.billing.kind === "one_time" ? "<p>One-time" : "<p>Recurring"}`,
   );
 });
+
+it("TERMS856-10 prints the payment terms and the due date under Issued", () => {
+  const html = simpleInvoiceDocument({
+    ...invoice,
+    terms: "net_15",
+    dueOn: "2026-11-15",
+  });
+  expect(html).toContain(
+    "<p>Issued 31 Oct 2026</p><p>Payment terms: Net 15</p><p>Due 15 Nov 2026</p>",
+  );
+  expect(
+    simpleInvoiceDocument({
+      ...invoice,
+      terms: "due_on_receipt",
+      dueOn: "2026-10-31",
+    }),
+  ).toContain("<p>Payment terms: Due on receipt</p><p>Due 31 Oct 2026</p>");
+});
+
+it("TERMS856-11 an invoice issued before payment terms prints neither line", () => {
+  const html = simpleInvoiceDocument(invoice);
+  expect(html).not.toContain("Payment terms");
+  expect(html).not.toMatch(/<p>Due /);
+});
+
+it("TERMS856-12 an invoice issued from the student's saved draft says so, without the reason", () => {
+  const coaching = {
+    month: "2026-10",
+    minutes: 90,
+    rateCents: 12000,
+    rateVersion: 1,
+    rateId: "invented-rate",
+    submissionRevision: 3,
+    replacesInvoiceId: null,
+  };
+  const line =
+    "<p>Issued by the administrator from the student's saved hours.</p>";
+  expect(
+    simpleInvoiceDocument({
+      ...invoice,
+      coaching: { ...coaching, issuedFromDraft: true },
+    }),
+  ).toContain(line);
+  expect(simpleInvoiceDocument({ ...invoice, coaching })).not.toContain(
+    "Issued by the administrator",
+  );
+});
+
+it("TERMS856-13 the replacement line names the replaced invoice's number when the store supplies it", () => {
+  const coaching = {
+    month: "2026-10",
+    minutes: 90,
+    rateCents: 12000,
+    rateVersion: 1,
+    rateId: "invented-rate",
+    submissionRevision: 3,
+    replacesInvoiceId: "invented-original",
+  };
+  expect(
+    simpleInvoiceDocument({
+      ...invoice,
+      coaching,
+      replacesNumber: "INV-0042",
+    }),
+  ).toContain(
+    "<p>Replaces void invoice INV-0042. The original remains retained.</p>",
+  );
+  expect(simpleInvoiceDocument({ ...invoice, coaching })).toContain(
+    "<p>Replaces void invoice DN-invented-original. The original remains retained.</p>",
+  );
+});
