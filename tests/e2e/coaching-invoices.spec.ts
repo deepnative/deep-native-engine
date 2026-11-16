@@ -643,6 +643,9 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
     await save(f, m.page, "1", "0");
     await submit(m.page);
     const first = await issue(f, admin, m.id);
+    // #856: the replacement names the voided invoice by its printed number.
+    const firstNumber = await admin.locator(".invoice-reference").textContent();
+    expect(firstNumber).toMatch(/^SAMPLE-\d{4,}$/);
     await other.page.goto(`${f.origin}/account/purchases/invoices/${first}`);
     await expect(
       other.page.getByRole("heading", { name: "Invoice", exact: true }),
@@ -672,7 +675,7 @@ test("[L274] HOUR05/07/08 stale forms deny changes and unpaid correction retains
     const second = await issue(f, admin, m.id);
     await expect(
       admin.getByText(
-        `Replaces void invoice DN-${first}. The original remains retained.`,
+        `Replaces void invoice ${firstNumber}. The original remains retained.`,
       ),
     ).toBeVisible();
     expect(second).not.toBe(first);

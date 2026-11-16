@@ -1993,10 +1993,26 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
               )
             ).rows[0] ?? { state: "awaiting_payment" })
           : undefined;
+        // #856: a replacement names the voided invoice by its own number.
+        const replaces = row.document.coaching?.replacesInvoiceId,
+          replacesNumber =
+            replaces && row.ownerId
+              ? (
+                  await tx.query<{ replacesNumber: string }>(
+                    `SELECT document->>'number' AS "replacesNumber" FROM simple_invoices WHERE id=$1 AND owner_id=$2`,
+                    [replaces, row.ownerId],
+                  )
+                ).rows[0]?.replacesNumber
+              : undefined;
+        const decoded = decodeInvoice(row);
         return {
           kind: "ready",
           value: {
-            ...decodeInvoice(row),
+            ...decoded,
+            document: {
+              ...decoded.document,
+              ...(replacesNumber ? { replacesNumber } : {}),
+            },
             payments,
             ...(service ? { service } : {}),
           },
