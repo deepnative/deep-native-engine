@@ -78,6 +78,10 @@ function fixture(disabled = false, noSender = false) {
           paid: 0,
           void: 0,
           hoursToReview: 0,
+          overdue: 0,
+          notYetDueCents: 0,
+          overdue1to30Cents: 0,
+          overdueOver30Cents: 0,
         },
       }),
     ),
@@ -807,6 +811,10 @@ const zero = {
   paid: 0,
   void: 0,
   hoursToReview: 0,
+  overdue: 0,
+  notYetDueCents: 0,
+  overdue1to30Cents: 0,
+  overdueOver30Cents: 0,
 };
 const listRow = {
   id,
@@ -824,6 +832,8 @@ const listRow = {
   lineCount: 1,
   issuedOn: "2026-11-14",
   sample: false,
+  dueOn: "2026-11-29",
+  overdueDays: null,
 };
 const another = (n: number, extra: object) => ({
   ...listRow,
@@ -839,6 +849,10 @@ const threeSummary = {
   paid: 1,
   void: 1,
   hoursToReview: 1,
+  overdue: 1,
+  notYetDueCents: 50000,
+  overdue1to30Cents: 15000,
+  overdueOver30Cents: 7000,
 };
 function listed(invoices: object[], summary: object = threeSummary) {
   return ready({
@@ -900,7 +914,7 @@ it("INVOICELIST-01/ADMINNAV-01 the Invoices page leads with a table in words and
   );
   // The id is never the link text; the invoice number is the link.
   expect(main).toContain(
-    `<tr><td data-label="Issued">14 Nov 2026</td><td data-label="Number"><a href="/operator/invoices/${id}">INV-&lt;7&gt;</a></td><td data-label="Student">Mei &lt;Tanaka&gt;</td><td data-label="For">Coaching · September 2026</td><td data-label="Amount">CAD 720.00</td><td data-label="Balance">CAD 720.00</td><td data-label="Status"><div class="invoice-status"><span class="badge badge-unpaid">Unpaid</span> Not sent</div></td></tr>`,
+    `<tr><td data-label="Issued">14 Nov 2026</td><td data-label="Number"><a href="/operator/invoices/${id}">INV-&lt;7&gt;</a></td><td data-label="Student">Mei &lt;Tanaka&gt;</td><td data-label="For">Coaching · September 2026</td><td data-label="Due">29 Nov 2026</td><td data-label="Amount">CAD 720.00</td><td data-label="Balance">CAD 720.00</td><td data-label="Status"><div class="invoice-status"><span class="badge badge-unpaid">Unpaid</span> Not sent</div></td></tr>`,
   );
   expect(main).not.toContain(`>${id}<`);
   expect(main).not.toContain(">Open<");
@@ -946,7 +960,7 @@ it("LIST854-01 summary cards show the money outstanding and the work waiting, ea
   f.service.adminOverview.mockResolvedValue(listed([listRow]));
   const main = mainHtml((await f.get("/operator/invoices")).text);
   expect(main).toContain(
-    '<h1>Invoices</h1><section class="invoice-summary" aria-label="Summary"><a href="/operator/invoices?status=unpaid"><span>Outstanding</span> <strong>CAD 720.00</strong></a><a href="/operator/invoices?status=unpaid"><span>Unpaid</span> <strong>1</strong></a><a href="/operator/invoices?status=not-sent"><span>Not sent</span> <strong>1</strong></a><a href="/operator#awaiting-review"><span>Hours to review</span> <strong>1</strong></a></section>',
+    '<h1>Invoices</h1><section class="invoice-summary" aria-label="Summary"><a href="/operator/invoices?status=unpaid"><span>Outstanding</span> <strong>CAD 720.00</strong><span class="invoice-aging">Not yet due CAD 500.00</span><span class="invoice-aging">1–30 days overdue CAD 150.00</span><span class="invoice-aging">Over 30 days overdue CAD 70.00</span></a><a href="/operator/invoices?status=unpaid"><span>Unpaid</span> <strong>1</strong></a><a href="/operator/invoices?status=not-sent"><span>Not sent</span> <strong>1</strong></a><a href="/operator#awaiting-review"><span>Hours to review</span> <strong>1</strong></a></section>',
   );
   // With one student chosen, the cards and views keep that student.
   const one = mainHtml((await f.get(`/operator/invoices?ownerId=${id}`)).text);
@@ -964,11 +978,12 @@ it("LIST854-02 status views name their counts and mark the one shown", async () 
   const nav = (main: string) =>
     main.match(/<nav class="invoice-views"[^>]*>.*?<\/nav>/)![0];
   expect(nav(mainHtml((await f.get("/operator/invoices")).text))).toBe(
-    '<nav class="invoice-views" aria-label="Invoice views"><a href="/operator/invoices" aria-current="page">All (3)</a><a href="/operator/invoices?status=unpaid">Unpaid (1)</a><a href="/operator/invoices?status=not-sent">Not sent (1)</a><a href="/operator/invoices?status=paid">Paid (1)</a><a href="/operator/invoices?status=void">Void (1)</a></nav>',
+    '<nav class="invoice-views" aria-label="Invoice views"><a href="/operator/invoices" aria-current="page">All (3)</a><a href="/operator/invoices?status=unpaid">Unpaid (1)</a><a href="/operator/invoices?status=overdue">Overdue (1)</a><a href="/operator/invoices?status=not-sent">Not sent (1)</a><a href="/operator/invoices?status=paid">Paid (1)</a><a href="/operator/invoices?status=void">Void (1)</a></nav>',
   );
   for (const [view, label] of [
     ["all", "All (3)"],
     ["unpaid", "Unpaid (1)"],
+    ["overdue", "Overdue (1)"],
     ["not-sent", "Not sent (1)"],
     ["paid", "Paid (1)"],
     ["void", "Void (1)"],
@@ -987,12 +1002,12 @@ it("LIST854-02 status views name their counts and mark the one shown", async () 
     expect(shown).toContain(`aria-current="page">${label}</a>`);
   }
 });
-it("LIST854-03 the table reads Issued, Number, Student, For, Amount, Balance, Status", async () => {
+it("LIST854-03 #856 the table reads Issued, Number, Student, For, Due, Amount, Balance, Status", async () => {
   const f = fixture();
   f.service.adminOverview.mockResolvedValue(listed([listRow]));
   const main = mainHtml((await f.get("/operator/invoices")).text);
   expect(main).toContain(
-    '</nav><div class="table-scroll" tabindex="0" role="region" aria-label="Invoices"><table class="member-table stack-table invoice-list"><thead><tr><th scope="col">Issued</th><th scope="col">Number</th><th scope="col">Student</th><th scope="col">For</th><th scope="col">Amount</th><th scope="col">Balance</th><th scope="col">Status</th></tr></thead>',
+    '</nav><div class="table-scroll" tabindex="0" role="region" aria-label="Invoices"><table class="member-table stack-table invoice-list"><thead><tr><th scope="col">Issued</th><th scope="col">Number</th><th scope="col">Student</th><th scope="col">For</th><th scope="col">Due</th><th scope="col">Amount</th><th scope="col">Balance</th><th scope="col">Status</th></tr></thead>',
   );
   expect(main).toContain(
     `<td data-label="Number"><a href="/operator/invoices/${id}">INV-&lt;7&gt;</a></td>`,
@@ -1030,6 +1045,7 @@ it("LIST854-05 an empty view says so instead of showing an empty table, and the 
   expect(none).not.toContain("<table");
   for (const [view, text] of [
     ["unpaid", "No unpaid invoices."],
+    ["overdue", "No overdue invoices."],
     ["not-sent", "No invoices waiting to be sent."],
     ["paid", "No paid invoices."],
     ["void", "No voided invoices."],
@@ -1572,7 +1588,7 @@ const voidInvoice = {
 it("PAGE854-01 the administrator's invoice opens with its number, a payment badge and the delivery word, before the document", async () => {
   const html = await adminPage(invoice);
   expect(html).toContain(
-    '<div class="invoice-header"><h1>Invoice DN-invented</h1><p class="invoice-state"><span class="badge badge-unpaid">Unpaid</span> <span class="invoice-delivery">Not sent</span></p></div>',
+    '<div class="invoice-header"><h1>Invoice DN-invented</h1><p class="invoice-state"><span class="badge badge-unpaid">Unpaid</span> <span class="invoice-delivery">Not sent</span></p><p class="invoice-due">No due date</p></div>',
   );
   expect(html.indexOf('class="invoice-header"')).toBeLessThan(
     html.indexOf('<article class="invoice-document">'),
@@ -1897,4 +1913,58 @@ it("LIST854-07 the status words read the same from a list row or a stored invoic
   expect(deliveryLabel({ delivery: "unconfirmed", sample: true })).toBe(
     "Unconfirmed: check the recipient's inbox before sending again",
   );
+});
+it("TERMS856-23 the list shows the Due column, — for old invoices, and Overdue with how many days", async () => {
+  const f = fixture();
+  f.service.adminOverview.mockResolvedValue(
+    listed([
+      another(2, { delivery: "sent", overdueDays: 12, dueOn: "2026-11-02" }),
+      another(3, { delivery: "sent", overdueDays: 1, paidCents: "100" }),
+      another(4, { dueOn: null }),
+    ]),
+  );
+  const main = mainHtml((await f.get("/operator/invoices")).text);
+  const rows = [...main.matchAll(/<tr><td.*?<\/tr>/g)].map((m) => m[0]);
+  expect(rows[0]).toContain(
+    '<td data-label="Due">2 Nov 2026</td><td data-label="Amount">CAD 720.00</td><td data-label="Balance">CAD 720.00</td><td data-label="Status"><div class="invoice-status"><span class="badge badge-overdue">Overdue</span> 12 days overdue</div></td>',
+  );
+  expect(rows[1]).toContain(
+    '<span class="badge badge-overdue">Overdue</span> 1 day overdue',
+  );
+  expect(rows[2]).toContain(
+    '<td data-label="Due">—</td><td data-label="Amount">CAD 720.00</td><td data-label="Balance">CAD 720.00</td><td data-label="Status"><div class="invoice-status"><span class="badge badge-unpaid">Unpaid</span> Not sent</div>',
+  );
+  expect((await f.get("/operator/invoices?status=overdue")).status).toBe(200);
+  expect(f.service.adminOverview).toHaveBeenLastCalledWith(
+    token,
+    undefined,
+    "overdue",
+  );
+});
+it("TERMS856-24 the invoice page shows the due date, and What's next says how long it is overdue", async () => {
+  const due = {
+    ...invoice,
+    delivery: "sent" as const,
+    document: { ...doc, sample: false, terms: "net_15", dueOn: "2026-11-15" },
+  };
+  const onTime = await adminPage({ ...due, overdueDays: null });
+  expect(onTime).toContain(
+    '<span class="badge badge-unpaid">Unpaid</span> <span class="invoice-delivery">Sent</span></p><p class="invoice-due">Due 15 Nov 2026</p></div>',
+  );
+  expect(onTime).toContain("<p>Record a payment when it arrives.</p>");
+  const late = await adminPage({ ...due, overdueDays: 3 });
+  expect(late).toContain(
+    '<p class="invoice-state"><span class="badge badge-overdue">Overdue</span> <span class="invoice-delivery">Sent</span></p><p class="invoice-due">Due 15 Nov 2026</p>',
+  );
+  expect(late).toContain(
+    '<p>Overdue by 3 days. Record a payment when it arrives.</p><a class="button" href="#payment">Record payment</a>',
+  );
+  expect(late).toContain(
+    '<section id="payment" class="action-panel suggested"',
+  );
+  expect(await adminPage({ ...due, overdueDays: 1 })).toContain(
+    "<p>Overdue by 1 day. Record a payment when it arrives.</p>",
+  );
+  // The printed document carries the terms and due date too.
+  expect(late).toContain("<p>Payment terms: Net 15</p><p>Due 15 Nov 2026</p>");
 });

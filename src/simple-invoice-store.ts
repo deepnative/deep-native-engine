@@ -70,17 +70,33 @@ export interface AdminInvoiceRow {
   /** #854: the issued date and whether it is a sample, from the snapshot. */
   issuedOn: string;
   sample: boolean;
+  /** #856: null on invoices issued before payment terms. */
+  dueOn: string | null;
+  /** #856: whole days past the due date while overdue; otherwise null. */
+  overdueDays: number | null;
 }
 /** #854: the administrator's invoice list views, in the order they appear. */
-export type InvoiceView = "all" | "unpaid" | "not-sent" | "paid" | "void";
+export type InvoiceView =
+  "all" | "unpaid" | "overdue" | "not-sent" | "paid" | "void";
 export const INVOICE_VIEWS: readonly InvoiceView[] = [
   "all",
   "unpaid",
+  "overdue",
   "not-sent",
   "paid",
   "void",
 ];
+/**
+ * #856: a sent, unpaid, real invoice past its due date (Toronto). An invoice
+ * with no due date, a sample, or one not yet sent is never overdue.
+ */
+const overdueSql = (t: string) =>
+  `(${t}voided_at IS NULL AND NOT ${t}sample AND ${t}total_cents-${t}paid_cents>0 AND ${t}delivery='sent' AND COALESCE((${t}document->>'dueOn')::date<toronto_today(),false))`;
+const overdueDaysSql = (t: string) =>
+  `CASE WHEN ${overdueSql(t)} THEN toronto_today()-(${t}document->>'dueOn')::date END`;
 // Fixed SQL conditions per view; request input only chooses among them.
+const OVERDUE_SQL = overdueSql("i."),
+  OVERDUE_DAYS_SQL = overdueDaysSql("i.");
 const UNPAID_SQL = "i.voided_at IS NULL AND i.total_cents-i.paid_cents>0",
   NOT_SENT_SQL =
     "i.voided_at IS NULL AND i.delivery IN ('not_sent','sending','unconfirmed')",
@@ -89,6 +105,7 @@ const UNPAID_SQL = "i.voided_at IS NULL AND i.total_cents-i.paid_cents>0",
 const VIEW_SQL: Record<InvoiceView, string> = {
   all: "true",
   unpaid: UNPAID_SQL,
+  overdue: OVERDUE_SQL,
   "not-sent": NOT_SENT_SQL,
   paid: PAID_SQL,
   void: VOID_SQL,
@@ -102,6 +119,11 @@ export interface InvoiceSummary {
   paid: number;
   void: number;
   hoursToReview: number;
+  /** #856: overdue invoices, and unpaid real money by age. */
+  overdue: number;
+  notYetDueCents: number;
+  overdue1to30Cents: number;
+  overdueOver30Cents: number;
 }
 export interface InvoicePlan {
   id: string;
@@ -136,6 +158,8 @@ export interface StoredInvoice {
   payments?: InvoicePaymentEvent[];
   /** SVC: present only on a sample invoice that signed test events reached. */
   service?: SampleService;
+  /** #856: whole days past the due date while overdue; read by `invoice`. */
+  overdueDays?: number | null;
 }
 export type SampleService =
   | { state: "awaiting_payment" }
@@ -1582,7 +1606,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
                i.document->'lines'->0->>'description' AS "firstLine",
                jsonb_array_length(i.document->'lines') AS "lineCount",
                i.document->>'issuedOn' AS "issuedOn",
-               COALESCE((i.document->>'sample')::boolean,false) AS sample
+               COALESCE((i.document->>'sample')::boolean,false) AS sample,
+               i.document->>'dueOn' AS "dueOn",${OVERDUE_DAYS_SQL} AS "overdueDays"
              FROM simple_invoices i LEFT JOIN learners l ON l.id=i.owner_id
              WHERE ($1::uuid IS NULL OR i.owner_id=$1) AND ${VIEW_SQL[view]} ORDER BY i.created_at DESC LIMIT 100`,
             [ownerId ?? null],
@@ -1597,6 +1622,10 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
                count(*) FILTER (WHERE ${NOT_SENT_SQL})::integer AS "notSent",
                count(*) FILTER (WHERE ${PAID_SQL})::integer AS paid,
                count(*) FILTER (WHERE ${VOID_SQL})::integer AS void,
+               count(*) FILTER (WHERE ${OVERDUE_SQL})::integer AS overdue,
+               COALESCE(sum(i.total_cents-i.paid_cents) FILTER (WHERE ${UNPAID_SQL} AND NOT i.sample AND NOT ${OVERDUE_SQL}),0)::float8 AS "notYetDueCents",
+               COALESCE(sum(i.total_cents-i.paid_cents) FILTER (WHERE ${OVERDUE_DAYS_SQL}<=30),0)::float8 AS "overdue1to30Cents",
+               COALESCE(sum(i.total_cents-i.paid_cents) FILTER (WHERE ${OVERDUE_DAYS_SQL}>30),0)::float8 AS "overdueOver30Cents",
                (SELECT count(*)::integer FROM coaching_months WHERE state='submitted' AND ($1::uuid IS NULL OR owner_id=$1)) AS "hoursToReview"
              FROM simple_invoices i WHERE ($1::uuid IS NULL OR i.owner_id=$1)`,
             [ownerId ?? null],
@@ -1957,7 +1986,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         if (!admin) await owner(tx, actor);
         const row = (
           await tx.query<StoredInvoice>(
-            `SELECT ${invoiceColumns},owner_id AS "ownerId" FROM simple_invoices WHERE id=$1 AND ($2::boolean OR owner_id=$3) FOR SHARE`,
+            `SELECT ${invoiceColumns},owner_id AS "ownerId",${overdueDaysSql("")} AS "overdueDays" FROM simple_invoices WHERE id=$1 AND ($2::boolean OR owner_id=$3) FOR SHARE`,
             [id, admin, actor],
           )
         ).rows[0];
