@@ -47,6 +47,8 @@ const value = {
   period: { key: "2026-10", start: "2026-10-01", end: "2026-10-31", days: 31 },
   periods: [],
   date: "2026-10-20",
+  toronto: "2026-10-20",
+  adminIssue: null,
   billing: { schedules: [], version: 0, nextStart: null },
   sample: true,
 };
@@ -3083,4 +3085,154 @@ it("TERMS856-31 the issue POST passes the chosen terms through and refuses an un
   for (const terms of ["net_60", "", "Net 15"])
     expect((await f.post(path, { ...fields, terms })).status).toBe(422);
   expect(f.service.issueCoaching).not.toHaveBeenCalled();
+});
+
+const DRAFT_FORM = "<h2>Issue invoice from this draft</h2>";
+it("TERMS856-47 the admin page offers Issue invoice from this draft only on an ended draft with a rate and hours", async () => {
+  const f = fixture();
+  const show = async (over: Record<string, unknown>) => {
+    f.service.coachingOverview.mockResolvedValue(ready({ ...value, ...over }));
+    return (await f.get(`/operator/coaching/${id}`)).text;
+  };
+  const ended = await show({ toronto: "2026-11-01" });
+  expect(ended).toContain(
+    `${DRAFT_FORM}<p>The student saved 1h 30m at CAD 120.00 per hour = CAD 180.00 but hasn’t requested the invoice.</p><form method="post" action="/operator/coaching/${id}/issue-draft">`,
+  );
+  const form = ended.match(/<form[^>]*issue-draft">[\s\S]*?<\/form>/)![0];
+  expect(form).toContain(
+    '<input type="hidden" name="action" value="issue-draft">',
+  );
+  expect(form).toContain(
+    '<label>Invented sample tax (CAD)<input name="tax" inputmode="decimal" value="0.00" required></label><label>Payment terms<select name="terms">',
+  );
+  expect(form).toContain(
+    '<label>Reason the student did not submit<input name="reason" maxlength="500" required></label><label class="check"><input type="checkbox" name="confirm" value="issue-draft" required><span>I issue these hours for the student. They will see the hours, the amount and this reason.</span></label><button>Issue invoice from this draft</button>',
+  );
+  // TERMS856-41: the month has not ended in Toronto, so no form, only when.
+  for (const toronto of ["2026-10-20", "2026-10-31"]) {
+    const early = await show({ toronto });
+    expect(early).not.toContain(DRAFT_FORM);
+    expect(early).toContain(
+      '<p role="status">The student hasn’t requested the invoice for this month. You can issue it from their saved hours after the month ends on 31 Oct 2026.</p>',
+    );
+  }
+  // No rate, no hours, or a submitted month: nothing to issue from a draft.
+  for (const over of [
+    { toronto: "2026-11-01", rate: null },
+    { toronto: "2026-11-01", entry: { ...entry, minutes: 0 } },
+    {
+      toronto: "2026-11-01",
+      entry: { ...entry, state: "submitted", submittedRevision: 2, snapshot },
+    },
+  ]) {
+    const page = await show(over);
+    expect(page).not.toContain(DRAFT_FORM);
+    expect(page).not.toContain("hasn’t requested the invoice for this");
+  }
+  // The student never sees the form.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...value, toronto: "2026-11-01" }),
+  );
+  expect((await f.get("/account/coaching")).text).not.toContain(DRAFT_FORM);
+  // Configured HST is computed, never typed.
+  (f.service as Record<string, unknown>).tax = {
+    label: "HST",
+    registration: "713254472RT0001",
+    rateBasisPoints: 1300,
+  };
+  const hst = await show({ toronto: "2026-11-01", sample: false });
+  expect(hst).toContain(
+    '<p>HST at 13% (CAD 23.40) is added to the subtotal.</p><label>Payment terms<select name="terms">',
+  );
+});
+it("TERMS856-45 the student and the administrator see why the invoice was issued from the draft", async () => {
+  const f = fixture();
+  const issued = {
+    ...value,
+    entry: {
+      ...entry,
+      state: "invoiced",
+      submittedRevision: 2,
+      snapshot,
+      invoiceId: id,
+    },
+    adminIssue: { reason: "Invented <travel>", on: "2026-11-16" },
+  };
+  f.service.coachingOverview.mockResolvedValue(ready(issued));
+  expect((await f.get("/account/coaching")).text).toContain(
+    '<p class="notice" role="status">Your administrator issued this invoice from your saved draft on 16 Nov 2026. Reason: Invented &lt;travel&gt;</p>',
+  );
+  expect((await f.get(`/operator/coaching/${id}`)).text).toContain(
+    '<p class="notice" role="status">Issued by an administrator from the student’s saved draft on 16 Nov 2026. The student sees this reason: Invented &lt;travel&gt;</p>',
+  );
+  // Once the month is returned and is a draft again, the notice goes.
+  f.service.coachingOverview.mockResolvedValue(
+    ready({ ...issued, entry: { ...entry, state: "draft" } }),
+  );
+  expect((await f.get("/account/coaching")).text).not.toContain(
+    "Your administrator issued",
+  );
+});
+it("TERMS856-40/41/42 the issue-draft POST passes the form to the store and maps each refusal", async () => {
+  const f = fixture();
+  const issue = vi.fn().mockResolvedValue(ready({ invoiceId: id }));
+  (f.service as Record<string, unknown>).issueCoachingFromDraft = issue;
+  const path = `/operator/coaching/${id}/issue-draft`,
+    fields = {
+      month,
+      action: "issue-draft",
+      confirm: "issue-draft",
+      tax: "1.00",
+      terms: "net_30",
+      reason: "Invented reason",
+    };
+  const ok = await f.post(path, fields);
+  expect(ok.status).toBe(303);
+  expect(ok.headers.location).toBe(`/operator/invoices/${id}`);
+  expect(issue.mock.calls[0]![1]).toMatchObject({
+    ownerId: id,
+    month,
+    reason: "Invented reason",
+    taxCents: 100,
+    terms: "net_30",
+  });
+  const withoutTerms: Record<string, string> = { ...fields };
+  delete withoutTerms.terms;
+  expect((await f.post(path, withoutTerms)).status).toBe(303);
+  expect(issue.mock.calls[1]![1]).not.toHaveProperty("terms");
+  issue.mockClear();
+  for (const bad of [
+    { action: "issue" },
+    { confirm: "issue" },
+    { tax: "" },
+    { terms: "net_60" },
+  ])
+    expect((await f.post(path, { ...fields, ...bad })).status).toBe(422);
+  expect((await f.post(path, { ...fields, other: "x" })).status).toBe(403);
+  expect(issue).not.toHaveBeenCalled();
+  for (const [kind, status] of [
+    ["conflict", 409],
+    ["invalid", 422],
+    ["denied", 403],
+  ] as const) {
+    issue.mockResolvedValueOnce({ kind });
+    const r = await f.post(path, fields);
+    expect(r.status).toBe(status);
+    if (kind === "invalid")
+      expect(r.text).toContain(
+        "A draft can be issued only after its period has ended, with a reason",
+      );
+  }
+  // Configured HST: a typed tax is refused, and none is passed.
+  (f.service as Record<string, unknown>).tax = {
+    label: "HST",
+    registration: "713254472RT0001",
+    rateBasisPoints: 1300,
+  };
+  expect((await f.post(path, fields)).status).toBe(403);
+  const untaxed: Record<string, string> = { ...fields };
+  delete untaxed.tax;
+  expect((await f.post(path, untaxed)).status).toBe(303);
+  expect(issue.mock.calls.at(-1)![1]).not.toHaveProperty("taxCents");
+  expect((await fixture(true).post(path, fields)).status).toBe(503);
 });

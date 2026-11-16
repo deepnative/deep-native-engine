@@ -456,7 +456,7 @@ it("OVR832-07 the student reads the change with their earlier figure, it is in D
       records[key] = [...(records[key] ?? []), ...rows];
     cursor = result.payload.page.nextCursor ?? undefined;
   } while (cursor);
-  expect(version).toBe("local-member-records-v52");
+  expect(version).toBe("local-member-records-v53");
   expect(records.coachingHoursOverrides).toEqual([
     {
       month,

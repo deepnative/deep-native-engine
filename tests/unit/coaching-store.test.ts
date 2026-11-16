@@ -107,6 +107,9 @@ function fixture(
     schedules?: unknown[];
     lastSaved?: string;
     date?: string;
+    /** #856: Toronto today, and the period's issue-from-draft reason. */
+    today?: string;
+    adminIssue?: { reason: string; on: string };
   } = {},
 ) {
   const query = vi.fn(async (sql: string, _args?: unknown[]) => {
@@ -139,7 +142,10 @@ function fixture(
       rows = [{ last: o.lastSaved ?? null }];
     else if (sql.includes("AS month"))
       rows = [{ month, date: o.date ?? month + "-31" }];
-    else if (sql.includes("AS today")) rows = [{ today: month + "-31" }];
+    else if (sql.includes("AS today"))
+      rows = [{ today: o.today ?? month + "-31" }];
+    else if (sql.includes("FROM coaching_admin_issues"))
+      rows = o.adminIssue ? [o.adminIssue] : [];
     else if (sql.includes("FROM coaching_rates")) rows = o.rates ?? [rate];
     else if (sql.includes("o.reason,o.state")) rows = o.overrides ?? [];
     else if (sql.includes("FROM coaching_months"))
@@ -1438,4 +1444,184 @@ it("TERMS856-01/03/04 a coaching invoice takes a short number, Toronto date and 
       sql.includes("simple_invoice_numbers"),
     )![1],
   ).toEqual(["real"]);
+});
+
+const fromDraft = {
+  ownerId: id,
+  month,
+  expectedRevision: 1,
+  taxCents: 0,
+  reason: "  Invented: travelling  ",
+  operationId: key,
+};
+it("TERMS856-40..44 issuing from a draft checks the draft, then writes the submission, the reason and the invoice", async () => {
+  const f = fixture({ admin: true, today: "2026-11-01" });
+  const r = await f.service.issueCoachingFromDraft(token, {
+    ...fromDraft,
+    terms: "net_30",
+  });
+  expect(r).toEqual({
+    kind: "ready",
+    value: { invoiceId: expect.any(String) },
+  });
+  const calls = f.query.mock.calls.map(([sql, args]) => [sql, args] as const);
+  const at = (start: string) =>
+    calls.findIndex(([sql]) => sql.startsWith(start));
+  // Everything is checked before the first write.
+  expect(at("SELECT id FROM simple_invoices WHERE owner_id")).toBeLessThan(
+    at("INSERT INTO coaching_submissions"),
+  );
+  const snap = JSON.parse(
+    String(calls[at("INSERT INTO coaching_submissions")]![1]![3]),
+  );
+  expect(snap).toEqual({
+    month,
+    minutes: 90,
+    rate,
+    subtotalCents: 18000,
+    name: draft.name,
+    email: draft.email,
+    sample: true,
+  });
+  expect(calls[at("UPDATE coaching_months SET state='submitted'")]![1]).toEqual(
+    [id, month, 2],
+  );
+  expect(calls[at("INSERT INTO coaching_admin_issues")]![1]).toEqual([
+    id,
+    month,
+    2,
+    "Invented: travelling",
+    id,
+  ]);
+  expect(
+    calls
+      .filter(([sql]) => sql.startsWith("INSERT INTO billing_change_events"))
+      .map(([, args]) => args![1]),
+  ).toEqual(["issued_from_draft", "coaching_invoice_issued"]);
+  const document = JSON.parse(
+    String(calls[at("INSERT INTO simple_invoices(")]![1]![2]),
+  );
+  expect(document).toMatchObject({
+    terms: "net_30",
+    coaching: { submissionRevision: 2, issuedFromDraft: true },
+  });
+  // A defined period and a company carry to the snapshot.
+  const period = fixture({
+    admin: true,
+    today: "2026-11-02",
+    entry: {
+      ...draft,
+      month: "2026-10-19",
+      periodStart: "2026-10-19",
+      periodEnd: "2026-11-01",
+      company: "Invented Studio",
+    },
+  });
+  expect(
+    (
+      await period.service.issueCoachingFromDraft(token, {
+        ...fromDraft,
+        month: "2026-10-19",
+      })
+    ).kind,
+  ).toBe("ready");
+  expect(
+    JSON.parse(
+      String(
+        period.query.mock.calls.find(([sql]) =>
+          sql.startsWith("INSERT INTO coaching_submissions"),
+        )![1]![3],
+      ),
+    ),
+  ).toMatchObject({
+    periodStart: "2026-10-19",
+    periodEnd: "2026-11-01",
+    company: "Invented Studio",
+  });
+});
+it("TERMS856-41..44 refusals from a draft write nothing", async () => {
+  const writes = (f: ReturnType<typeof fixture>) =>
+    f.query.mock.calls.filter(([sql]) => /^(INSERT|UPDATE)/.test(sql));
+  const refused = async (
+    o: Parameters<typeof fixture>[0],
+    change: Record<string, unknown> = {},
+  ) => {
+    const f = fixture({ admin: true, today: "2026-11-01", ...o });
+    const r = await f.service.issueCoachingFromDraft(token, {
+      ...fromDraft,
+      ...change,
+    } as never);
+    expect(writes(f)).toEqual([]);
+    return r.kind;
+  };
+  for (const change of [
+    { ownerId: "bad" },
+    { month: "bad" },
+    { expectedRevision: -1 },
+    { taxCents: undefined },
+    { terms: "net_60" },
+    { reason: "" },
+    { reason: "x".repeat(501) },
+    { operationId: "bad" },
+  ])
+    expect(await refused({}, change)).toBe("invalid");
+  expect(
+    await fixture({ admin: true }).service.issueCoachingFromDraft(
+      token,
+      null as never,
+    ),
+  ).toEqual({ kind: "invalid" });
+  // Configured HST: a typed tax is refused.
+  expect(
+    await refused({
+      settings: {
+        sample: false,
+        issuer: "Okay",
+        instructions: "Okay",
+        tax: { label: "HST", registration: "1", rateBasisPoints: 1300 },
+      },
+    }),
+  ).toBe("invalid");
+  expect(await refused({ entry: null })).toBe("not-found");
+  for (const o of [
+    { entry: submitted },
+    { entry: { ...draft, revision: 4 } },
+    // TERMS856-41: the period ends today or later in Toronto.
+    { today: "2026-10-31" },
+    { rates: [] },
+    { activeInvoice: true },
+  ])
+    expect(await refused(o)).toBe("conflict");
+  for (const o of [
+    { entry: { ...draft, minutes: 0 } },
+    { rates: [{ ...rate, cents: 1000000000 }] },
+    { settings: { sample: true, issuer: "", instructions: "Okay" } },
+  ])
+    expect(await refused(o)).toBe("invalid");
+  // A retried submit returns its first result.
+  const receipt = {
+    digest: invoiceDigest({ action: "coaching-issue-draft", input: fromDraft }),
+    result: { invoiceId: id },
+  };
+  expect(await refused({ receipt })).toBe("ready");
+});
+it("TERMS856-45 the overview carries the draft-issue reason of the current submission and Toronto today", async () => {
+  const adminIssue = { reason: "Invented: travelling", on: "2026-11-16" };
+  const r = await fixture({
+    today: "2026-11-16",
+    adminIssue,
+  }).service.coachingOverview(token);
+  expect(r).toMatchObject({
+    kind: "ready",
+    value: { adminIssue, toronto: "2026-11-16" },
+  });
+  const f = fixture();
+  expect(await f.service.coachingOverview(token)).toMatchObject({
+    value: { adminIssue: null },
+  });
+  expect(
+    f.query.mock.calls.find(([sql]) =>
+      sql.includes("FROM coaching_admin_issues"),
+    )![0],
+  ).toContain("m.submitted_revision=a.revision");
 });

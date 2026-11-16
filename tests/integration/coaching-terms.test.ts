@@ -306,7 +306,7 @@ it("TERMS316-07 the student's download has every version without the administrat
   do {
     const page = await exporter.exportOwned(m.token, cursor);
     if (page.kind !== "ready") throw Error("Expected an export page");
-    expect(page.payload.version).toBe("local-member-records-v52");
+    expect(page.payload.version).toBe("local-member-records-v53");
     rows.push(...(page.payload.records.coachingTerms ?? []));
     cursor = page.payload.page.nextCursor ?? undefined;
   } while (cursor);

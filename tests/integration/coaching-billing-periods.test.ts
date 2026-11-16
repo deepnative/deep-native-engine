@@ -579,7 +579,7 @@ it("PERIOD832-09 Download my records carries period dates and the billing-period
       records[key] = [...(records[key] ?? []), ...list];
     cursor = result.payload.page.nextCursor ?? undefined;
   } while (cursor);
-  expect(version).toBe("local-member-records-v52");
+  expect(version).toBe("local-member-records-v53");
   expect(records.coachingMonths).toMatchObject([
     { month: m.ended, periodStart: day(-20), periodEnd: day(-7), minutes: 600 },
   ]);

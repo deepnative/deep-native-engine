@@ -13,6 +13,19 @@ CREATE TABLE IF NOT EXISTS simple_invoice_numbers (
 INSERT INTO simple_invoice_numbers(series,next) VALUES('real',1),('sample',1)
  ON CONFLICT DO NOTHING;
 
+-- An administrator issued the invoice from the student's saved draft. The
+-- reason is shown to the student and in their records, never printed on the
+-- invoice. The administrator is named only in staff change history.
+CREATE TABLE IF NOT EXISTS coaching_admin_issues (
+ owner_id uuid NOT NULL REFERENCES learners(id) ON DELETE CASCADE,
+ month text NOT NULL,
+ revision integer NOT NULL CHECK(revision>1),
+ reason text NOT NULL CHECK(length(btrim(reason)) BETWEEN 1 AND 500),
+ actor_id uuid REFERENCES principals(id) ON DELETE SET NULL,
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ PRIMARY KEY(owner_id,month,revision)
+);
+
 -- Staff change history gains an invoice issued from the student's saved draft.
 ALTER TABLE billing_change_events DROP CONSTRAINT IF EXISTS billing_change_events_action_check;
 ALTER TABLE billing_change_events ADD CONSTRAINT billing_change_events_action_check

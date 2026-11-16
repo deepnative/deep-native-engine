@@ -761,6 +761,13 @@ const sections = {
     "coaching_billing_schedules WHERE owner_id=$1",
     "version",
   ),
+  // v53 appends #856: each time an administrator issued the member's invoice
+  // from their saved draft, with the reason they gave; never who.
+  coachingAdminIssues: section(
+    'month,reason,created_at AS "issuedAt"',
+    "coaching_admin_issues WHERE owner_id=$1",
+    "month,revision",
+  ),
 } as const;
 /** Section SQL, shared with the member-authorized operator download (#40). */
 export const MEMBER_EXPORT_SECTIONS = sections;
@@ -776,7 +783,7 @@ type Cursor = [
 ];
 export interface MemberExportPayload {
   kind: "ready";
-  version: "local-member-records-v52";
+  version: "local-member-records-v53";
   profile: Record<string, unknown>;
   records: Record<string, Record<string, unknown>[]>;
   testUnitHistory: {
@@ -910,7 +917,7 @@ export function memberExportStore(
         );
         const payload: MemberExportPayload = {
           kind: "ready",
-          version: "local-member-records-v52",
+          version: "local-member-records-v53",
           profile: owner.rows[0],
           records,
           testUnitHistory: {

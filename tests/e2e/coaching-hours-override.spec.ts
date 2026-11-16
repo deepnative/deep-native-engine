@@ -9,7 +9,7 @@ test.use({ trace: "off" });
 const noSidewaysScroll = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
 
-test("[L338] OVR832-01/03/06/07/08 an administrator changes a student's submitted hours with a reason; the student sees it and the invoice uses the changed figure", async ({
+test("[L338] OVR832-01/03/06/07/08 TERMS856-40/45/47 an administrator changes a student's submitted hours with a reason; the student sees it and the invoice uses the changed figure", async ({
   browser,
 }, info) => {
   const f = await reviewedContentFixture(browser, info, {
@@ -149,6 +149,52 @@ test("[L338] OVR832-01/03/06/07/08 an administrator changes a student's submitte
         /changed the coaching hours Sample learner reported for \d{4}-\d{2}\./,
       ),
     ).toBeVisible();
+
+    // 8. #856 TERMS856-40/45/47: the student saves last month's hours but
+    //    never requests the invoice. Once that month has ended, the
+    //    administrator issues it from the draft with a reason the student sees.
+    await s.goto(f.origin + "/account/coaching");
+    await s.locator("nav.month-nav a").first().click();
+    const last = new URL(s.url()).searchParams.get("month")!;
+    await s.getByLabel("Hours", { exact: true }).fill("2");
+    await s.getByLabel("Minutes", { exact: true }).fill("0");
+    await s.getByRole("button", { name: "Save draft" }).click();
+    await a.goto(`${f.origin}/operator/coaching/${id}?month=${last}`);
+    // The rate for that month first; it applies from the month shown.
+    await a.getByLabel("Hourly rate (CAD)").fill("120.00");
+    await a.getByRole("button", { name: "Save hourly rate" }).click();
+    await expect(a.locator(".rate-now")).toContainText("CAD 120.00 per hour");
+    await a.goto(`${f.origin}/operator/coaching/${id}?month=${last}`);
+    await expect(
+      a.getByRole("heading", { name: "Issue invoice from this draft" }),
+    ).toBeVisible();
+    await expect(a.getByLabel("Payment terms")).toHaveValue("net_15");
+    await a
+      .getByLabel("Reason the student did not submit")
+      .fill("Invented: the student is travelling");
+    await a
+      .getByRole("checkbox", {
+        name: "I issue these hours for the student. They will see the hours, the amount and this reason.",
+      })
+      .check();
+    await a
+      .getByRole("button", { name: "Issue invoice from this draft" })
+      .click();
+    await expect(
+      a.getByText(
+        "Issued by the administrator from the student's saved hours.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    await expect(a.locator(".invoice-document")).toContainText("240.00");
+    await expect(a.locator(".invoice-document")).not.toContainText(
+      "travelling",
+    );
+    await s.goto(`${f.origin}/account/coaching?month=${last}`);
+    await expect(s.locator("p.notice")).toContainText(
+      /^Your administrator issued this invoice from your saved draft on \d{1,2} \w{3} \d{4}\. Reason: Invented: the student is travelling$/,
+    );
+    expect(await noSidewaysScroll(s)).toBe(true);
   } finally {
     await f.close();
   }
