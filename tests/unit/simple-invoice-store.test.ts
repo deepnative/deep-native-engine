@@ -252,6 +252,8 @@ function fixture(
       )
     )
       return result([]);
+    // #856: the next number in the invoice's series.
+    if (sql.includes("simple_invoice_numbers")) return result([{ issued: 7 }]);
     if (sql.includes("interval '10 seconds'"))
       return result(options.lease === false ? [] : [{ expires: expiry }]);
     if (sql.startsWith("INSERT") || sql.startsWith("UPDATE"))

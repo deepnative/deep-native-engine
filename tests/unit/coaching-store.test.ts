@@ -111,7 +111,9 @@ function fixture(
 ) {
   const query = vi.fn(async (sql: string, _args?: unknown[]) => {
     let rows: unknown[] = [];
-    if (sql.includes("AS student_present"))
+    // #856: the next number in the invoice's series.
+    if (sql.includes("simple_invoice_numbers")) rows = [{ issued: 7 }];
+    else if (sql.includes("AS student_present"))
       rows = o.studentGone ? [] : [{ student_present: true }];
     else if (sql.includes("FROM principals WHERE token_hash"))
       rows = [
@@ -1386,4 +1388,54 @@ it("PERIOD832-03 a defined period is invoiced only after its last day, and the i
     (await fixture({ admin: true, entry }).service.returnCoaching(token, input))
       .kind,
   ).toBe("ready");
+});
+it("TERMS856-01/03/04 a coaching invoice takes a short number, Toronto date and chosen terms; unknown terms are invalid", async () => {
+  const issued = async (terms?: unknown) => {
+    const f = fixture({ admin: true, entry: submitted });
+    const r = await f.service.issueCoaching(token, {
+      ...action,
+      ...(terms === undefined ? {} : { terms: terms as never }),
+    });
+    const insert = f.query.mock.calls.find(([sql]) =>
+      sql.startsWith("INSERT INTO simple_invoices("),
+    );
+    return {
+      r,
+      document: insert ? JSON.parse(String(insert[1]![2])) : null,
+      f,
+    };
+  };
+  const plain = await issued();
+  expect(plain.r.kind).toBe("ready");
+  expect(plain.document).toMatchObject({
+    number: "SAMPLE-0007",
+    issuedOn: "2026-10-31",
+    terms: "net_15",
+    dueOn: "2026-11-15",
+  });
+  expect(
+    plain.f.query.mock.calls.some(([sql]) => sql.includes("toronto_today()")),
+  ).toBe(true);
+  expect((await issued("due_on_receipt")).document).toMatchObject({
+    terms: "due_on_receipt",
+    dueOn: "2026-10-31",
+  });
+  expect((await issued("net_30")).document.dueOn).toBe("2026-11-30");
+  for (const terms of ["net_60", "", 15, null, "toString"]) {
+    const refused = await issued(terms);
+    expect(refused.r.kind).toBe("invalid");
+    expect(refused.f.query).not.toHaveBeenCalled();
+  }
+  const configured = fixture({
+    admin: true,
+    entry: { ...submitted, snapshot: { ...snapshot, sample: false } },
+    snapshot: { ...snapshot, sample: false },
+    settings: { sample: false, issuer: "Okay", instructions: "Okay" },
+  });
+  await configured.service.issueCoaching(token, action);
+  expect(
+    configured.query.mock.calls.find(([sql]) =>
+      sql.includes("simple_invoice_numbers"),
+    )![1],
+  ).toEqual(["real"]);
 });

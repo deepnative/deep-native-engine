@@ -16,6 +16,7 @@ import {
 import { COOKIE, csrf } from "../../src/session.ts";
 import { testPool } from "../support/database.ts";
 import { withLoopback } from "../support/loopback-server.ts";
+import { addDays } from "../../src/coaching-values.ts";
 import type { Pool, PoolClient } from "pg";
 const pool = testPool(),
   members = store(pool),
@@ -953,7 +954,7 @@ it("BILLPROFILE05 records applied migration versions and preserves the profile w
     84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101,
     102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
     117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 128, 129, 130, 131, 132,
-    133, 134, 135, 136, 137, 138, 139, 140, 141,
+    133, 134, 135, 136, 137, 138, 139, 140, 141, 142,
   ]);
   const owner = await member();
   const profile = ready(
@@ -968,7 +969,7 @@ it("BILLPROFILE05 records applied migration versions and preserves the profile w
     84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101,
     102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116,
     117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 128, 129, 130, 131, 132,
-    133, 134, 135, 136, 137, 138, 139, 140, 141,
+    133, 134, 135, 136, 137, 138, 139, 140, 141, 142,
   ]);
   expect(ready(await profiles.read(owner.token))).toEqual(profile);
   expect((await members.session(owner.token, "account")).kind).toBe("active");
@@ -1114,4 +1115,47 @@ it("NOEMAIL-01/02/03 a coaching month with no invoice email is requested, issued
   expect(
     ready(await invoices.invoice(m.token, issued.invoiceId)).delivery,
   ).toBe("not_sent");
+});
+it("TERMS856-08 recurring course-billing invoice gets a short number and net_15", async () => {
+  const toronto = (
+    await pool.query<{ day: string }>(
+      "SELECT to_char(toronto_today(),'YYYY-MM-DD') AS day",
+    )
+  ).rows[0]!.day;
+  const start = (
+    await pool.query<{ next: number }>(
+      "SELECT next FROM simple_invoice_numbers WHERE series='sample'",
+    )
+  ).rows[0]!.next;
+  const m = await accepted("monthly");
+  const document = (
+    await pool.query("SELECT document FROM simple_invoices WHERE id=$1", [
+      m.invoiceId,
+    ])
+  ).rows[0]!.document;
+  // These course invoices are samples, so they take the sample series.
+  expect(document).toMatchObject({
+    number: `SAMPLE-${String(start).padStart(4, "0")}`,
+    issuedOn: toronto,
+    terms: "net_15",
+    dueOn: addDays(toronto, 15),
+    billing: { kind: "recurring" },
+  });
+  const real = simpleInvoiceStore(pool, { ...settings, sample: false }),
+    first = (
+      await pool.query<{ next: number }>(
+        "SELECT next FROM simple_invoice_numbers WHERE series='real'",
+      )
+    ).rows[0]!.next;
+  const r = await accepted("monthly", real);
+  expect(
+    (
+      await pool.query("SELECT document FROM simple_invoices WHERE id=$1", [
+        r.invoiceId,
+      ])
+    ).rows[0]!.document,
+  ).toMatchObject({
+    number: `INV-${String(first).padStart(4, "0")}`,
+    terms: "net_15",
+  });
 });

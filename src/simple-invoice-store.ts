@@ -22,7 +22,13 @@ import {
   type InvoiceTerms,
 } from "./simple-invoice-values.ts";
 import { normalizedEmail } from "./member-email-access.ts";
-import type { SimpleInvoiceDocument } from "./simple-invoice-views.ts";
+import {
+  DEFAULT_PAYMENT_TERMS,
+  PAYMENT_TERMS,
+  paymentTerms,
+  type PaymentTerms,
+  type SimpleInvoiceDocument,
+} from "./simple-invoice-views.ts";
 
 import {
   addDays,
@@ -165,6 +171,37 @@ async function utcToday(tx: PracticeTransaction) {
       "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS today",
     )
   ).rows[0]!.today;
+}
+/** #856: new invoices are dated in Toronto, so an evening issue is not tomorrow. */
+async function torontoToday(tx: PracticeTransaction) {
+  return (
+    await tx.query<{ today: string }>(
+      "SELECT to_char(toronto_today(),'YYYY-MM-DD') AS today",
+    )
+  ).rows[0]!.today;
+}
+/**
+ * #856: the next number in the real or sample series. The row stays locked
+ * until the issuing transaction ends, so concurrent issues queue for it and a
+ * rolled-back issue leaves no gap. Call it only once nothing else can refuse.
+ */
+async function nextNumber(tx: PracticeTransaction, sample: boolean) {
+  const n = (
+    await tx.query<{ issued: number }>(
+      "UPDATE simple_invoice_numbers SET next=next+1 WHERE series=$1 RETURNING next-1 AS issued",
+      [sample ? "sample" : "real"],
+    )
+  ).rows[0]!.issued;
+  return `${sample ? "SAMPLE" : "INV"}-${String(n).padStart(4, "0")}`;
+}
+/** #856: the dates and terms every new invoice prints. */
+async function issueDates(tx: PracticeTransaction, terms: PaymentTerms) {
+  const issuedOn = await torontoToday(tx);
+  return {
+    issuedOn,
+    terms,
+    dueOn: addDays(issuedOn, PAYMENT_TERMS[terms].days),
+  };
 }
 const planColumns =
   'id,owner_id AS "ownerId",terms,state,revision,next_cycle AS "nextCycle"';
@@ -400,12 +437,9 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
     const id = randomUUID(),
       period = invoicePeriod(plan.terms.startsOn, cycle);
     const document: SimpleInvoiceDocument & { recipientEmail: string } = {
-      number: `DN-${id}`,
-      issuedOn: (
-        await tx.query<{ today: string }>(
-          "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS today",
-        )
-      ).rows[0]!.today,
+      // #856: course billing has no form, so it takes the default terms.
+      number: await nextNumber(tx, plan.terms.sample),
+      ...(await issueDates(tx, DEFAULT_PAYMENT_TERMS)),
       issuer: plan.terms.issuer,
       billedTo: name,
       ...(company ? { billedToCompany: company } : {}),
@@ -1209,6 +1243,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         expectedRevision: number;
         /** Sample mode only: configured invoices compute HST. */
         taxCents?: number;
+        /** #856: Net 15 when not chosen. */
+        terms?: PaymentTerms;
         operationId: string;
       },
     ): Promise<InvoiceResult<{ invoiceId: string }>> {
@@ -1220,6 +1256,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         (settings.tax
           ? input.taxCents !== undefined
           : !invoiceCents(input.taxCents)) ||
+        (input.terms !== undefined && !paymentTerms(input.terms)) ||
         !invoiceUuid(input.operationId)
       )
         return fail("invalid");
@@ -1271,12 +1308,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           return fail("conflict");
         const invoiceId = randomUUID();
         const document: SimpleInvoiceDocument & { recipientEmail: string } = {
-          number: `DN-${invoiceId}`,
-          issuedOn: (
-            await tx.query<{ today: string }>(
-              "SELECT to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYY-MM-DD') AS today",
-            )
-          ).rows[0]!.today,
+          number: await nextNumber(tx, snapshot.sample),
+          ...(await issueDates(tx, input.terms ?? DEFAULT_PAYMENT_TERMS)),
           issuer: settings.issuer,
           billedTo: snapshot.name,
           ...(snapshot.company ? { billedToCompany: snapshot.company } : {}),
@@ -1384,6 +1417,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         version: number;
         /** Sample mode only: configured invoices compute HST. */
         taxCents?: number;
+        /** #856: Net 15 when not chosen. */
+        terms?: PaymentTerms;
         operationId: string;
       },
     ): Promise<InvoiceResult<{ invoiceId: string }>> {
@@ -1395,6 +1430,7 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
         (settings.tax
           ? input.taxCents !== undefined
           : !invoiceCents(input.taxCents)) ||
+        (input.terms !== undefined && !paymentTerms(input.terms)) ||
         !invoiceUuid(input.operationId)
       )
         return fail("invalid");
@@ -1437,8 +1473,8 @@ export function simpleInvoiceStore(pool: Pool, settings: InvoiceSettings) {
           return fail("conflict");
         const invoiceId = randomUUID();
         const document: SimpleInvoiceDocument & { recipientEmail: string } = {
-          number: `DN-${invoiceId}`,
-          issuedOn: await utcToday(tx),
+          number: await nextNumber(tx, settings.sample),
+          ...(await issueDates(tx, input.terms ?? DEFAULT_PAYMENT_TERMS)),
           issuer: settings.issuer,
           billedTo: to.name,
           ...(to.company ? { billedToCompany: to.company } : {}),

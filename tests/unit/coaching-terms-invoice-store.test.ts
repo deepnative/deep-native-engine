@@ -74,6 +74,8 @@ function fixture(
     else if (sql.includes("FROM simple_invoices i JOIN coaching_terms"))
       rows = o.earlier ?? [];
     else if (sql.includes("AS today")) rows = [{ today: "2026-11-10" }];
+    // #856: the next number in the invoice's series.
+    else if (sql.includes("simple_invoice_numbers")) rows = [{ issued: 7 }];
     return { rows, rowCount: rows.length };
   });
   vi.mocked(practiceTransaction).mockImplementation(async (_pool, use) =>
@@ -257,4 +259,29 @@ it("TERMSINV318-02/03/04 refuses wrong input, a replayed different request, miss
       terms: { ...terms, priceCents: 1_000_000_000 },
     }).service.issueCoachingTerms(token, input),
   ).toEqual({ kind: "invalid" });
+});
+it("TERMS856-03/04 a coaching-terms invoice takes a real number and the chosen terms; unknown terms are invalid", async () => {
+  const f = fixture();
+  expect(
+    (await f.service.issueCoachingTerms(token, { ...input, terms: "net_30" }))
+      .kind,
+  ).toBe("ready");
+  const insert = sql(f, "INSERT INTO simple_invoices(")!;
+  expect(JSON.parse(String(insert[1]![2]))).toMatchObject({
+    number: "INV-0007",
+    issuedOn: "2026-11-10",
+    terms: "net_30",
+    dueOn: "2026-12-10",
+  });
+  expect(sql(f, "UPDATE simple_invoice_numbers")![1]).toEqual(["real"]);
+  const refused = fixture();
+  expect(
+    (
+      await refused.service.issueCoachingTerms(token, {
+        ...input,
+        terms: "net_45" as never,
+      })
+    ).kind,
+  ).toBe("invalid");
+  expect(refused.query).not.toHaveBeenCalled();
 });

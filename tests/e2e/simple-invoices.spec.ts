@@ -108,7 +108,7 @@ test("[L266] registered student accepts two courses on one printable individual 
     // #854 PAGE854-01..04: number and status first, What's next opens Send.
     const staff = admin.page;
     await expect(staff.getByRole("heading", { level: 1 })).toHaveText(
-      /^Invoice DN-/,
+      /^Invoice SAMPLE-\d{4,}$/,
     );
     await expect(staff.locator(".invoice-state .badge")).toHaveText("Unpaid");
     await expect(staff.locator(".invoice-delivery")).toHaveText("Not sent");

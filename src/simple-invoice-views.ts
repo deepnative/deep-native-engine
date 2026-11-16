@@ -8,9 +8,27 @@ import type {
 import { taxRate, type InvoiceTax } from "./simple-invoice-values.ts";
 import { escape, page } from "./views.ts";
 
+/** #856: payment terms an administrator picks when issuing; Net 15 by default. */
+export type PaymentTerms = "due_on_receipt" | "net_15" | "net_30";
+export const PAYMENT_TERMS: Record<
+  PaymentTerms,
+  { days: number; label: string }
+> = {
+  due_on_receipt: { days: 0, label: "Due on receipt" },
+  net_15: { days: 15, label: "Net 15" },
+  net_30: { days: 30, label: "Net 30" },
+};
+export const DEFAULT_PAYMENT_TERMS: PaymentTerms = "net_15";
+export const paymentTerms = (value: unknown): value is PaymentTerms =>
+  typeof value === "string" && Object.hasOwn(PAYMENT_TERMS, value);
+
 export interface SimpleInvoiceDocument {
   number: string;
   issuedOn: string;
+  /** #856: absent on invoices issued before payment terms existed. */
+  terms?: PaymentTerms;
+  /** #856: YYYY-MM-DD, issuedOn plus the terms' days. */
+  dueOn?: string;
   issuer: string;
   billedTo: string;
   /** RECIPIENT-05: an optional company printed under the recipient. */
@@ -39,6 +57,8 @@ export interface SimpleInvoiceDocument {
     rateId: string;
     submissionRevision: number;
     replacesInvoiceId: string | null;
+    /** #856: an administrator issued it from the student's saved draft. */
+    issuedFromDraft?: true;
   };
   /** TERMSINV318-01: issued from an administrator-set coaching-terms version. */
   coachingTerms?: { version: number; startsOn: string; endsOn: string };
