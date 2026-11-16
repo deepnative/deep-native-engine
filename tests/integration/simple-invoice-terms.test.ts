@@ -274,8 +274,8 @@ it("TERMS856-09 a retry without the terms field matches the same issue at Net 15
   const first = ready(
     await samples.issueCoaching(admin, { ...input, terms: "net_15" }),
   );
-  const { terms: _omitted, ...plain } = { ...input, terms: undefined };
-  expect(ready(await samples.issueCoaching(admin, plain))).toEqual(first);
+  expect("terms" in input).toBe(false);
+  expect(ready(await samples.issueCoaching(admin, input))).toEqual(first);
   expect(
     (await samples.issueCoaching(admin, { ...input, terms: "net_30" })).kind,
   ).toBe("conflict");
