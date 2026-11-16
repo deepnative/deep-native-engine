@@ -56,6 +56,7 @@ import {
   parseAgreedChange,
   type CoachingAgreedChangesStore,
 } from "./coaching-agreed-changes.ts";
+import { paymentTermsSelect, postedTerms } from "./simple-invoice-views.ts";
 import type {
   CoachingHoursOverride,
   InvoiceFailure,
@@ -593,7 +594,7 @@ export function mountCoachingRoutes(
           snapshot.subtotalCents > 0 &&
           snapshot.sample === v.sample
         )
-          body += `<h2>Issue the reviewed invoice</h2><form method="post" action="${base}/issue">${form("issue", e.revision)}${hst ? `<p>${escape(hst.label)} at ${taxRate(hst)} (${money(salesTaxCents(snapshot.subtotalCents, hst))}) is added to the subtotal.</p>` : `<label>${v.sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${v.sample ? 'value="0.00"' : ""} required></label>`}<label class="check"><input type="checkbox" name="confirm" value="issue" required><span>I reviewed these submitted hours and the ${hst ? `computed ${escape(hst.label)}` : "separately supplied tax"}.</span></label><button>Issue coaching invoice</button></form>`;
+          body += `<h2>Issue the reviewed invoice</h2><form method="post" action="${base}/issue">${form("issue", e.revision)}${hst ? `<p>${escape(hst.label)} at ${taxRate(hst)} (${money(salesTaxCents(snapshot.subtotalCents, hst))}) is added to the subtotal.</p>` : `<label>${v.sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${v.sample ? 'value="0.00"' : ""} required></label>`}${paymentTermsSelect()}<label class="check"><input type="checkbox" name="confirm" value="issue" required><span>I reviewed these submitted hours and the ${hst ? `computed ${escape(hst.label)}` : "separately supplied tax"}.</span></label><button>Issue coaching invoice</button></form>`;
         else
           body += `<p role="status">${snapshot?.sample !== v.sample ? "The submitted billing mode differs from current configuration. Return it and ask the student to confirm the current mode." : "This zero-total submission is retained. No invoice can be issued."}</p>`;
       }
@@ -818,13 +819,22 @@ export function mountCoachingRoutes(
   // #318 TERMSINV318-01..06: one invoice for the current terms version.
   app.post(`${adminPath}/:ownerId/terms-invoice`, async (req, res) => {
     // ISSUER-03: a typed tax is refused when the server computes HST.
-    if (!valid(req, res, store?.tax ? ["confirm"] : ["tax", "confirm"])) return;
+    if (
+      !valid(
+        req,
+        res,
+        store?.tax ? ["confirm", "terms"] : ["tax", "confirm", "terms"],
+      )
+    )
+      return;
     if (!store) return failure(res, "unavailable", true);
-    const taxCents = parseInvoiceMoney(req.body.tax);
+    const taxCents = parseInvoiceMoney(req.body.tax),
+      terms = postedTerms(req.body.terms);
     if (
       req.body.confirm !== "terms-invoice" ||
       !/^[1-9]\d{0,8}$/.test(String(req.body.revision)) ||
-      (!store.tax && taxCents === null)
+      (!store.tax && taxCents === null) ||
+      !terms
     )
       return failure(res, "invalid", true);
     const r = await store.issueCoachingTerms(token(res), {
@@ -832,6 +842,7 @@ export function mountCoachingRoutes(
       version: Number(req.body.revision),
       operationId: req.body.operationId,
       ...(store.tax ? {} : { taxCents: taxCents! }),
+      ...terms,
     });
     return r.kind === "ready"
       ? res.redirect(303, `/operator/invoices/${r.value.invoiceId}`)
@@ -1039,7 +1050,8 @@ export function mountCoachingRoutes(
         submit: ["rateId", "sample", "confirm"],
         return: ["reason"],
         // ISSUER-03: a typed tax is refused when the server computes HST.
-        issue: store?.tax ? ["confirm"] : ["tax", "confirm"],
+        // #856: the payment terms chosen on the form.
+        issue: store?.tax ? ["confirm", "terms"] : ["tax", "confirm", "terms"],
       }[action];
       if (!valid(req, res, ["month", "action", ...fields])) return;
       if (!store) return failure(res, "unavailable", admin);
@@ -1055,10 +1067,12 @@ export function mountCoachingRoutes(
         operationId: req.body.operationId,
       };
       const minutes = parseCoachingDuration(req.body.hours, req.body.minutes),
-        taxCents = parseInvoiceMoney(req.body.tax);
+        taxCents = parseInvoiceMoney(req.body.tax),
+        terms = postedTerms(req.body.terms);
       if (
         (action === "save" && minutes === null) ||
         (action === "issue" && !store?.tax && taxCents === null) ||
+        (action === "issue" && !terms) ||
         (action === "submit" && !["true", "false"].includes(req.body.sample))
       )
         return failure(res, "invalid", admin);
@@ -1087,6 +1101,7 @@ export function mountCoachingRoutes(
                   ...input,
                   ownerId: (req.params as Record<string, string>).ownerId!,
                   ...(store?.tax ? {} : { taxCents: taxCents! }),
+                  ...terms,
                 });
       if (r.kind !== "ready")
         return failure(

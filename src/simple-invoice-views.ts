@@ -21,6 +21,22 @@ export const PAYMENT_TERMS: Record<
 export const DEFAULT_PAYMENT_TERMS: PaymentTerms = "net_15";
 export const paymentTerms = (value: unknown): value is PaymentTerms =>
   typeof value === "string" && Object.hasOwn(PAYMENT_TERMS, value);
+/** #856: the Payment terms select on every administrator issue form. */
+export const paymentTermsSelect = () =>
+  `<label>Payment terms<select name="terms">${Object.entries(PAYMENT_TERMS)
+    .map(
+      ([value, { label }]) =>
+        `<option value="${value}"${value === DEFAULT_PAYMENT_TERMS ? " selected" : ""}>${label}</option>`,
+    )
+    .join("")}</select></label>`;
+/**
+ * #856: a posted terms field for the store. Absent (a form from before #856)
+ * leaves the default to the store; anything unknown is null and refused.
+ */
+export function postedTerms(value: unknown): { terms?: PaymentTerms } | null {
+  if (value === undefined) return {};
+  return paymentTerms(value) ? { terms: value } : null;
+}
 
 export interface SimpleInvoiceDocument {
   number: string;

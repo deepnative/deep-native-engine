@@ -17,6 +17,7 @@ import {
 } from "./simple-invoice-values.ts";
 import { escape } from "./views.ts";
 import type { CoachingTermsInvoiceView } from "./simple-invoice-store.ts";
+import { paymentTermsSelect } from "./simple-invoice-views.ts";
 import { SERVICE_CONTACT } from "./demo-terms.ts";
 import { coachingAllowanceLedgerOnConnection } from "./ledger.ts";
 
@@ -595,5 +596,5 @@ export function adminTermsInvoiceSection(
         `<p role="status">Terms version ${e.version} covers an overlapping coaching period (${readable(e.startsOn)} to ${readable(e.endsOn)}) and is already invoiced: <a href="/operator/invoices/${escape(e.invoiceId)}">view that invoice</a>. Issue another invoice only if the student owes both. To replace the earlier invoice, void it first.</p>`,
     )
     .join("");
-  return `${head}${earlier}<p>Issue an invoice for terms version ${v.terms.version}: ${amount}, to ${to}.</p><p>${sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Issuing doesn't take payment. The student pays offline, and you record the payment on the invoice."}</p><form method="post" action="${action}">${hiddenFields}${tax ? "" : `<label>${sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${sample ? 'value="0.00"' : ""} required></label>`}<label class="check"><input type="checkbox" name="confirm" value="terms-invoice" required><span>I checked this terms version, amount and recipient.</span></label><button>Issue invoice for these terms</button></form></section>`;
+  return `${head}${earlier}<p>Issue an invoice for terms version ${v.terms.version}: ${amount}, to ${to}.</p><p>${sample ? "SAMPLE · NOT PAYABLE. All sample amounts and tax are invented." : "Issuing doesn't take payment. The student pays offline, and you record the payment on the invoice."}</p><form method="post" action="${action}">${hiddenFields}${tax ? "" : `<label>${sample ? "Invented sample tax (CAD)" : "Explicit tax amount (CAD)"}<input name="tax" inputmode="decimal" ${sample ? 'value="0.00"' : ""} required></label>`}${paymentTermsSelect()}<label class="check"><input type="checkbox" name="confirm" value="terms-invoice" required><span>I checked this terms version, amount and recipient.</span></label><button>Issue invoice for these terms</button></form></section>`;
 }

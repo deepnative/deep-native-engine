@@ -819,3 +819,63 @@ it("RENEW317-01/04 the administration page shows renewals due and maps a failure
   expect(off.status).toBe(200);
   expect(off.text).not.toContain("Renewals due");
 });
+it("TERMS856-30/31 the coaching-terms invoice form offers payment terms and its POST passes them through", async () => {
+  const section = adminTermsInvoiceSection(
+    {
+      terms: {
+        id: "22222222-2222-4222-8222-222222222222",
+        version: 2,
+        priceCents: 120000,
+        startsOn: "2026-12-01",
+        endsOn: "2027-05-31",
+      },
+      recipient: { name: "Invented", email: "s@example.test", company: null },
+      invoiceId: null,
+      earlier: [],
+    },
+    "/a",
+    "",
+    undefined,
+    true,
+  );
+  expect(section).toContain(
+    '<label>Payment terms<select name="terms"><option value="due_on_receipt">Due on receipt</option><option value="net_15" selected>Net 15</option><option value="net_30">Net 30</option></select></label>',
+  );
+  const issue = vi
+    .fn()
+    .mockResolvedValue({ kind: "ready", value: { invoiceId: key } });
+  const r = routes(
+    {
+      own: vi.fn().mockResolvedValue({ kind: "ready", value: saved }),
+      forStudent: vi.fn().mockResolvedValue({ kind: "ready", value: saved }),
+      save: vi.fn(),
+    },
+    { issueCoachingTerms: issue, coachingTermsInvoice: vi.fn() },
+  );
+  const send = (fields: Record<string, string>) =>
+    r.raw((s) =>
+      request(s)
+        .post(`/operator/coaching/${id}/terms-invoice`)
+        .set("Origin", origin)
+        .type("form")
+        .send({
+          csrf: csrf(token, secret),
+          operationId: key,
+          revision: "1",
+          confirm: "terms-invoice",
+          tax: "0.00",
+          ...fields,
+        }),
+    );
+  expect((await send({ terms: "due_on_receipt" })).status).toBe(303);
+  expect(issue).toHaveBeenCalledWith(token, {
+    ownerId: id,
+    version: 1,
+    operationId: key,
+    taxCents: 0,
+    terms: "due_on_receipt",
+  });
+  issue.mockClear();
+  expect((await send({ terms: "net_45" })).status).toBe(422);
+  expect(issue).not.toHaveBeenCalled();
+});

@@ -3049,3 +3049,38 @@ it("QUEUE854-02 on a submitted month the issue panel comes first, after the mont
   expect(order.every((at) => at >= 0)).toBe(true);
   expect(order).toEqual([...order].sort((a, b) => a - b));
 });
+const TERMS_SELECT =
+  '<label>Payment terms<select name="terms"><option value="due_on_receipt">Due on receipt</option><option value="net_15" selected>Net 15</option><option value="net_30">Net 30</option></select></label>';
+it("TERMS856-30 the reviewed-invoice form offers payment terms, Net 15 selected", async () => {
+  const f = fixture();
+  f.service.coachingOverview.mockResolvedValue(
+    ready({
+      ...value,
+      entry: { ...entry, state: "submitted", submittedRevision: 2, snapshot },
+    }),
+  );
+  const page = (await f.get(`/operator/coaching/${id}`)).text;
+  const form = page.match(
+    /<form method="post" action="[^"]*\/issue">[\s\S]*?<\/form>/,
+  )![0];
+  expect(form).toContain(TERMS_SELECT);
+  expect(form.indexOf(TERMS_SELECT)).toBeLessThan(form.indexOf("<button>"));
+});
+it("TERMS856-31 the issue POST passes the chosen terms through and refuses an unknown one", async () => {
+  const f = fixture();
+  const path = `/operator/coaching/${id}/issue`,
+    fields = { month, action: "issue", confirm: "issue", tax: "0.00" };
+  expect((await f.post(path, { ...fields, terms: "net_30" })).status).toBe(303);
+  expect(f.service.issueCoaching.mock.calls.at(-1)![1]).toMatchObject({
+    terms: "net_30",
+  });
+  // A form from before #856 has no terms field: the store's default applies.
+  expect((await f.post(path, fields)).status).toBe(303);
+  expect(f.service.issueCoaching.mock.calls.at(-1)![1]).not.toHaveProperty(
+    "terms",
+  );
+  f.service.issueCoaching.mockClear();
+  for (const terms of ["net_60", "", "Net 15"])
+    expect((await f.post(path, { ...fields, terms })).status).toBe(422);
+  expect(f.service.issueCoaching).not.toHaveBeenCalled();
+});

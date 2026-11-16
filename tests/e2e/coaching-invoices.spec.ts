@@ -244,9 +244,14 @@ async function issue(f: Fixture, p: Page, id: string) {
     path: test.info().outputPath(`coaching-review-${id}.png`),
     fullPage: true,
   });
+  // #856 TERMS856-30: Net 15 unless the administrator picks other terms.
+  await expect(p.getByLabel("Payment terms")).toHaveValue("net_15");
   await p.getByRole("button", { name: "Issue coaching invoice" }).click();
   await expect(
     p.getByRole("heading", { name: "Invoice", exact: true }),
+  ).toBeVisible();
+  await expect(
+    p.getByText("Payment terms: Net 15", { exact: true }),
   ).toBeVisible();
   return p.url().split("/").at(-1)!;
 }
